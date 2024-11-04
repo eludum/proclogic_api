@@ -1,4 +1,4 @@
-# eproc_ai
+# proclogic
 
 curl -fsSL <https://ollama.com/install.sh> | sh
 
