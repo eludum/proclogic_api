@@ -1,7 +1,9 @@
-from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Form
+from fastapi import FastAPI, Depends, BackgroundTasks, UploadFile, File, Form
 from starlette.responses import JSONResponse
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from pydantic import EmailStr, BaseModel
+import redis.asyncio as redis
+from config.redis import create_redis
 from typing import List
 from contextlib import asynccontextmanager
 import asyncio
@@ -11,6 +13,8 @@ import httpx
 class EmailSchema(BaseModel):
     email: List[EmailStr]
 
+
+pool = create_redis()
 
 conf = ConnectionConfig(
     MAIL_USERNAME="username",
@@ -34,6 +38,8 @@ async def lifespan(app: FastAPI):
 
 
 async def cyclic_func():
+    # TODO: add redis sync after mock connection, split into
+    #       different sectors
     while True:
         try:
             async with httpx.AsyncClient() as client:
@@ -45,9 +51,9 @@ async def cyclic_func():
             await asyncio.sleep(60)  # wait a minute before retrying
 
 
-async def persist_to_db():
-    while True:
-        pass
+async def get_redis() -> redis.Redis:
+    return redis.Redis.from_pool(pool)
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -95,6 +101,18 @@ async def send_file(
     background_tasks.add_task(fm.send_message, message)
 
     return JSONResponse(status_code=200, content={"message": "email has been sent"})
+
+
+@app.get("/bid/{bid_id}")
+def read_item(bid_id: int, cache=Depends(get_redis)):
+    status = cache.get(bid_id)
+    return {"item_name": status}
+
+
+@app.put("/bid/{bid_id}")
+def update_item(bid_id: int, cache=Depends(get_redis)):
+    cache.set(bid_id, "available")
+    return {"status": "available", "item_id": bid_id}
 
 
 @app.get("/mock")

@@ -7,3 +7,4 @@ asyncio
 httpx
 aioredis
 python-multipart
+redis
