@@ -1,1 +1,9 @@
 fastapi
+fastapi-mail
+pydantic
+uvicorn
+openai
+asyncio
+httpx
+aioredis
+python-multipart
