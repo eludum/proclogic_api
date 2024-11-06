@@ -6,8 +6,11 @@ import redis.asyncio as redis
 from config.redis import create_redis
 from typing import List
 from contextlib import asynccontextmanager
+from schemas import Model
 import asyncio
 import httpx
+import json
+from pydantic_core import from_json
 
 
 class EmailSchema(BaseModel):
@@ -30,29 +33,38 @@ conf = ConnectionConfig(
 )
 
 
+async def get_redis() -> redis.Redis:
+    return redis.Redis.from_pool(pool)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(cyclic_func())
+    task = asyncio.create_task(fetch_data(sector="bouw"))
     yield
     task.cancel()
 
 
-async def cyclic_func():
+async def fetch_data(sector):
     # TODO: add redis sync after mock connection, split into
     #       different sectors
     while True:
         try:
             async with httpx.AsyncClient() as client:
                 r = await client.get('http://localhost:9005/mock')
-                r.json()
-            await asyncio.sleep(600)  # 60 seconds
+                await update_publications(r.json(), sector)
+            await asyncio.sleep(600)  # 10 minutes in seconds
         except Exception as e:
-            print(f"Error in cyclic_func: {e}")
+            print(f"Error in fetching of data: {e}")
+            print("Retrying in 60 seconds...")
             await asyncio.sleep(60)  # wait a minute before retrying
 
 
-async def get_redis() -> redis.Redis:
-    return redis.Redis.from_pool(pool)
+async def update_publications(data, sector):
+    cache = await get_redis()
+    model = Model(**data)
+    # TODO: make internal model with psql where we store final output per publication
+    for publication in model.publications:
+        await cache.json().sadd(str(publication.id) + "_" + sector, "$", publication.model_dump_json())
 
 
 app = FastAPI(lifespan=lifespan)
@@ -103,16 +115,12 @@ async def send_file(
     return JSONResponse(status_code=200, content={"message": "email has been sent"})
 
 
-@app.get("/bid/{bid_id}")
-def read_item(bid_id: int, cache=Depends(get_redis)):
-    status = cache.get(bid_id)
+@app.get("/publication/{pub_id}")
+async def read_publication(pub_id: int, cache=Depends(get_redis)):
+    status = cache.json().get(pub_id, "$")
     return {"item_name": status}
 
-
-@app.put("/bid/{bid_id}")
-def update_item(bid_id: int, cache=Depends(get_redis)):
-    cache.set(bid_id, "available")
-    return {"status": "available", "item_id": bid_id}
+# TODO: implement redis pub sub for updates
 
 
 @app.get("/mock")
