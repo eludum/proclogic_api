@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: p@ssw0rd
+      POSTGRES_DB: book
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: "redis/redis-stack:latest"
+    ports:
+      - "6379:6379"
+      - "8001:8001"
