@@ -64,7 +64,7 @@ async def update_publications(data, sector):
     model = Model(**data)
     # TODO: make internal model with psql where we store final output per publication
     for publication in model.publications:
-        await cache.json().sadd(str(publication.id) + "_" + sector, "$", publication.model_dump_json())
+        await cache.json().set(str(publication.id) + "_" + sector, "$", publication.model_dump_json())
 
 
 app = FastAPI(lifespan=lifespan)
