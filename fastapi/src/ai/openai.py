@@ -23,6 +23,9 @@ completion = client.chat.completions.create(
             ]
         }
     ]
+    # TODO: to be fine tuned
+    # temperature=0.2,
+    # top_p=0.2
 )
 
 print(completion.choices[0].message.content)
