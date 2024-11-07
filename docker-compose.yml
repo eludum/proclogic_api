@@ -3,8 +3,8 @@ services:
     image: postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: p@ssw0rd
-      POSTGRES_DB: book
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: publications
     ports:
       - "5432:5432"
 

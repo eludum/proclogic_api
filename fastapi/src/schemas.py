@@ -39,41 +39,26 @@ class Dossier(BaseModel):
     legalBasis: str
 
 
-class Title1(BaseModel):
-    text: str
-    language: str
-
-
 class Description1(BaseModel):
     text: str
     language: str
 
 
 class Lot(BaseModel):
-    titles: List[Title1]
+    titles: List[Title]
     descriptions: List[Description1]
     reservedParticipation: List[str]
     reservedExecution: List[str]
 
 
-class Description2(BaseModel):
-    text: str
-    language: str
-
-
 class CpvMainCode(BaseModel):
     code: str
-    descriptions: List[Description2]
-
-
-class Description3(BaseModel):
-    text: str
-    language: str
+    descriptions: List[Description]
 
 
 class CpvAdditionalCode(BaseModel):
     code: str
-    descriptions: List[Description3]
+    descriptions: List[Description]
 
 
 class Publication(BaseModel):

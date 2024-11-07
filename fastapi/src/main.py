@@ -9,8 +9,8 @@ from contextlib import asynccontextmanager
 from schemas import Model
 import asyncio
 import httpx
-import json
-from pydantic_core import from_json
+
+from ai.openai import get_openai_answer
 
 
 class EmailSchema(BaseModel):
@@ -63,9 +63,13 @@ async def update_publications(data, sector):
     cache = await get_redis()
     model = Model(**data)
     # TODO: make internal model with psql where we store final output per publication
+    #       fix sector logic
     for publication in model.publications:
         await cache.json().set(str(publication.id) + "_" + sector, "$", publication.model_dump_json())
 
+    for publication in model.publications:
+        # TODO: store final answer with internal model to psql use same IDs
+        await get_openai_answer(publication)
 
 app = FastAPI(lifespan=lifespan)
 
