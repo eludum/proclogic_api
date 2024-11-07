@@ -129,6 +129,11 @@ async def read_publication(pub_id: int, cache=Depends(get_redis)):
 
 @app.get("/mock")
 async def mock_db_data():
+    # TODO: make better mock data
+    # TODO: add pagination
+    # TODO: add sorting
+    # TODO: add filtering
+    # TODO: add TED db
     return {
         "totalCount": 0,
         "publications": [
