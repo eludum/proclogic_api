@@ -7,6 +7,7 @@ from config.redis import create_redis
 from typing import List
 from contextlib import asynccontextmanager
 from schemas import Model
+from datetime import date
 import asyncio
 import httpx
 
@@ -44,14 +45,16 @@ async def lifespan(app: FastAPI):
     task.cancel()
 
 
-async def fetch_data(sector):
+async def fetch_data(sector) -> None:
     # TODO: add redis sync after mock connection, split into
     #       different sectors
     while True:
         try:
             async with httpx.AsyncClient() as client:
-                r = await client.get('http://localhost:9005/mock')
-                await update_publications(r.json(), sector)
+                pubproc_r = await client.get('http://localhost:9005/mock')
+                ted_r = await get_ted_data()
+                await update_pubproc_publications(pubproc_r.json(), sector)
+                await update_ted_publications(ted_r.json(), sector)
             await asyncio.sleep(600)  # 10 minutes in seconds
         except Exception as e:
             print(f"Error in fetching of data: {e}")
@@ -59,7 +62,7 @@ async def fetch_data(sector):
             await asyncio.sleep(60)  # wait a minute before retrying
 
 
-async def update_publications(data, sector):
+async def update_pubproc_publications(data, sector) -> None:
     cache = await get_redis()
     model = Model(**data)
     # TODO: make internal model with psql where we store final output per publication
@@ -70,6 +73,20 @@ async def update_publications(data, sector):
     for publication in model.publications:
         # TODO: store final answer with internal model to psql use same IDs
         await get_openai_answer(publication)
+
+
+async def update_ted_publications(data, sector) -> None:
+    cache = await get_redis()
+    model = Model(**data)
+    # TODO: make internal model with psql where we store final output per publication
+    #       fix sector logic
+    for publication in model.publications:
+        await cache.json().set(str(publication.id) + "_" + sector, "$", publication.model_dump_json())
+
+    for publication in model.publications:
+        # TODO: store final answer with internal model to psql use same IDs
+        await get_openai_answer(publication)
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -127,13 +144,43 @@ async def read_publication(pub_id: int, cache=Depends(get_redis)):
 # TODO: implement redis pub sub for updates
 
 
+async def get_ted_data() -> dict:
+    # TODO: add pagination
+    # TODO: add sorting
+    # TODO: add filtering
+    today = date.today()
+    data = {
+        "query": f"publication-date={today.strftime("%Y%m%d")}",
+        "fields": [
+            "publication-date",
+            "notice-title",
+            "procedure-type",
+            "contract-nature",
+            # TODO fix country
+            # "country",
+            "tender-value",
+            "tender-value-cur",
+            "classification-cpv",
+            "organisation-contact-point-tenderer",
+            "document-url-lot"
+        ],
+        "page": 1,
+        "limit": 10,
+        "scope": "ACTIVE",
+        "checkQuerySyntax": False,
+        "paginationMode": "PAGE_NUMBER"
+    }
+    r = httpx.post('https://httpbin.org/post', data=data)
+    return r
+
+
 @app.get("/mock")
-async def mock_db_data():
+async def mock_db_data() -> dict:
     # TODO: make better mock data
     # TODO: add pagination
     # TODO: add sorting
     # TODO: add filtering
-    # TODO: add TED db
+    # TODO: add TED db (European Single Procurement Document)
     return {
         "totalCount": 0,
         "publications": [
