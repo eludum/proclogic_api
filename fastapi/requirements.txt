@@ -9,3 +9,5 @@ aioredis
 python-multipart
 redis
 pydantic-settings
+sqlalchemy
+alembic
