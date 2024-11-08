@@ -6,7 +6,7 @@ import redis.asyncio as redis
 from config.redis import create_redis
 from typing import List
 from contextlib import asynccontextmanager
-from schemas import Model
+from schemas.pubproc_schemas import Model
 from datetime import date
 import asyncio
 import httpx

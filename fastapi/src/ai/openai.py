@@ -1,6 +1,6 @@
 from openai import AsyncOpenAI
 
-from proclogic.fastapi.src.schemas import Publication
+from schemas.pubproc_schemas import Publication
 from config.config import get_settings
 
 settings = get_settings()
