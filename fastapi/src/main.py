@@ -151,6 +151,7 @@ async def get_ted_data() -> dict:
     # TODO: add filtering
     today = date.today()
     data = {
+        # TODO: add cpv based on sector in query
         "query": f"publication-date={today.strftime("%Y%m%d")}",
         "fields": [
             "publication-date",
@@ -171,7 +172,7 @@ async def get_ted_data() -> dict:
         "checkQuerySyntax": False,
         "paginationMode": "PAGE_NUMBER"
     }
-    r = httpx.post('https://httpbin.org/post', data=data)
+    r = httpx.post('https://api.ted.europa.eu/v3/notices/search', json=data)
     return r
 
 
