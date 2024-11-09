@@ -85,6 +85,6 @@ class Publication(BaseModel):
     procedureId: str
 
 
-class Model(BaseModel):
+class PubProc(BaseModel):
     totalCount: int
     publications: List[Publication]

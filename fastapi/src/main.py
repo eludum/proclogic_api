@@ -6,7 +6,8 @@ import redis.asyncio as redis
 from config.redis import create_redis
 from typing import List
 from contextlib import asynccontextmanager
-from schemas.pubproc_schemas import Model
+from schemas.pubproc_schemas import PubProc
+from schemas.ted_schemas import Ted
 from datetime import date
 import asyncio
 import httpx
@@ -64,7 +65,7 @@ async def fetch_data(sector) -> None:
 
 async def update_pubproc_publications(data, sector) -> None:
     cache = await get_redis()
-    model = Model(**data)
+    model = PubProc(**data)
     # TODO: make internal model with psql where we store final output per publication
     #       fix sector logic
     for publication in model.publications:
@@ -77,7 +78,7 @@ async def update_pubproc_publications(data, sector) -> None:
 
 async def update_ted_publications(data, sector) -> None:
     cache = await get_redis()
-    model = Model(**data)
+    model = Ted(**data)
     # TODO: make internal model with psql where we store final output per publication
     #       fix sector logic
     for publication in model.publications:

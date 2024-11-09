@@ -149,7 +149,7 @@ class Notice(BaseModel):
     )
 
 
-class Model(BaseModel):
+class Ted(BaseModel):
     notices: List[Notice]
     totalNoticeCount: int
     iterationNextToken: Any
