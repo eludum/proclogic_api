@@ -41,6 +41,7 @@ async def get_redis() -> redis.Redis:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # TODO: cpv code filter here
     task = asyncio.create_task(fetch_data(sector="bouw"))
     yield
     task.cancel()
@@ -52,7 +53,7 @@ async def fetch_data(sector) -> None:
     while True:
         try:
             async with httpx.AsyncClient() as client:
-                pubproc_r = await client.get('http://localhost:9005/mock')
+                pubproc_r = await client.get('http://localhost:9005/mock/pubproc')
                 ted_r = await get_ted_data()
                 await update_pubproc_publications(pubproc_r.json(), sector)
                 await update_ted_publications(ted_r.json(), sector)
@@ -176,8 +177,8 @@ async def get_ted_data() -> dict:
     return r
 
 
-@app.get("/mock")
-async def mock_db_data() -> dict:
+@app.get("/mock/pubproc")
+async def mock_pubproc_data() -> dict:
     # TODO: make better mock data
     # TODO: add pagination
     # TODO: add sorting
