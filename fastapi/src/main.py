@@ -97,6 +97,9 @@ app = FastAPI(lifespan=lifespan)
 async def root():
     return {"message": "Hello World"}
 
+# TODO: refactor, does this need to be an endpoint?
+#       https://www.geeksforgeeks.org/email-templates-with-jinja-in-python/
+
 
 @app.post("/email")
 async def send_with_template(email: EmailSchema) -> JSONResponse:
