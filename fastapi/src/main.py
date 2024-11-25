@@ -55,7 +55,7 @@ async def fetch_data(sector) -> None:
             async with httpx.AsyncClient() as client:
                 pubproc_r = await client.get('http://localhost:9005/mock/pubproc')
                 ted_r = await get_ted_data()
-                await update_pubproc_publications(pubproc_r.json(), sector)
+                # await update_pubproc_publications(pubproc_r.json(), sector)
                 await update_ted_publications(ted_r.json(), sector)
             await asyncio.sleep(600)  # 10 minutes in seconds
         except Exception as e:
@@ -95,7 +95,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "Hello Procurement World!"}
 
 # TODO: refactor, does this need to be an endpoint?
 #       https://www.geeksforgeeks.org/email-templates-with-jinja-in-python/
