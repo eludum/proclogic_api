@@ -6,6 +6,7 @@ import redis.asyncio as redis
 from config.redis import create_redis
 from typing import List
 from contextlib import asynccontextmanager
+from schemas.company import Company
 from schemas.pubproc_schemas import PubProc
 from schemas.ted_schemas import Ted
 from datetime import date
@@ -42,21 +43,21 @@ async def get_redis() -> redis.Redis:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # TODO: cpv code filter here
-    task = asyncio.create_task(fetch_data(sector="bouw"))
+    task = asyncio.create_task(fetch_data())
     yield
     task.cancel()
 
 
-async def fetch_data(sector) -> None:
+async def fetch_data() -> None:
     # TODO: add redis sync after mock connection, split into
     #       different sectors
     while True:
         try:
-            async with httpx.AsyncClient() as client:
-                pubproc_r = await client.get('http://localhost:9005/mock/pubproc')
+            async with httpx.AsyncClient():
+                # pubproc_r = await client.get('http://localhost:9005/mock/pubproc')
                 ted_r = await get_ted_data()
                 # await update_pubproc_publications(pubproc_r.json(), sector)
-                await update_ted_publications(ted_r.json(), sector)
+                await update_ted_publications(ted_r.json())
             await asyncio.sleep(600)  # 10 minutes in seconds
         except Exception as e:
             print(f"Error in fetching of data: {e}")
@@ -64,30 +65,32 @@ async def fetch_data(sector) -> None:
             await asyncio.sleep(60)  # wait a minute before retrying
 
 
-async def update_pubproc_publications(data, sector) -> None:
+async def update_pubproc_publications(data) -> None:
     cache = await get_redis()
     model = PubProc(**data)
     # TODO: make internal model with psql where we store final output per publication
     #       fix sector logic
     for publication in model.publications:
-        await cache.json().set(str(publication.id) + "_" + sector, "$", publication.model_dump_json())
+        await cache.json().set(str(publication.id), "$", publication.model_dump_json())
 
     for publication in model.publications:
         # TODO: store final answer with internal model to psql use same IDs
         await get_openai_answer(publication)
 
 
-async def update_ted_publications(data, sector) -> None:
+async def update_ted_publications(data) -> None:
     cache = await get_redis()
     model = Ted(**data)
     # TODO: make internal model with psql where we store final output per publication
     #       fix sector logic
-    for publication in model.publications:
-        await cache.json().set(str(publication.id) + "_" + sector, "$", publication.model_dump_json())
+    for notice in model.notices:
+        # TODO: convert to hash
+        # TODO: implement langchain
+        await cache.json().set(str(notice.publication_number), "$", notice.model_dump_json())
 
-    for publication in model.publications:
+    for notice in model.notices:
         # TODO: store final answer with internal model to psql use same IDs
-        await get_openai_answer(publication)
+        await get_openai_answer(notice)
 
 
 app = FastAPI(lifespan=lifespan)
@@ -102,7 +105,7 @@ async def root():
 
 
 @app.post("/email")
-async def send_with_template(email: EmailSchema) -> JSONResponse:
+async def send_with_template(email: EmailSchema, company: Company) -> JSONResponse:
 
     message = MessageSchema(
         subject="ProcLogic daily summary",

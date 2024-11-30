@@ -1,6 +1,6 @@
 from openai import AsyncOpenAI
 
-from schemas.pubproc_schemas import Publication
+from schemas.ted_schemas import Notice
 from config.config import get_settings
 
 settings = get_settings()
@@ -10,9 +10,10 @@ async def get_openai_client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 
-async def get_openai_answer(publication: Publication) -> str:
-    client = get_openai_client()
-    completion = client.chat.completions.create(
+async def get_openai_answer(notice: Notice) -> str:
+
+    client = await get_openai_client()
+    completion = await client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {
@@ -34,10 +35,9 @@ async def get_openai_answer(publication: Publication) -> str:
                     }
                 ]
             }
-        ]
+        ],
         # TODO: to be fine tuned
-        # temperature=0.2,
-        # top_p=0.2
+        temperature=0.1
     )
 
     return completion.choices[0].message.content
