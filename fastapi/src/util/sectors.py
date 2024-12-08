@@ -2,18 +2,13 @@ from pydantic import BaseModel
 from typing import List
 
 
-class Sector(BaseModel):
-    codes_pubproc: List[str]
-    codes_ted: List[str]
-
-
-class Construction(Sector):
+class Construction(BaseModel):
     codes: List[str] = [""]
 
 
-class InformationTechnology(Sector):
+class InformationTechnology(BaseModel):
     codes: List[str] = [""]
 
 
-class Finance(Sector):
+class Finance(BaseModel):
     codes: List[str] = [""]
