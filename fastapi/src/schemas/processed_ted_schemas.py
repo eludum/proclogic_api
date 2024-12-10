@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from schemas.company import Company
-from ted_schemas import Notice
+from schemas.ted_schemas import Notice
 
 
 class ProcessedNotice(BaseModel):

@@ -6,7 +6,7 @@ import redis.asyncio as redis
 from config.redis import create_redis
 from typing import List
 from contextlib import asynccontextmanager
-from proclogic.fastapi.src.schemas.processed_ted_schemas import ProcessedNotice
+from schemas.processed_ted_schemas import ProcessedNotice
 from schemas.company import Company
 from schemas.pubproc_schemas import PubProc
 from schemas.ted_schemas import Ted
@@ -139,7 +139,7 @@ async def get_ted_data() -> dict:
     today = date.today()
     data = {
         # TODO: add cpv based on sector in query
-        "query": f"publication-date={today.strftime("%Y%m%d")} AND buyer-country=BEL",
+        "query": f'publication-date={today.strftime("%Y%m%d")} AND buyer-country=BEL',
         "fields": [
             "publication-date",
             "notice-title",
