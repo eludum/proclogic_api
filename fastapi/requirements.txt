@@ -8,6 +8,7 @@ httpx
 aioredis
 python-multipart
 redis
+pydantic
 pydantic-settings
 sqlalchemy
 alembic

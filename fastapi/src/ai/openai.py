@@ -1,8 +1,8 @@
 from openai import AsyncOpenAI
 
+from config.config import get_settings
 from schemas.company import Company
 from schemas.ted_schemas import Notice
-from config.config import get_settings
 
 settings = get_settings()
 
@@ -24,9 +24,9 @@ async def get_openai_answer(notice: Notice, company: Company) -> str:
                 "content": [
                     {
                         "type": "text",
-                        "text": 'You are a public procurement ranking system designed to determine whether a procurement opportunity is a good fit for a specific company. Your response to any given procurement must be either "yes" or "no".'
+                        "text": 'You are a public procurement ranking system designed to determine whether a procurement opportunity is a good fit for a specific company. Your response to any given procurement must be either "yes" or "no".',
                     }
-                ]
+                ],
             },
             {
                 "role": "user",
@@ -34,13 +34,13 @@ async def get_openai_answer(notice: Notice, company: Company) -> str:
                     {
                         # TODO: make profile per company
                         "type": "text",
-                        "text": f"The company is {company.name}, they do {company.summary_activities}. The notice title is {notice.notice_title}. Is this a good fit for them?"
+                        "text": f"The company is {company.name}, they do {company.summary_activities}. The notice title is {notice.notice_title}. Is this a good fit for them?",
                     }
-                ]
-            }
+                ],
+            },
         ],
         # TODO: to be fine tuned
-        temperature=0.0
+        temperature=0.0,
     )
 
     return completion.choices[0].message.content

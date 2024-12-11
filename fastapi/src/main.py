@@ -1,20 +1,22 @@
-from fastapi import FastAPI, Depends, BackgroundTasks, UploadFile, File, Form
-from starlette.responses import JSONResponse
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
-from pydantic import EmailStr, BaseModel
-import redis.asyncio as redis
-from config.redis import create_redis
-from typing import List
-from contextlib import asynccontextmanager
-from schemas.processed_ted_schemas import ProcessedNotice
-from schemas.company import Company
-from schemas.pubproc_schemas import PubProc
-from schemas.ted_schemas import Ted
-from datetime import date
 import asyncio
+from contextlib import asynccontextmanager
+from datetime import date
+from typing import List
+
 import httpx
+import redis.asyncio as redis
+from fastapi import Depends, FastAPI
+from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
+from pydantic import BaseModel, EmailStr
+from starlette.responses import JSONResponse
 
 from ai.openai import get_openai_answer
+from config.redis import create_redis
+from schemas.company import Company
+from schemas.processed_ted_schemas import ProcessedNotice
+from schemas.pubproc_schemas import PubProc
+from schemas.ted_schemas import Ted
+from util.sectors import Sector
 
 
 class EmailSchema(BaseModel):
@@ -103,7 +105,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 async def root():
-    return {"message": "Hello Procurement World!"}
+    return {"message": "Hello World!"}
 
 # TODO: refactor, does this need to be an endpoint?
 #       https://www.geeksforgeeks.org/email-templates-with-jinja-in-python/
@@ -132,7 +134,7 @@ async def read_publication(pub_id: int, cache=Depends(get_redis)):
 # TODO: implement redis pub sub for updates
 
 
-async def get_ted_data() -> dict:
+async def get_ted_data(sector: Sector) -> dict:
     # TODO: add pagination
     # TODO: add sorting
     # TODO: add filtering

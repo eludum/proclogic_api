@@ -1,5 +1,5 @@
-from pydantic import BaseModel
 import httpx
+from pydantic import BaseModel
 
 
 class NoticeCrawler(BaseModel):
