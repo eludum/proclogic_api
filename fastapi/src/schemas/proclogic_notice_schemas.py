@@ -3,7 +3,7 @@ from typing import List, Tuple, Union
 from models.pubproc_models import Publication
 from models.ted_models import Notice
 from pydantic import BaseModel
-from proclogic.fastapi.src.schemas.sector_schemas import Sector
+from schemas.sector_schemas import Sector
 
 
 class ProcLogicNotice(BaseModel):

@@ -2,7 +2,7 @@ from typing import List
 
 from pydantic import BaseModel
 
-from util.sectors import Sector
+from schemas.sector_schemas import Sector
 
 
 class Company(BaseModel):

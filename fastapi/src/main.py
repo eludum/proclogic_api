@@ -17,7 +17,7 @@ from schemas.company import Company
 from schemas.processed_ted_schemas import ProcessedNotice
 from schemas.pubproc_schemas import PubProc
 from schemas.ted_schemas import Ted
-from proclogic.fastapi.src.schemas.sector_schemas import Sector
+from schemas.sector_schemas import Sector
 
 
 class EmailSchema(BaseModel):
