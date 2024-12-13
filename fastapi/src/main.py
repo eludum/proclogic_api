@@ -11,6 +11,7 @@ from pydantic import BaseModel, EmailStr
 from starlette.responses import JSONResponse
 
 from ai.openai import get_openai_answer
+from config.postgres import get_sql
 from config.redis import create_redis
 from schemas.company import Company
 from schemas.processed_ted_schemas import ProcessedNotice
@@ -41,7 +42,6 @@ conf = ConnectionConfig(
 
 async def get_redis() -> redis.Redis:
     return redis.Redis.from_pool(pool)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -126,6 +126,10 @@ async def send_with_template(email: EmailSchema, company: Company) -> JSONRespon
     return JSONResponse(status_code=200, content={"message": "email has been sent"})
 
 
+@app.get("company/{company_id}")
+async def read_company(company_id: int, cache=Depends(get_sql)):
+    cache.add()
+
 @app.get("/publication/{pub_id}")
 async def read_publication(pub_id: int, cache=Depends(get_redis)):
     status = cache.json().get(pub_id, "$")
@@ -147,8 +151,6 @@ async def get_ted_data(sector: Sector) -> dict:
             "notice-title",
             "procedure-type",
             "contract-nature",
-            # TODO fix country
-            # "country",
             "tender-value",
             "tender-value-cur",
             "classification-cpv",

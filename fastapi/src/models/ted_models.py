@@ -10,14 +10,14 @@ class Notice(Base):
     __tablename__ = 'notices'
 
     id = Column(Integer, primary_key=True)
-    document_url_lot = Column(JSON)
-    procedure_type = Column(String)
-    classification_cpv = Column(JSON)
-    publication_number = Column(String)
-    contract_nature = Column(JSON)
-    publication_date = Column(String)  # Using String to handle timezone
-    links = Column(JSON)
-    notice_title = Column(JSON)
+    document_url_lot = Column(JSON, nullable=True)
+    procedure_type = Column(String, nullable=True)
+    classification_cpv = Column(JSON, nullable=True)
+    publication_number = Column(String, nullable=True)
+    contract_nature = Column(JSON, nullable=True)
+    publication_date = Column(String, nullable=True)  # Using String to handle timezone
+    links = Column(JSON, nullable=True)
+    notice_title = Column(JSON, nullable=True)
     tender_value_cur = Column(JSON, nullable=True)
     tender_value = Column(JSON, nullable=True)
     organisation_contact_point_tenderer = Column(JSON, nullable=True)

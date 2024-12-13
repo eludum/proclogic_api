@@ -4,9 +4,17 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: publications
+      POSTGRES_DB: proclogic
     ports:
       - "5432:5432"
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "admin@localhost.be"
+      PGADMIN_DEFAULT_PASSWORD: "admin"
+    ports:
+      - "8002:80"
 
   redis:
     image: "redis/redis-stack:latest"
