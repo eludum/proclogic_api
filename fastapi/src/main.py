@@ -17,7 +17,7 @@ from schemas.company import Company
 from schemas.processed_ted_schemas import ProcessedNotice
 from schemas.pubproc_schemas import PubProc
 from schemas.ted_schemas import Ted
-from util.sectors import Sector
+from proclogic.fastapi.src.schemas.sector_schemas import Sector
 
 
 class EmailSchema(BaseModel):
@@ -52,15 +52,10 @@ async def lifespan(app: FastAPI):
 
 
 async def fetch_data() -> None:
-    # TODO: add redis sync after mock connection, split into
-    #       different sectors
     while True:
         try:
             async with httpx.AsyncClient():
-                # pubproc_r = await client.get('http://localhost:9005/mock/pubproc')
-                ted_r = await get_ted_data()
-                # await update_pubproc_publications(pubproc_r.json(), sector)
-                await update_ted_publications(ted_r.json())
+                await update_ted_publications()
             await asyncio.sleep(600)  # 10 minutes in seconds
         except Exception as e:
             print(f"Error in fetching of data: {e}")
@@ -68,36 +63,22 @@ async def fetch_data() -> None:
             await asyncio.sleep(60)  # wait a minute before retrying
 
 
-async def update_pubproc_publications(data) -> None:
-    cache = await get_redis()
-    model = PubProc(**data)
-    # TODO: make internal model with psql where we store final output per publication
-    #       fix sector logic
-    for publication in model.publications:
-        await cache.json().set(str(publication.id), "$", publication.model_dump_json())
+async def update_ted_publications() -> None:
+    redis_cache = await get_redis()
+    sql_cache = await get_sql()
 
-    for publication in model.publications:
-        # TODO: store final answer with internal model to psql use same IDs
-        await get_openai_answer(publication)
+    ted_r = await get_ted_data()
+    data = Ted(**ted_r.json())
 
+    for notice in data.notices:
+        await redis_cache.json().set(str(notice.publication_number), "$", notice.model_dump_json())
+        # TODO: crawl and add docs to redis ragged
 
-async def update_ted_publications(data) -> None:
-    cache = await get_redis()
-    model = Ted(**data)
-    # TODO: make internal model with psql where we store final output per publication
-    #       fix sector logic
-    for notice in model.notices:
-        # TODO: convert to hash
-        # TODO: implement langchain
-        await cache.json().set(str(notice.publication_number), "$", notice.model_dump_json())
-
-    for notice in model.notices:
-        # TODO: store final answer with internal model to psql use same IDs
-        # TODO: for company in xxx: get from SQL
-        comp = Company(
-            name="EBM", summary_activities="repair and maintanence of buildings")
-        recomm = await get_openai_answer(notice, comp)
-        pn = ProcessedNotice(notice=notice, company=comp, recommended=recomm)
+    for notice in data.notices:
+        for comp in sql_cache.query(Company).all():
+            recomm = await get_openai_answer(notice, comp) #TODO: redis stream for summary?
+            pn = ProcessedNotice(notice=notice, company=comp, recommended=recomm)
+            sql_cache.add(pn)
 
 
 app = FastAPI(lifespan=lifespan)
@@ -135,13 +116,7 @@ async def read_publication(pub_id: int, cache=Depends(get_redis)):
     status = cache.json().get(pub_id, "$")
     return {"item_name": status}
 
-# TODO: implement redis pub sub for updates
-
-
 async def get_ted_data(sector: Sector) -> dict:
-    # TODO: add pagination
-    # TODO: add sorting
-    # TODO: add filtering
     today = date.today()
     data = {
         # TODO: add cpv based on sector in query
@@ -168,12 +143,7 @@ async def get_ted_data(sector: Sector) -> dict:
 
 
 @app.get("/mock/pubproc")
-async def mock_pubproc_data() -> dict:
-    # TODO: make better mock data
-    # TODO: add pagination
-    # TODO: add sorting
-    # TODO: add filtering
-    # TODO: add TED db (European Single Procurement Document)
+async def mock_pubproc_data(sector: Sector) -> dict:
     return {
         "totalCount": 0,
         "publications": [
