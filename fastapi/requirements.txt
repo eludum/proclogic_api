@@ -12,3 +12,4 @@ pydantic
 pydantic-settings
 sqlalchemy
 alembic
+requests-oauthlib

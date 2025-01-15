@@ -3,8 +3,12 @@ from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
+from config.config import get_settings
+
+settings = get_settings()
+
 engine = create_async_engine(
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres",
+    settings.postgres_con_url,
     echo=True,
     future=True,
 )

@@ -1,7 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
-from datetime import date
 from typing import List
+from datetime import datetime, date
 
 import httpx
 import redis.asyncio as redis
@@ -14,11 +14,16 @@ from ai.openai import get_openai_answer
 from config.postgres import get_sql
 from config.redis import create_redis
 from schemas.company import Company
-from schemas.processed_ted_schemas import ProcessedNotice
+from schemas.proclogic_notice_schemas import ProcLogicNotice
 from schemas.pubproc_schemas import PubProc
 from schemas.ted_schemas import Ted
 from schemas.sector_schemas import Sector
 
+from util.pubproc_token import get_token
+
+from config.config import get_settings
+
+settings = get_settings()
 
 class EmailSchema(BaseModel):
     email: List[EmailStr]
@@ -77,7 +82,7 @@ async def update_ted_publications() -> None:
     for notice in data.notices:
         for comp in sql_cache.query(Company).all():
             recomm = await get_openai_answer(notice, comp) #TODO: redis stream for summary?
-            pn = ProcessedNotice(notice=notice, company=comp, recommended=recomm)
+            pn = ProcLogicNotice(notice=notice, company=comp, recommended=recomm)
             sql_cache.add(pn)
 
 
@@ -142,115 +147,22 @@ async def get_ted_data(sector: Sector) -> dict:
     return r
 
 
-@app.get("/mock/pubproc")
-async def mock_pubproc_data(sector: Sector) -> dict:
-    return {
-        "totalCount": 0,
-        "publications": [
-            {
-                "id": 0,
-                "referenceNumber": "string",
-                "insertionDate": "2022-03-10",
-                "organisation": {
-                    "organisationId": 0,
-                    "tree": "string",
-                    "organisationNames": [
-                        {
-                            "text": "string",
-                            "language": "NL"
-                        }
-                    ]
-                },
-                "cancelledAt": "2022-03-10T12:15:50",
-                "dossier": {
-                    "titles": [
-                        {
-                            "text": "string",
-                            "language": "NL"
-                        }
-                    ],
-                    "descriptions": [
-                        {
-                            "text": "string",
-                            "language": "NL"
-                        }
-                    ],
-                    "accreditations": {
-                        "additionalProp1": 0,
-                        "additionalProp2": 0,
-                        "additionalProp3": 0
-                    },
-                    "referenceNumber": "string",
-                    "procurementProcedureType": "OPEN",
-                    "specialPurchasingTechnique": "FRAMEWORK_AGREEMENT",
-                    "legalBasis": "D23"
-                },
-                "lots": [
-                    {
-                        "titles": [
-                            {
-                                "text": "string",
-                                "language": "NL"
-                            }
-                        ],
-                        "descriptions": [
-                            {
-                                "text": "string",
-                                "language": "NL"
-                            }
-                        ],
-                        "reservedParticipation": [
-                            "NONE"
-                        ],
-                        "reservedExecution": [
-                            "YES"
-                        ]
-                    }
-                ],
-                "publicationWorkspaceId": "string",
-                "cpvMainCode": {
-                    "code": "string",
-                    "descriptions": [
-                        {
-                            "text": "string",
-                            "language": "NL"
-                        }
-                    ]
-                },
-                "cpvAdditionalCodes": [
-                    {
-                        "code": "string",
-                        "descriptions": [
-                            {
-                                "text": "string",
-                                "language": "NL"
-                            }
-                        ]
-                    }
-                ],
-                "natures": [
-                    "WORKS"
-                ],
-                "publicationLanguages": [
-                    "NL"
-                ],
-                "nutsCodes": [
-                    "string"
-                ],
-                "dispatchDate": "2022-03-10",
-                "sentAt": [
-                    "2022-03-10T12:15:50"
-                ],
-                "publishedAt": [
-                    "2022-03-10T12:15:50"
-                ],
-                "vaultSubmissionDeadline": "2022-03-10T12:15:50",
-                "tedPublished": "true",
-                "noticeSubType": "string",
-                "noticeIds": [
-                    "string"
-                ],
-                "procedureId": "string"
-            }
-        ]
+async def get_pubproc_data(sector: Sector) -> dict:
+    token, exp = settings.pubproc_token, settings.pubproc_token_exp
+    today = date.today()
+
+    # if token expired then get a new one
+    if exp < datetime.now().timestamp():
+        token, exp = get_token()
+
+    data = {
+        "currency-id": "82",
+        "dispatch-date": f"{today.strftime("%d-%m-%Y")}",
     }
+    headers = {
+        'Authorization': f'Bearer {token["access_token"]}',
+        'BelGov-Trace-Id': '2ce83af9-d524-43a6-8d1c-b19dff051aed'
+    }
+    r = httpx.get('https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications', params=data, headers=headers)    
+    
+    return r
