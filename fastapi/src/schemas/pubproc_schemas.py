@@ -1,91 +1,69 @@
-from typing import List
-
+from typing import List, Optional
 from pydantic import BaseModel
 
+class Description(BaseModel):
+    language: str
+    text: str
+
+class CPVCode(BaseModel):
+    code: str
+    descriptions: List[Description]
+
+class Dossier(BaseModel):
+    accreditations: dict
+    descriptions: List[Description]
+    enterpriseCategories: List[str]
+    legalBasis: str
+    number: str
+    procurementProcedureType: str
+    referenceNumber: str
+    specialPurchasingTechnique: Optional[str]
+    titles: List[Description]
+
+class Lot(BaseModel):
+    descriptions: List[Description]
+    reservedExecution: List[str]
+    reservedParticipation: List[str]
+    titles: List[Description]
 
 class OrganisationName(BaseModel):
-    text: str
     language: str
-
+    text: str
 
 class Organisation(BaseModel):
     organisationId: int
-    tree: str
     organisationNames: List[OrganisationName]
-
-
-class Title(BaseModel):
-    text: str
-    language: str
-
-
-class Description(BaseModel):
-    text: str
-    language: str
-
-
-class Accreditations(BaseModel):
-    additionalProp1: int
-    additionalProp2: int
-    additionalProp3: int
-
-
-class Dossier(BaseModel):
-    titles: List[Title]
-    descriptions: List[Description]
-    accreditations: Accreditations
-    referenceNumber: str
-    procurementProcedureType: str
-    specialPurchasingTechnique: str
-    legalBasis: str
-
-
-class Description1(BaseModel):
-    text: str
-    language: str
-
-
-class Lot(BaseModel):
-    titles: List[Title]
-    descriptions: List[Description1]
-    reservedParticipation: List[str]
-    reservedExecution: List[str]
-
-
-class CpvMainCode(BaseModel):
-    code: str
-    descriptions: List[Description]
-
-
-class CpvAdditionalCode(BaseModel):
-    code: str
-    descriptions: List[Description]
-
+    tree: str
 
 class Publication(BaseModel):
-    id: int
-    referenceNumber: str
-    insertionDate: str
-    organisation: Organisation
-    cancelledAt: str
-    dossier: Dossier
-    lots: List[Lot]
-    publicationWorkspaceId: str
-    cpvMainCode: CpvMainCode
-    cpvAdditionalCodes: List[CpvAdditionalCode]
-    natures: List[str]
-    publicationLanguages: List[str]
-    nutsCodes: List[str]
+    cpvAdditionalCodes: List[CPVCode]
+    cpvMainCode: CPVCode
     dispatchDate: str
-    sentAt: List[str]
-    publishedAt: List[str]
-    vaultSubmissionDeadline: str
-    tedPublished: str
-    noticeSubType: str
+    dossier: Dossier
+    insertionDate: str
+    lots: List[Lot]
+    natures: List[str]
     noticeIds: List[str]
+    noticeSubType: str
+    nutsCodes: List[str]
+    organisation: Organisation
     procedureId: str
+    publicationDate: str
+    publicationLanguages: List[str]
+    publicationReferenceNumbersBDA: List[str]
+    publicationReferenceNumbersTED: List[str]
+    publicationType: str
+    publicationWorkspaceId: str
+    publishedAt: List[str]
+    referenceNumber: str
+    sentAt: List[str]
+    tedPublished: bool
+    vaultSubmissionDeadline: str
 
-
-class PubProc(BaseModel):
+class Publications(BaseModel):
     totalCount: int
     publications: List[Publication]
+
+# Example usage
+# data = {...}  # Your JSON data
+# publications = Publications(**data)

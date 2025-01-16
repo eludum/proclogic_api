@@ -72,10 +72,16 @@ async def update_ted_publications() -> None:
     redis_cache = await get_redis()
     sql_cache = await get_sql()
 
+    pubproc_r = await get_pubproc_data()
     ted_r = await get_ted_data()
-    data = Ted(**ted_r.json())
+    pubproc_data = PubProc(**pubproc_r.json())
+    ted_data = Ted(**ted_r.json())
 
-    for notice in data.notices:
+    for publication in pubproc_data.publications:
+        await redis_cache.json().set(str(publication.publicationReferenceNumbersBDA), "$", publication.model_dump_json())
+        # TODO: crawl and add docs to redis ragged
+
+    for notice in ted_data.notices:
         await redis_cache.json().set(str(notice.publication_number), "$", notice.model_dump_json())
         # TODO: crawl and add docs to redis ragged
 
@@ -121,6 +127,9 @@ async def read_publication(pub_id: int, cache=Depends(get_redis)):
     status = cache.json().get(pub_id, "$")
     return {"item_name": status}
 
+# TODO: shouldn't these be getting more data?
+#       pagination?
+
 async def get_ted_data(sector: Sector) -> dict:
     today = date.today()
     data = {
@@ -148,12 +157,8 @@ async def get_ted_data(sector: Sector) -> dict:
 
 
 async def get_pubproc_data(sector: Sector) -> dict:
-    token, exp = settings.pubproc_token, settings.pubproc_token_exp
+    token = get_token()
     today = date.today()
-
-    # if token expired then get a new one
-    if exp < datetime.now().timestamp():
-        token, exp = get_token()
 
     data = {
         "currency-id": "82",
