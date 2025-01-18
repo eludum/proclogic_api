@@ -1,12 +1,12 @@
 from typing import List, Tuple, Union
 
-from models.pubproc_models import Publication
-from models.ted_models import Notice
+from schemas.pubproc_schemas import Publication
+from schemas.ted_schemas import Notice
 from pydantic import BaseModel
 from schemas.sector_schemas import Sector
 
 
-class ProcLogicNotice(BaseModel):
+class ProcLogicPublication(BaseModel):
     id: str
     original_notice: Union[Publication, Notice]
     title: str

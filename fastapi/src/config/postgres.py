@@ -3,18 +3,22 @@ from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from config.config import get_settings
+from config.settings import Settings
 
-settings = get_settings()
 
-engine = create_async_engine(
-    settings.postgres_con_url,
-    echo=True,
-    future=True,
-)
+settings = Settings
 
 
 def async_session_generator():
+
+    print(settings)
+
+    engine = create_async_engine(
+        settings.postgres_con_url,
+        echo=True,
+        future=True,
+    )
+
     return sessionmaker(engine, class_=AsyncSession)
 
 

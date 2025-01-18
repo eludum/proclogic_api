@@ -60,9 +60,3 @@ class Notice(BaseModel):
         None, alias='tender-value')
     organisation_contact_point_tenderer: Optional[List[str]] = Field(
         None, alias='organisation-contact-point-tenderer')
-
-
-class Ted(BaseModel):
-    notices: List[Notice]
-    totalNoticeCount: int
-    iterationNextToken: Optional[str] = None

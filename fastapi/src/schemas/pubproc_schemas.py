@@ -1,24 +1,33 @@
 from typing import List, Optional
 from pydantic import BaseModel
 
+
 class Description(BaseModel):
     language: str
     text: str
+
 
 class CPVCode(BaseModel):
     code: str
     descriptions: List[Description]
 
+
+class EnterpriseCategory(BaseModel):
+    categoryCode: str
+    levels: List[int]
+
+
 class Dossier(BaseModel):
-    accreditations: dict
+    accreditations: Optional[dict] = None
     descriptions: List[Description]
-    enterpriseCategories: List[str]
+    enterpriseCategories: List[EnterpriseCategory]
     legalBasis: str
     number: str
-    procurementProcedureType: str
+    procurementProcedureType: Optional[str] = None
     referenceNumber: str
-    specialPurchasingTechnique: Optional[str]
+    specialPurchasingTechnique: Optional[str] = None
     titles: List[Description]
+
 
 class Lot(BaseModel):
     descriptions: List[Description]
@@ -26,14 +35,17 @@ class Lot(BaseModel):
     reservedParticipation: List[str]
     titles: List[Description]
 
+
 class OrganisationName(BaseModel):
     language: str
     text: str
+
 
 class Organisation(BaseModel):
     organisationId: int
     organisationNames: List[OrganisationName]
     tree: str
+
 
 class Publication(BaseModel):
     cpvAdditionalCodes: List[CPVCode]
@@ -58,12 +70,4 @@ class Publication(BaseModel):
     referenceNumber: str
     sentAt: List[str]
     tedPublished: bool
-    vaultSubmissionDeadline: str
-
-class Publications(BaseModel):
-    totalCount: int
-    publications: List[Publication]
-
-# Example usage
-# data = {...}  # Your JSON data
-# publications = Publications(**data)
+    vaultSubmissionDeadline: Optional[str] = None

@@ -3,19 +3,23 @@ from requests_oauthlib import OAuth2Session
 
 from datetime import datetime
 
-from config.config import get_settings
+from config.settings import Settings
 
-settings = get_settings()
+settings = Settings()
 
 def get_token():
 
-    if settings.pubproc_token_exp > datetime.now().timestamp():
-        return settings.pubproc_token
+    if settings.pubproc_token and settings.pubproc_token_exp is not None:
+        if settings.pubproc_token_exp > datetime.now().timestamp():
+            return settings.pubproc_token
 
     client_id = settings.pubproc_client_id
     client_secret = settings.pubproc_client_secret
 
-    url = "https://public.pr.fedservices.be/api/oauth2/token"
+    url = settings.pubproc_token_url
+
+    print(client_id, client_secret)
+    print(url)
 
     client = BackendApplicationClient(client_id=client_id)
     oauth = OAuth2Session(client=client)

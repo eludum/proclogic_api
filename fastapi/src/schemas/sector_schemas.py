@@ -14,7 +14,10 @@ class Construction(Sector):
 
 
 class Handyman(Construction):
-    codes = Construction.codes + [""]
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.codes.append([""])
+
 
 
 class InformationTechnology(Sector):

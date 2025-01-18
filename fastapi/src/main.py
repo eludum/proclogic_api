@@ -7,23 +7,23 @@ import httpx
 import redis.asyncio as redis
 from fastapi import Depends, FastAPI
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, TypeAdapter
 from starlette.responses import JSONResponse
 
 from ai.openai import get_openai_answer
 from config.postgres import get_sql
 from config.redis import create_redis
 from schemas.company import Company
-from schemas.proclogic_notice_schemas import ProcLogicNotice
-from schemas.pubproc_schemas import PubProc
-from schemas.ted_schemas import Ted
+from schemas.proclogic_notice_schemas import ProcLogicPublication
+from schemas.pubproc_schemas import Publication
+from schemas.ted_schemas import Notice
 from schemas.sector_schemas import Sector
 
 from util.pubproc_token import get_token
 
-from config.config import get_settings
+from config.settings import Settings
 
-settings = get_settings()
+settings = Settings()
 
 class EmailSchema(BaseModel):
     email: List[EmailStr]
@@ -31,13 +31,13 @@ class EmailSchema(BaseModel):
 
 pool = create_redis()
 
-conf = ConnectionConfig(
-    MAIL_USERNAME="username",
-    MAIL_PASSWORD="**********",
-    MAIL_FROM="test@email.com",
-    MAIL_PORT=587,
-    MAIL_SERVER="mail server",
-    MAIL_FROM_NAME="Desired Name",
+email_conf = ConnectionConfig(
+    MAIL_USERNAME=settings.mail_username,
+    MAIL_PASSWORD=settings.mail_password,
+    MAIL_FROM=settings.mail_from,
+    MAIL_PORT=465,
+    MAIL_SERVER="smtp-auth.mailprotect.be",
+    MAIL_FROM_NAME="ProcLogic",
     MAIL_STARTTLS=True,
     MAIL_SSL_TLS=False,
     USE_CREDENTIALS=True,
@@ -60,7 +60,7 @@ async def fetch_data() -> None:
     while True:
         try:
             async with httpx.AsyncClient():
-                await update_ted_publications()
+                await update_publications()
             await asyncio.sleep(600)  # 10 minutes in seconds
         except Exception as e:
             print(f"Error in fetching of data: {e}")
@@ -68,28 +68,20 @@ async def fetch_data() -> None:
             await asyncio.sleep(60)  # wait a minute before retrying
 
 
-async def update_ted_publications() -> None:
-    redis_cache = await get_redis()
-    sql_cache = await get_sql()
+async def update_publications() -> None:
+    psql = get_sql()
 
     pubproc_r = await get_pubproc_data()
     ted_r = await get_ted_data()
-    pubproc_data = PubProc(**pubproc_r.json())
-    ted_data = Ted(**ted_r.json())
 
-    for publication in pubproc_data.publications:
-        await redis_cache.json().set(str(publication.publicationReferenceNumbersBDA), "$", publication.model_dump_json())
-        # TODO: crawl and add docs to redis ragged
+    pubproc_data = TypeAdapter(list[Publication]).validate_python(pubproc_r)
+    ted_data = TypeAdapter(list[Notice]).validate_python(ted_r)
 
-    for notice in ted_data.notices:
-        await redis_cache.json().set(str(notice.publication_number), "$", notice.model_dump_json())
-        # TODO: crawl and add docs to redis ragged
-
-    for notice in data.notices:
-        for comp in sql_cache.query(Company).all():
-            recomm = await get_openai_answer(notice, comp) #TODO: redis stream for summary?
-            pn = ProcLogicNotice(notice=notice, company=comp, recommended=recomm)
-            sql_cache.add(pn)
+    # for notice in data.notices:
+    #     for comp in sql_cache.query(Company).all():
+    #         recomm = await get_openai_answer(notice, comp) #TODO: redis stream for summary?
+    #         pn = ProcLogicNotice(notice=notice, company=comp, recommended=recomm)
+    #         sql_cache.add(pn)
 
 
 app = FastAPI(lifespan=lifespan)
@@ -102,7 +94,6 @@ async def root():
 # TODO: refactor, does this need to be an endpoint?
 #       https://www.geeksforgeeks.org/email-templates-with-jinja-in-python/
 
-
 @app.post("/email")
 async def send_with_template(email: EmailSchema, company: Company) -> JSONResponse:
 
@@ -113,24 +104,14 @@ async def send_with_template(email: EmailSchema, company: Company) -> JSONRespon
         subtype=MessageType.html,
     )
 
-    fm = FastMail(conf)
+    fm = FastMail(email_conf)
     await fm.send_message(message, template_name="email_template.html")
     return JSONResponse(status_code=200, content={"message": "email has been sent"})
-
-
-@app.get("company/{company_id}")
-async def read_company(company_id: int, cache=Depends(get_sql)):
-    cache.add()
-
-@app.get("/publication/{pub_id}")
-async def read_publication(pub_id: int, cache=Depends(get_redis)):
-    status = cache.json().get(pub_id, "$")
-    return {"item_name": status}
 
 # TODO: shouldn't these be getting more data?
 #       pagination?
 
-async def get_ted_data(sector: Sector) -> dict:
+async def get_ted_data() -> dict:
     today = date.today()
     data = {
         # TODO: add cpv based on sector in query
@@ -160,27 +141,33 @@ async def get_ted_data(sector: Sector) -> dict:
         data['iterationNextToken'] = r.json()['iterationNextToken']
         r = httpx.post('https://api.ted.europa.eu/v3/notices/search', json=data)
         notices.extend(r.json()['notices'])
+        break
 
-    return r
+    return notices
 
 
-async def get_pubproc_data(sector: Sector) -> dict:
+async def get_pubproc_data() -> dict:
     token = get_token()
     today = date.today()
 
     data = {
+        # TODO: add cpv based on sector in query
         "currency-id": "82",
-        "dispatch-date": f"{today.strftime("%d-%m-%Y")}",
+        "dispatch-date": f"{today.strftime('%d-%m-%Y')}",
         "page": 1,
         "pageSize": 100
     }
 
     headers = {
-        'Authorization': f'Bearer {token["access_token"]}',
+        'Authorization': f'Bearer {token}',
         'BelGov-Trace-Id': '2ce83af9-d524-43a6-8d1c-b19dff051aed'
     }
 
-    r = httpx.get('https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications', params=data, headers=headers)    
+    print(headers)
+
+    r = httpx.get('https://public.int.fedservices.be/api/eProcurementSea/v1/search/publications', params=data, headers=headers)    
+
+    print(r)
 
     publications = r.json()['publications']
 
@@ -188,9 +175,11 @@ async def get_pubproc_data(sector: Sector) -> dict:
         totalCount = r.json()['totalCount']
         pages = int(totalCount / 100)
 
-        for i in pages:
+        for i in range(2, pages + 1):
             data['page'] = i
-            r = httpx.get('https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications', params=data, headers=headers)
+            print(data)
+            r = httpx.get('https://public.int.fedservices.be/api/eProcurementSea/v1/search/publications', params=data, headers=headers)
             publications.extend(r.json()['publications'])
+            break
 
-    return r
+    return publications

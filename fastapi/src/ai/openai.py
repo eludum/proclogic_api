@@ -1,10 +1,10 @@
 from openai import AsyncOpenAI
 
-from config.config import get_settings
+from config.settings import Settings
 from schemas.company import Company
 from schemas.ted_schemas import Notice
 
-settings = get_settings()
+settings = Settings
 
 
 async def get_openai_client() -> AsyncOpenAI:
