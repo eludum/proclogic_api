@@ -147,12 +147,20 @@ async def get_ted_data(sector: Sector) -> dict:
             "document-url-lot"
         ],
         "page": 1,
-        "limit": 10,
+        "limit": 100,
         "scope": "ACTIVE",
         "checkQuerySyntax": False,
-        "paginationMode": "PAGE_NUMBER"
+        "paginationMode": "ITERATION"
     }
     r = httpx.post('https://api.ted.europa.eu/v3/notices/search', json=data)
+
+    notices = r.json()['notices']
+
+    while "iterationNextToken" in r.json():
+        data['iterationNextToken'] = r.json()['iterationNextToken']
+        r = httpx.post('https://api.ted.europa.eu/v3/notices/search', json=data)
+        notices.extend(r.json()['notices'])
+
     return r
 
 
@@ -163,11 +171,26 @@ async def get_pubproc_data(sector: Sector) -> dict:
     data = {
         "currency-id": "82",
         "dispatch-date": f"{today.strftime("%d-%m-%Y")}",
+        "page": 1,
+        "pageSize": 100
     }
+
     headers = {
         'Authorization': f'Bearer {token["access_token"]}',
         'BelGov-Trace-Id': '2ce83af9-d524-43a6-8d1c-b19dff051aed'
     }
+
     r = httpx.get('https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications', params=data, headers=headers)    
-    
+
+    publications = r.json()['publications']
+
+    if r.status_code == 200:
+        totalCount = r.json()['totalCount']
+        pages = int(totalCount / 100)
+
+        for i in pages:
+            data['page'] = i
+            r = httpx.get('https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications', params=data, headers=headers)
+            publications.extend(r.json()['publications'])
+
     return r
