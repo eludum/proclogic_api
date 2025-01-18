@@ -1,72 +1,75 @@
-create table publications (
+create table descriptions (
   id bigint primary key generated always as identity,
-  reference_number text,
-  insertion_date timestamp,
-  organisation_id bigint,
-  cancelled_at timestamp,
-  dossier_id bigint,
-  publication_workspace_id text,
-  cpv_main_code_id bigint,
-  natures jsonb,
-  dispatch_date timestamp,
-  sent_at jsonb,
-  published_at jsonb,
-  vault_submission_deadline timestamp,
-  ted_published boolean,
-  notice_sub_type text,
-  procedure_id text
+  language text not null,
+  text text not null
 );
 
-create table organisations (
+create table cpv_additional_codes (
   id bigint primary key generated always as identity,
-  tree text
+  code text not null
 );
 
-create table organisation_names (
+create table cpv_additional_code_descriptions (
+  cpv_additional_code_id bigint references cpv_additional_codes (id),
+  description_id bigint references descriptions (id),
+  primary key (cpv_additional_code_id, description_id)
+);
+
+create table cpv_main_codes (
   id bigint primary key generated always as identity,
-  organisation_id bigint references organisations (id),
-  text text,
-  language text
+  code text not null
+);
+
+create table enterprise_categories (
+  id bigint primary key generated always as identity,
+  category_code text not null,
+  levels text
 );
 
 create table dossiers (
   id bigint primary key generated always as identity,
-  titles jsonb,
-  descriptions jsonb,
-  accreditations jsonb,
-  reference_number text,
-  procurement_procedure_type text,
-  special_purchasing_technique text,
-  legal_basis text
+  legal_basis text not null,
+  number text not null,
+  procurement_procedure_type text not null,
+  reference_number text not null
 );
 
 create table lots (
   id bigint primary key generated always as identity,
-  titles jsonb,
-  descriptions jsonb,
-  reserved_participation jsonb,
-  reserved_execution jsonb,
-  publication_id bigint references publications (id)
+  reserved_execution text,
+  reserved_participation text
 );
 
-create table cpv_codes (
+create table lot_descriptions (
+  lot_id bigint references lots (id),
+  description_id bigint references descriptions (id),
+  primary key (lot_id, description_id)
+);
+
+create table organisations (
   id bigint primary key generated always as identity,
-  code text,
-  descriptions jsonb,
-  publication_id bigint references publications (id)
+  organisation_id bigint not null,
+  tree text not null
 );
 
-create table publication_language_association (
-  publication_id bigint references publications (id),
-  language text
+create table organisation_names (
+  organisation_id bigint references organisations (id),
+  name_id bigint references descriptions (id),
+  primary key (organisation_id, name_id)
 );
 
-create table nuts_code_association (
-  publication_id bigint references publications (id),
-  nuts_code text
-);
-
-create table notice_id_association (
-  publication_id bigint references publications (id),
-  notice_id text
+create table publications (
+  id bigint primary key generated always as identity,
+  procedure_id text not null,
+  publication_date date not null,
+  dispatch_date date not null,
+  insertion_date date not null,
+  publication_type text not null,
+  publication_workspace_id text not null,
+  reference_number text not null,
+  ted_published boolean not null,
+  vault_submission_deadline timestamp not null,
+  cpv_main_code_id bigint references cpv_main_codes (id),
+  organisation_id bigint references organisations (id),
+  dossier_id bigint references dossiers (id)
 );

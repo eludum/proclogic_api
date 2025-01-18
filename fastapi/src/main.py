@@ -72,10 +72,16 @@ async def update_publications() -> None:
     psql = get_sql()
 
     pubproc_r = await get_pubproc_data()
-    ted_r = await get_ted_data()
+    # ted_r = await get_ted_data()
 
     pubproc_data = TypeAdapter(list[Publication]).validate_python(pubproc_r)
-    ted_data = TypeAdapter(list[Notice]).validate_python(ted_r)
+    # ted_data = TypeAdapter(list[Notice]).validate_python(ted_r)
+
+    for pub in pubproc_data:
+        for comp in psql.query(Company).all():
+            recomm = await get_openai_answer(pub, comp) #TODO: redis stream for summary?
+            pn = ProcLogicPublication(original_notice=pub, company=comp, recommended=recomm)
+            psql.add(pn)
 
     # for notice in data.notices:
     #     for comp in sql_cache.query(Company).all():

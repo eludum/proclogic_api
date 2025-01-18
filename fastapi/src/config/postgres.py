@@ -11,8 +11,6 @@ settings = Settings
 
 def async_session_generator():
 
-    print(settings)
-
     engine = create_async_engine(
         settings.postgres_con_url,
         echo=True,
