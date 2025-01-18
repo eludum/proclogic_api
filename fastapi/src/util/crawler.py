@@ -16,6 +16,7 @@ class TedNoticeCrawler(Crawler):
             # TODO: store in redis
             # TODO: rag
 
+
 class PubProcPublicationCrawler(Crawler):
     # easiest would be to use selenium or playwirght?
     pass
