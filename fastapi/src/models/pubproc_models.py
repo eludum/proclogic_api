@@ -1,110 +1,139 @@
-from sqlalchemy import (
-    create_engine,
-    Column,
-    Integer,
-    String,
-    ForeignKey,
-    Table,
-    Boolean,
-    DateTime,
-    JSON,
-)
-from sqlalchemy.orm import relationship, declarative_base, sessionmaker
+from sqlalchemy import Column, Integer, String, JSON, ForeignKey, Boolean
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+from sqlalchemy.ext.declarative import declarative_base
+from typing import List, Optional
 
 Base = declarative_base()
 
 
 class Description(Base):
     __tablename__ = "descriptions"
-    id = Column(Integer, primary_key=True)
-    language = Column(String, nullable=False)
-    text = Column(String, nullable=False)
-    cpv_code_id = Column(Integer, ForeignKey("cpv_codes.id"))
-    dossier_id = Column(Integer, ForeignKey("dossiers.id"))
-    lot_id = Column(Integer, ForeignKey("lots.id"))
-    title_id = Column(Integer, ForeignKey("titles.id"))
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    language: Mapped[str] = mapped_column(String, nullable=False)
+    text: Mapped[str] = mapped_column(String, nullable=False)
+
+    cpv_code_id: Mapped[int] = mapped_column(Integer, ForeignKey("cpv_codes.id"))
+    cpv_code: Mapped["CPVCode"] = relationship("CPVCode", back_populates="descriptions")
+
+    dossier_id: Mapped[int] = mapped_column(Integer, ForeignKey("dossiers.id"))
+    dossier: Mapped["Dossier"] = relationship("Dossier", back_populates="descriptions")
+
+    lot_id: Mapped[int] = mapped_column(Integer, ForeignKey("lots.id"))
+    lot: Mapped["Lot"] = relationship("Lot", back_populates="descriptions")
 
 
 class CPVCode(Base):
     __tablename__ = "cpv_codes"
-    id = Column(Integer, primary_key=True)
-    code = Column(String, nullable=False)
-    descriptions = relationship("Description", backref="cpv_code")
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String, nullable=False)
+
+    descriptions: Mapped[List[Description]] = relationship(
+        "Description", back_populates="cpv_code"
+    )
 
 
 class EnterpriseCategory(Base):
     __tablename__ = "enterprise_categories"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    category_code = Column(String, nullable=False)
-    levels = Column(String)  # Store levels as a comma-separated string
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    category_code: Mapped[str] = mapped_column(String, nullable=False)
+    levels: Mapped[List[int]] = mapped_column(JSON, default=[])
+
+    # Add the foreign key reference to the Dossier table
+    dossier_id: Mapped[int] = mapped_column(Integer, ForeignKey("dossiers.id"))
+
+    # Relationship back to the Dossier model
+    dossier: Mapped["Dossier"] = relationship("Dossier", back_populates="enterprise_categories")
 
 
 class Dossier(Base):
     __tablename__ = "dossiers"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    legal_basis = Column(String, nullable=False)
-    number = Column(String, nullable=False)
-    procurement_procedure_type = Column(String, nullable=False)
-    reference_number = Column(String, nullable=False)
-    descriptions = relationship("Description")
-    enterprise_categories = relationship("EnterpriseCategory")
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    legal_basis: Mapped[str] = mapped_column(String, nullable=False)
+    number: Mapped[str] = mapped_column(String, nullable=False)
+    procurement_procedure_type: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True
+    )
+    reference_number: Mapped[str] = mapped_column(String, nullable=False)
+    accreditations: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    special_purchasing_technique: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True
+    )
+
+    descriptions: Mapped[List[Description]] = relationship(
+        "Description", back_populates="dossier"
+    )
+
+    # Update the relationship with the EnterpriseCategory model
+    enterprise_categories: Mapped[List[EnterpriseCategory]] = relationship(
+        "EnterpriseCategory", back_populates="dossier"
+    )
+
 
 
 class Lot(Base):
     __tablename__ = "lots"
-    id = Column(Integer, primary_key=True)
-    descriptions = relationship("Description", backref="lot")
-    reserved_execution = Column(JSON)
-    reserved_participation = Column(JSON)
-    titles = relationship("Description", backref="lot_title")
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reserved_execution: Mapped[List[str]] = mapped_column(JSON, default=[])
+    reserved_participation: Mapped[List[str]] = mapped_column(JSON, default=[])
+
+    # Foreign Key linking Lot to Publication
+    publication_id: Mapped[int] = mapped_column(Integer, ForeignKey("publications.id"))
+
+    # Relationship back to Publication
+    publication: Mapped["Publication"] = relationship("Publication", back_populates="lots")
+
+    descriptions: Mapped[List[Description]] = relationship(
+        "Description", back_populates="lot"
+    )
+
 
 
 class OrganisationName(Base):
     __tablename__ = "organisation_names"
-    id = Column(Integer, primary_key=True)
-    language = Column(String, nullable=False)
-    text = Column(String, nullable=False)
-    organisation_id = Column(Integer, ForeignKey("organisations.id"))
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    language: Mapped[str] = mapped_column(String, nullable=False)
+    text: Mapped[str] = mapped_column(String, nullable=False)
+
+    organisation_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("organisations.id")
+    )
 
 
 class Organisation(Base):
     __tablename__ = "organisations"
-    id = Column(Integer, primary_key=True)
-    organisation_id = Column(Integer, nullable=False)
-    organisation_names = relationship("OrganisationName", backref="organisation")
-    tree = Column(String, nullable=False)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    organisation_id: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
+    tree: Mapped[str] = mapped_column(String, nullable=False)
+
+    organisation_names: Mapped[List[OrganisationName]] = relationship(
+        "OrganisationName", backref="organisation"
+    )
 
 
 class Publication(Base):
     __tablename__ = "publications"
-    id = Column(Integer, primary_key=True)
-    cpv_additional_codes = relationship("CPVCode", backref="publication")
-    cpv_main_code_id = Column(Integer, ForeignKey("cpv_codes.id"))
-    dispatch_date = Column(String, nullable=False)
-    dossier_id = Column(Integer, ForeignKey("dossiers.id"))
-    insertion_date = Column(String, nullable=False)
-    lots = relationship("Lot", backref="publication")
-    natures = Column(JSON)
-    notice_ids = Column(JSON)
-    notice_sub_type = Column(String, nullable=False)
-    nuts_codes = Column(JSON)
-    organisation_id = Column(Integer, ForeignKey("organisations.id"))
-    procedure_id = Column(String, nullable=False)
-    publication_date = Column(String, nullable=False)
-    publication_languages = Column(JSON)
-    publication_reference_numbers_bda = Column(JSON)
-    publication_reference_numbers_ted = Column(JSON)
-    publication_type = Column(String, nullable=False)
-    publication_workspace_id = Column(String, nullable=False)
-    published_at = Column(JSON)
-    reference_number = Column(String, nullable=False)
-    sent_at = Column(JSON)
-    ted_published = Column(Boolean, nullable=False)
-    vault_submission_deadline = Column(String, nullable=False)
 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    dispatch_date: Mapped[str] = mapped_column(String, nullable=False)
+    insertion_date: Mapped[str] = mapped_column(String, nullable=False)
+    procedure_id: Mapped[str] = mapped_column(String, nullable=False)
+    publication_date: Mapped[str] = mapped_column(String, nullable=False)
+    publication_type: Mapped[str] = mapped_column(String, nullable=False)
+    publication_workspace_id: Mapped[str] = mapped_column(String, nullable=False)
+    ted_published: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
-# Example usage
-# engine = create_engine('postgresql://user:password@localhost/mydatabase')
-# Base.metadata.create_all(engine)
+    cpv_main_code_id: Mapped[int] = mapped_column(Integer, ForeignKey("cpv_codes.id"))
+    cpv_main_code: Mapped[CPVCode] = relationship("CPVCode")
+
+    # Relationship with Lot
+    lots: Mapped[List[Lot]] = relationship("Lot", back_populates="publication")
+
+    natures: Mapped[List[str]] = mapped_column(JSON, default=[])
+    notice_ids: Mapped[List[str]] = mapped_column(JSON, default=[])

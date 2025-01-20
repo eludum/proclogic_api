@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     mail_username: str
     mail_password: str
     mail_from: str
+    debug_logs: bool = True
 
     class Config:
         env_file = "../.env", "../.env.prod"
