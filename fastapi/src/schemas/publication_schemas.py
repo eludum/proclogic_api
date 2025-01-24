@@ -1,7 +1,7 @@
-from typing import List, Optional, Tuple
-from pydantic import BaseModel, ConfigDict
+from datetime import datetime
+from typing import List, Optional
 
-from schemas.company_schemas import CompanySchema
+from pydantic import BaseModel, ConfigDict
 
 
 class DescriptionSchema(BaseModel):
@@ -12,6 +12,24 @@ class DescriptionSchema(BaseModel):
 class CPVCodeSchema(BaseModel):
     code: str
     descriptions: List[DescriptionSchema]
+    sector_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SectorSchema(BaseModel):
+    name: Optional[str]
+    cpv_codes: List[CPVCodeSchema]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CompanySchema(BaseModel):
+    vat_number: str
+    name: str
+    email: str
+    sectors: List[SectorSchema]
+    summary_activities: str
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -60,9 +78,9 @@ class OrganisationSchema(BaseModel):
 class PublicationSchema(BaseModel):
     cpvAdditionalCodes: List[CPVCodeSchema]
     cpvMainCode: CPVCodeSchema
-    dispatchDate: str
+    dispatchDate: datetime
     dossier: DossierSchema
-    insertionDate: str
+    insertionDate: datetime
     lots: List[LotSchema]
     natures: List[str]
     noticeIds: List[str]
@@ -70,18 +88,18 @@ class PublicationSchema(BaseModel):
     nutsCodes: List[str]
     organisation: OrganisationSchema
     procedureId: str
-    publicationDate: str
+    publicationDate: datetime
     publicationLanguages: List[str]
     publicationReferenceNumbersBDA: List[str]
     publicationReferenceNumbersTED: List[str]
     publicationType: str
     publicationWorkspaceId: str
-    publishedAt: List[str]
+    publishedAt: List[datetime]
     referenceNumber: str
-    sentAt: List[str]
+    sentAt: List[datetime]
     tedPublished: bool
-    vaultSubmissionDeadline: Optional[str] = None
-    recommended: Optional[Tuple[bool, CompanySchema]] = None
+    vaultSubmissionDeadline: Optional[datetime] = None
+    recommended: Optional[List[CompanySchema]] = None
     ai_summary: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)

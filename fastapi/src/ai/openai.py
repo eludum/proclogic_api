@@ -1,8 +1,7 @@
 from openai import AsyncOpenAI
 
 from config.settings import Settings
-from schemas.company_schemas import CompanySchema
-from schemas.pubproc_schemas import PublicationSchema
+from schemas.publication_schemas import CompanySchema, PublicationSchema
 
 settings = Settings
 

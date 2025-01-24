@@ -1,11 +1,12 @@
+from datetime import datetime
+
 from oauthlib.oauth2 import BackendApplicationClient
 from requests_oauthlib import OAuth2Session
-
-from datetime import datetime
 
 from config.settings import Settings
 
 settings = Settings()
+
 
 def get_token():
 
@@ -33,5 +34,5 @@ def get_token():
 
     settings.pubproc_token = token["access_token"]
     settings.pubproc_token_exp = token["expires_at"]
-    
+
     return settings.pubproc_token

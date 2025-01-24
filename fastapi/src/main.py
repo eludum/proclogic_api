@@ -1,28 +1,23 @@
 import asyncio
 import logging
 import sys
-
 from contextlib import asynccontextmanager
-from typing import List
 from datetime import date
+from typing import List
 
 import httpx
 import redis.asyncio as redis
-from fastapi import Depends, FastAPI
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from pydantic import BaseModel, EmailStr, TypeAdapter
 from starlette.responses import JSONResponse
 
 from ai.openai import get_openai_answer
-from config.postgres import sessionmanager
+from crud.publication import create_publication
 from config.redis import create_redis
-from schemas.company_schemas import CompanySchema
-from schemas.pubproc_schemas import PublicationSchema
-
-from util.pubproc_token import get_token
-
 from config.settings import Settings
-
+from fastapi import FastAPI
+from schemas.publication_schemas import PublicationSchema, CompanySchema
+from util.pubproc_token import get_token
 
 settings = Settings()
 
@@ -60,8 +55,6 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(fetch_data())
     yield
     task.cancel()
-    if sessionmanager._engine is not None:
-        await sessionmanager.close()
 
 
 async def fetch_data() -> None:
@@ -82,7 +75,8 @@ async def update_publications() -> None:
     pubproc_data = TypeAdapter(list[PublicationSchema]).validate_python(pubproc_r)
 
     for pub in pubproc_data:
-        logging.info(pub)
+        # logging.info(pub)
+        await create_publication(publication_data=pub)
         break
 
 
