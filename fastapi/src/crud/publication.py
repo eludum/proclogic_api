@@ -1,4 +1,4 @@
-from config.postgres import get_db
+from config.postgres import get_session
 from models.publication_models import (CPVCode, Description, Dossier,
                                        EnterpriseCategory, Lot, Organisation,
                                        OrganisationName, Publication)
@@ -7,7 +7,7 @@ from schemas.publication_schemas import PublicationSchema
 
 def create_publication(publication_data: PublicationSchema):
 
-    session = get_db()
+    session = get_session()
 
     publication = Publication(
         publication_workspace_id=publication_data.publicationWorkspaceId,

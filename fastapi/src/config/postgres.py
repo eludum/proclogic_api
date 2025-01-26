@@ -9,9 +9,9 @@ engine = create_engine(settings.postgres_con_url)
 
 Session = sessionmaker(bind=engine)
 
-def get_db():
-    db = Session()
+def get_session():
+    session = Session()
     try:
-        yield db
+        yield session
     finally:
-        db.close()
+        session.close()
