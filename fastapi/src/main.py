@@ -11,12 +11,11 @@ from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from pydantic import BaseModel, EmailStr, TypeAdapter
 from starlette.responses import JSONResponse
 
-from ai.openai import get_openai_answer
-from crud.publication import create_publication
 from config.redis import create_redis
 from config.settings import Settings
-from fastapi import FastAPI
-from schemas.publication_schemas import PublicationSchema, CompanySchema
+from crud.publication import create_publication
+from fastapi import FastAPI, status
+from schemas.publication_schemas import CompanySchema, PublicationSchema
 from util.pubproc_token import get_token
 
 settings = Settings()
@@ -75,17 +74,37 @@ async def update_publications() -> None:
     pubproc_data = TypeAdapter(list[PublicationSchema]).validate_python(pubproc_r)
 
     for pub in pubproc_data:
-        # logging.info(pub)
-        await create_publication(publication_data=pub)
+        logging.info(pub)
+        create_publication(publication_data=pub)
         break
 
 
 app = FastAPI(lifespan=lifespan)
 
+class HealthCheck(BaseModel):
+    """Response model to validate and return when performing a health check."""
 
-@app.get("/")
-async def root():
-    return {"message": "Hello World!"}
+    status: str = "OK"
+
+@app.get(
+    "/health",
+    tags=["healthcheck"],
+    summary="Perform a Health Check",
+    response_description="Return HTTP Status Code 200 (OK)",
+    status_code=status.HTTP_200_OK,
+    response_model=HealthCheck,
+)
+def get_health() -> HealthCheck:
+    """
+    ## Perform a Health Check
+    Endpoint to perform a healthcheck on. This endpoint can primarily be used Docker
+    to ensure a robust container orchestration and management is in place. Other
+    services which rely on proper functioning of the API service will not deploy if this
+    endpoint returns any other HTTP status code except 200 (OK).
+    Returns:
+        HealthCheck: Returns a JSON response with the health status
+    """
+    return HealthCheck(status="OK")
 
 
 # TODO: refactor, does this need to be an endpoint?
@@ -109,7 +128,7 @@ async def send_with_template(
     return JSONResponse(status_code=200, content={"message": "email has been sent"})
 
 
-async def get_pubproc_data() -> dict:
+async def get_pubproc_search_data() -> dict:
     token = get_token()
     today = date.today()
 
@@ -127,7 +146,7 @@ async def get_pubproc_data() -> dict:
     }
 
     r = httpx.get(
-        "https://public.int.fedservices.be/api/eProcurementSea/v1/search/publications",
+        settings.pubproc_server + settings.path_sea_api + "/search/publications",
         params=data,
         headers=headers,
     )
@@ -140,9 +159,8 @@ async def get_pubproc_data() -> dict:
 
         for i in range(2, pages + 1):
             data["page"] = i
-            print(data)
             r = httpx.get(
-                "https://public.int.fedservices.be/api/eProcurementSea/v1/search/publications",
+                settings.pubproc_server + settings.path_sea_api + "/search/publications",
                 params=data,
                 headers=headers,
             )
@@ -157,7 +175,6 @@ async def get_pubproc_data() -> dict:
 async def get_ted_data() -> dict:
     today = date.today()
     data = {
-        # TODO: add cpv based on sector in query
         "query": f'publication-date={today.strftime("%Y%m%d")} AND buyer-country=BEL',
         "fields": [
             "publication-date",

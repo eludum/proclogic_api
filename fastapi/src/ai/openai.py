@@ -11,9 +11,6 @@ async def get_openai_client() -> AsyncOpenAI:
 
 
 async def get_openai_answer(publication: PublicationSchema, company: CompanySchema) -> str:
-    # TODO:
-    # https://norahsakal.com/blog/chatgpt-product-recommendation-embeddings/
-    # https://norahsakal.com/blog/naive-rag-dead-long-live-agents/
     client = await get_openai_client()
     dossier_str = ""
     for desc in publication.dossier.descriptions:
@@ -39,15 +36,12 @@ async def get_openai_answer(publication: PublicationSchema, company: CompanySche
                 "role": "user",
                 "content": [
                     {
-                        # TODO: make profile per company
                         "type": "text",
-                        "text": f"The company is {company.name}, they do {company.summary_activities}. The publication title is {dossier_str}. The different lots within this publication are {lots_str}. Is this a good fit for them?",
+                        "text": f"The company is {company.name}, they do {company.summary_activities}. The max amount of  The publication title is {dossier_str}. The different lots within this publication are {lots_str}. Is this a good fit for them?",
                     }
                 ],
             },
         ],
-        # TODO: to be fine tuned
-        temperature=0.0,
     )
 
     return completion.choices[0].message.content

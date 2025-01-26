@@ -1,92 +1,159 @@
-from sqlalchemy.exc import IntegrityError
-from models.publication_models import CPVCode, Lot, Publication, Description
+from config.postgres import get_db
+from models.publication_models import (CPVCode, Description, Dossier,
+                                       EnterpriseCategory, Lot, Organisation,
+                                       OrganisationName, Publication)
 from schemas.publication_schemas import PublicationSchema
-from config.postgres import get_session
 
 
-async def create_publication(
-    publication_data: PublicationSchema
-) -> PublicationSchema:
-    """
-    Create a new publication in the database.
+def create_publication(publication_data: PublicationSchema):
 
-    Args:
-        publication_data (PublicationSchema): The data for creating the publication.
-        db (AsyncSession): The database session.
+    session = get_db()
 
-    Returns:
-        PublicationSchema: The newly created publication as a Pydantic schema.
-    """
-
-    async with get_session() as session:
-
-        try:
-            # Handle the main CPV code and descriptions
-            cpv_additional_codes = [
-                CPVCode(
-                    code=cpvcode.code,
-                    descriptions=[
-                        Description(language=desc.language, text=desc.text)
-                        for desc in cpvcode.descriptions
-                    ],
-                )
-                for cpvcode in publication_data.cpvAdditionalCodes
-            ]
-
-            # Handle lots and associated descriptions
-            lots = [
-                Lot(
-                    reserved_execution=lot.reservedExecution,
-                    reserved_participation=lot.reservedParticipation,
-                    descriptions=[
-                        Description(language=desc.language, text=desc.text)
-                        for desc in lot.descriptions
-                    ],
-                    titles=[
-                        Description(language=desc.language, text=desc.text)
-                        for desc in lot.titles
-                    ],
-                )
-                for lot in publication_data.lots
-            ]
-
-
-            new_publication = Publication(
-                publication_workspace_id=publication_data.publicationWorkspaceId,
-                dispatch_date=publication_data.dispatchDate,
-                insertion_date=publication_data.insertionDate,
-                natures=publication_data.natures,
-                notice_ids=publication_data.noticeIds,
-                notice_sub_type=publication_data.noticeSubType,
-                nuts_codes=publication_data.nutsCodes,
-                procedure_id=publication_data.procedureId,
-                publication_date=publication_data.publicationDate,
-                publication_languages=publication_data.publicationLanguages,
-                publication_reference_numbers_bda=publication_data.publicationReferenceNumbersBDA,
-                publication_reference_numbers_ted=publication_data.publicationReferenceNumbersTED,
-                publication_type=publication_data.publicationType,
-                published_at=publication_data.publishedAt,
-                reference_number=publication_data.referenceNumber,
-                sent_at=publication_data.sentAt,
-                ted_published=publication_data.tedPublished,
-                vault_submission_deadline=publication_data.vaultSubmissionDeadline,
-                ai_summary=publication_data.ai_summary,
-                cpv_additional_codes=cpv_additional_codes,
-                cpv_main_code_id=publication_data.cpvMainCode.code,
-                cpv_main_code=publication_data.cpvMainCode,
-                dossier_id=publication_data.dossier.referenceNumber,
-                dossier=publication_data.dossier,
-                organisation_id=publication_data.organisation.organisationId,
-                organisation=publication_data.organisation,
-                lots=lots,
-                recommended=publication_data.recommended or [],
+    publication = Publication(
+        publication_workspace_id=publication_data.publicationWorkspaceId,
+        dispatch_date=publication_data.dispatchDate,
+        insertion_date=publication_data.insertionDate,
+        natures=publication_data.natures,
+        notice_ids=publication_data.noticeIds,
+        notice_sub_type=publication_data.noticeSubType,
+        nuts_codes=publication_data.nutsCodes,
+        procedure_id=publication_data.procedureId,
+        publication_date=publication_data.publicationDate,
+        publication_languages=publication_data.publicationLanguages,
+        publication_reference_numbers_bda=publication_data.publicationReferenceNumbersBDA,
+        publication_reference_numbers_ted=publication_data.publicationReferenceNumbersTED,
+        publication_type=publication_data.publicationType,
+        published_at=publication_data.publishedAt,
+        reference_number=publication_data.referenceNumber,
+        sent_at=publication_data.sentAt,
+        ted_published=publication_data.tedPublished,
+        vault_submission_deadline=publication_data.vaultSubmissionDeadline,
+        ai_summary=publication_data.ai_summary,
+    )
+    session.add(publication)
+    session.flush()  # Ensure `publication` is written and has an ID
+    
+    # Add the main CPV code
+    cpv_main_code = CPVCode(
+        code=publication_data.cpvMainCode.code,
+        descriptions=[
+            Description(
+                language=desc.language,
+                text=desc.text,
+                cpv_code_code=publication_data.cpvMainCode.code,
             )
-            
-            session.add(new_publication)
-            await session.commit()
+            for desc in publication_data.cpvMainCode.descriptions
+        ],
+        publication_workspace_id=publication_data.publicationWorkspaceId,
+    )
+    cpv_in_db = session.get(CPVCode, publication_data.cpvMainCode.code)
+    if not cpv_in_db:
+        session.add(cpv_main_code)
+        session.flush()
+        publication.cpv_main_code = cpv_main_code  # Assign the new instance
+    else:
+        publication.cpv_main_code = cpv_in_db  # Assign the existing instance
 
-            return PublicationSchema.model_validate(new_publication)
+    # Add related CPV codes
+    for cpvcode in publication_data.cpvAdditionalCodes:
+        cpv_code_instance = CPVCode(
+            code=cpvcode.code,
+            descriptions=[
+                Description(
+                    language=desc.language,
+                    text=desc.text,
+                    cpv_code_code=cpvcode.code,
+                )
+                for desc in cpvcode.descriptions
+            ],
+            publication_workspace_id=publication_data.publicationWorkspaceId,
+        )
+        cpv_in_db = session.get(CPVCode, cpvcode.code)
+        if not cpv_in_db:
+            session.add(cpv_code_instance)
+            session.flush()
+            publication.cpv_additional_codes.append(
+                cpv_code_instance
+            )  # Append the new instance
+        else:
+            publication.cpv_additional_codes.append(
+                cpv_in_db
+            )  # Append the existing instance
 
-        except IntegrityError as e:
-            await session.rollback()
-            raise ValueError(f"Error creating publication: {str(e)}")
+    # Add other related objects (dossier, organisation, lots, etc.)
+    dossier = Dossier(
+        reference_number=publication_data.dossier.referenceNumber,
+        accreditations=publication_data.dossier.accreditations,
+        legal_basis=publication_data.dossier.legalBasis,
+        number=publication_data.dossier.number,
+        procurement_procedure_type=publication_data.dossier.procurementProcedureType,
+        special_purchasing_technique=publication_data.dossier.specialPurchasingTechnique,
+        descriptions=[
+            Description(
+                language=desc.language,
+                text=desc.text,
+                dossier_reference_number=publication_data.dossier.referenceNumber,
+            )
+            for desc in publication_data.dossier.descriptions
+        ],
+        titles=[
+            Description(
+                language=desc.language,
+                text=desc.text,
+                dossier_reference_number=publication_data.dossier.referenceNumber,
+            )
+            for desc in publication_data.dossier.titles
+        ],
+        publication_workspace_id=publication_data.publicationWorkspaceId,
+    )
+    session.add(dossier)
+
+    session.flush()
+    enterprise_categories = [
+        EnterpriseCategory(
+            category_code=entc.categoryCode,
+            levels=entc.levels,
+            dossier_reference_number=publication_data.dossier.referenceNumber,
+        )
+        for entc in publication_data.dossier.enterpriseCategories
+    ]
+    session.add_all(enterprise_categories)
+    session.flush()
+    publication.dossier = dossier
+
+    organisation = Organisation(
+        organisation_id=publication_data.organisation.organisationId,
+        tree=publication_data.organisation.tree,
+        organisation_names=[
+            OrganisationName(
+                language=org.language,
+                text=org.text,
+                organisation_id=publication_data.organisation.organisationId,
+            )
+            for org in publication_data.organisation.organisationNames
+        ],
+        publication_workspace_id=publication_data.publicationWorkspaceId,
+    )
+    session.add(organisation)
+    session.flush()
+    publication.organisation = organisation
+
+    for lot in publication_data.lots:
+        lot_instance = Lot(
+            reserved_execution=lot.reservedExecution,
+            reserved_participation=lot.reservedParticipation,
+            descriptions=[
+                Description(language=desc.language, text=desc.text)
+                for desc in lot.descriptions
+            ],
+            titles=[
+                Description(language=desc.language, text=desc.text)
+                for desc in lot.titles
+            ],
+            publication_workspace_id=publication_data.publicationWorkspaceId,
+        )
+        session.add(lot_instance)
+        session.flush()
+        publication.lots.append(lot_instance)
+
+    session.add(publication)

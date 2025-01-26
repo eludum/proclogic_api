@@ -8,5 +8,5 @@ class Crawler(BaseModel):
 
 
 class PubProcPublicationCrawler(Crawler):
-    # easiest would be to use selenium or playwirght?
+    # TODO: easiest would be to use selenium or playwirght?
     pass

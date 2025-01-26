@@ -17,18 +17,11 @@ class CPVCodeSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class SectorSchema(BaseModel):
-    name: Optional[str]
-    cpv_codes: List[CPVCodeSchema]
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class CompanySchema(BaseModel):
     vat_number: str
     name: str
     email: str
-    sectors: List[SectorSchema]
+    interested_cpv_codes: List[CPVCodeSchema]
     summary_activities: str
 
     model_config = ConfigDict(from_attributes=True)

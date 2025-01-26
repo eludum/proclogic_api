@@ -3,9 +3,14 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     openai_api_key: str
+    deepseek_api_key: str
     pubproc_client_id: str
     pubproc_client_secret: str
-    pubproc_token_url: str
+    pubproc_server: str = "https://public.int.fedservices.be"
+    pubproc_token_url: str = pubproc_server + "/api/oauth2/token"
+    path_sea_api: str = "/api/eProcurementSea/v1"
+    path_loc_api: str = "/api/eProcurementLoc/v1"
+    path_dos_api: str = "/api/eProcurementDos/v1"
     pubproc_token: str = ""
     pubproc_token_exp: str = ""
     redis_host: str = "localhost"

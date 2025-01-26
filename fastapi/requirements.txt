@@ -10,7 +10,8 @@ python-multipart
 redis
 pydantic
 pydantic-settings
-sqlalchemy[asyncio]
+sqlalchemy
+psycopg2-binary
 alembic
 requests-oauthlib
 asyncpg
