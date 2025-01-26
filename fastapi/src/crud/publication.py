@@ -7,6 +7,7 @@ from schemas.publication_schemas import PublicationSchema
 
 def create_publication(publication_data: PublicationSchema):
 
+    # TODO: implement rollback, split into smaller parts, add logging, create or update flows
     session = get_session()
 
     publication = Publication(

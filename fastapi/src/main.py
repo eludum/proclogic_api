@@ -69,13 +69,13 @@ async def fetch_data() -> None:
 
 
 async def update_publications() -> None:
-    pubproc_r = await get_pubproc_data()
+    pubproc_r = await get_pubproc_search_data()
 
     pubproc_data = TypeAdapter(list[PublicationSchema]).validate_python(pubproc_r)
 
     for pub in pubproc_data:
         logging.info(pub)
-        create_publication(publication_data=pub)
+        # create_publication(publication_data=pub)
         break
 
 
