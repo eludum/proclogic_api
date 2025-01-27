@@ -1,3 +1,4 @@
+# TODO: https://www.beekeeperstudio.io/blog/docker-postgres
 services:
   postgres:
     image: postgres
