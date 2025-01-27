@@ -9,6 +9,7 @@ engine = create_engine(settings.postgres_con_url)
 
 Session = sessionmaker(bind=engine)
 
+
 def get_session():
     session = Session()
     try:

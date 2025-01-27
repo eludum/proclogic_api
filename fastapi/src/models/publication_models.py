@@ -11,7 +11,6 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -32,7 +31,9 @@ class Description(Base):
         ForeignKey("dossiers.reference_number"), nullable=True
     )
 
-    cpv_code_code: Mapped[Optional[str]] = mapped_column(ForeignKey("cpv_codes.code"), nullable=True)
+    cpv_code_code: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("cpv_codes.code"), nullable=True
+    )
 
 
 class CPVCode(Base):

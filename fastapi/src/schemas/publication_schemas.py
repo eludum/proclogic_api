@@ -23,6 +23,8 @@ class CompanySchema(BaseModel):
     email: str
     interested_cpv_codes: List[CPVCodeSchema]
     summary_activities: str
+    accreditations: Optional[dict]
+    max_publication_value: int
 
     model_config = ConfigDict(from_attributes=True)
 

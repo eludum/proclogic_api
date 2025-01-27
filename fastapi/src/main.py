@@ -75,16 +75,17 @@ async def update_publications() -> None:
 
     for pub in pubproc_data:
         logging.info(pub)
-        # create_publication(publication_data=pub)
-        break
-
+        create_publication(publication_data=pub)
+        
 
 app = FastAPI(lifespan=lifespan)
+
 
 class HealthCheck(BaseModel):
     """Response model to validate and return when performing a health check."""
 
     status: str = "OK"
+
 
 @app.get(
     "/health",
@@ -134,6 +135,7 @@ async def get_pubproc_search_data() -> dict:
 
     data = {
         # TODO: add cpv based on sector in query
+        # TODO: implement batch adding to sql server
         "currency-id": "82",
         "dispatch-date": f"{today.strftime('%d-%m-%Y')}",
         "page": 1,
@@ -160,7 +162,9 @@ async def get_pubproc_search_data() -> dict:
         for i in range(2, pages + 1):
             data["page"] = i
             r = httpx.get(
-                settings.pubproc_server + settings.path_sea_api + "/search/publications",
+                settings.pubproc_server
+                + settings.path_sea_api
+                + "/search/publications",
                 params=data,
                 headers=headers,
             )
