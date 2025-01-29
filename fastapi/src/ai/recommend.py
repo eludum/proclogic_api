@@ -7,42 +7,71 @@ from schemas.publication_schemas import CompanySchema, PublicationSchema
 settings = Settings()
 
 
-# TODO: add recommendation engine using llm
-def get_answer(
+def get_preferred_text(
+    descriptions,
+    preferred_languages_descriptions=settings.prefered_languages_descriptions,
+):
+    # TODO: implement deepseek call to pick best description
+    descr_text = ""
+    for lang in preferred_languages_descriptions:
+        for desc in descriptions:
+            if desc.language == lang:
+                descr_text = desc.text
+    return "N/A" if not descr_text else descr_text
+
+
+# TODO: add recommendation engine using llm: https://cookbook.openai.com/examples/recommendation_using_embeddings
+def get_recommendation(
     publication: PublicationSchema, company: CompanySchema, client: OpenAI = None
 ) -> str:
 
-    client = get_deepseek_client() if client is None else client
+    client = settings.prefered_llm_api if not client else client
 
-    dossier_title_str = ""
-    dossier_desc_str = ""
+    interested_cpv_codes_str = ", ".join(
+        cpv_code.code for cpv_code in company.interested_cpv_codes
+    )
+
+    dossier_title_str = get_preferred_text(publication.dossier.titles)
+
+    dossier_desc_str = get_preferred_text(publication.dossier.descriptions)
+
     lot_title_str = ""
     lot_desc_str = ""
-    additional_cpv_codes_str = ""
+    for i, lot in enumerate(publication.lots):
+        if i < len(publication.lots) - 1:
+            lot_title_str += (
+                str(i + 1)
+                + ". lot title: "
+                + get_preferred_text(lot.titles)
+                + ", "
+                + "\n"
+            )
 
-    for dossier_title in publication.dossier.titles:
-        if dossier_title.language == "EN":
-            dossier_title_str += f"{dossier_title.text}\n"
+            lot_desc_str += (
+                str(i + 1)
+                + ". lot description: "
+                + get_preferred_text(lot.descriptions)
+                + ", "
+                + "\n"
+            )
+        else:
+            lot_title_str += (
+                str(i + 1) + ". lot title: " + get_preferred_text(lot.titles) + "\n"
+            )
 
-    for lot in publication.lots:
-        for lot_title in lot.titles:
-            if lot_title.language == "EN":
-                lot_title_str += f"{lot_title.text}\n"
+            lot_desc_str += (
+                str(i + 1)
+                + ". lot description: "
+                + get_preferred_text(lot.descriptions)
+                + "\n"
+            )
 
-    for dossier_desc in publication.dossier.descriptions:
-        if dossier_desc.language == "EN":
-            dossier_desc_str += f"{dossier_desc.text}\n"
-
-    for lot in publication.lots:
-        for lot_desc in lot.descriptions:
-            if lot_desc.language == "EN":
-                lot_desc_str += f"{lot_desc_str.text}\n"
-
-    for cpv_code in publication.cpvAdditionalCodes:
-        additional_cpv_codes_str += f"{cpv_code.code}\n"
+    additional_cpv_codes_str = ", ".join(
+        cpv_code.code for cpv_code in publication.cpvAdditionalCodes
+    )
 
     completion = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="deepseek-chat",  # TODO: adapt according to AI model used
         messages=[
             {
                 "role": "system",
@@ -58,13 +87,19 @@ def get_answer(
                 "content": [
                     {
                         "type": "text",
-                        "text": f"The company is {company.name}, they do {company.summary_activities}. The company accreditations are {str(company.accreditations)}. The max amount of publication value in EUR they are interested in is {company.max_publication_value}. The CPV codes they are interested in is {company.interested_cpv_codes}. The publication main CPV code is {publication.cpvMainCode.code}. The additional CPV codes for the publication are: {additional_cpv_codes_str}. The publication title is {dossier_title_str} and the description is {dossier_desc_str}. The different lots within this publication are {lot_title_str} with their respective descriptions: {lot_desc_str}. Is this a good fit for them?",
+                        "text": f"The company is {company.name}, they do {company.summary_activities}. The company accreditations are {str(company.accreditations) if company.accreditations else 'not found in database'}. The max amount of publication value in EUR they are interested in is {company.max_publication_value if company.max_publication_value else 'not found in database'}. The CPV codes they are interested in is {interested_cpv_codes_str}. The publication main CPV code is {publication.cpvMainCode.code}. The additional CPV codes for the publication are: {additional_cpv_codes_str}. The publication title is {dossier_title_str} and the description is {dossier_desc_str}."
+                        + "\n"
+                        + f"The different lots within this publication are: "
+                        + "\n"
+                        + f"{lot_title_str}With their respective descriptions:"
+                        + "\n"
+                        + f"{lot_desc_str}Is this a good fit for them?",
                     }
                 ],
             },
         ],
-        # TODO: to be fine tuned
-        temperature=1.0,
+        # TODO: to be finetuned
+        # temperature=1.0,
     )
 
     return completion.choices[0].message.content

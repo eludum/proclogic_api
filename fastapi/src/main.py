@@ -13,9 +13,16 @@ from starlette.responses import JSONResponse
 
 from config.redis import create_redis
 from config.settings import Settings
-from crud.publication import create_publication
+from crud.publication import create_or_update_publication
+from crud.company import get_all_companies
+from ai.recommend import get_recommendation
 from fastapi import FastAPI, status
-from schemas.publication_schemas import CompanySchema, PublicationSchema
+from schemas.publication_schemas import (
+    CPVCodeSchema,
+    CompanySchema,
+    DescriptionSchema,
+    PublicationSchema,
+)
 from util.pubproc_token import get_token
 
 settings = Settings()
@@ -72,11 +79,35 @@ async def update_publications() -> None:
     pubproc_r = await get_pubproc_search_data()
 
     pubproc_data = TypeAdapter(list[PublicationSchema]).validate_python(pubproc_r)
+    test_company = CompanySchema(
+        vat_number="BE0893620715",
+        name="EBM",
+        email="info@ebmgroup.be",
+        interested_cpv_codes=[
+            CPVCodeSchema(
+                code="45000000-7",
+                descriptions=[
+                    DescriptionSchema(
+                        language="EN",
+                        text="Construction work",
+                    )
+                ],
+            )
+        ],
+        summary_activities="bouwwerkzaamheden",
+        accreditations={},
+        max_publication_value=1000000,
+    )
+
 
     for pub in pubproc_data:
         logging.info(pub)
-        create_publication(publication_data=pub)
-        
+        recom = get_recommendation(publication=pub, company=test_company)
+        logging.info(recom)
+        # for company in get_all_companies():
+        #     pass
+        break
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -125,6 +156,7 @@ async def send_with_template(
     )
 
     fm = FastMail(email_conf)
+    # TODO: fix email template make it pretty
     await fm.send_message(message, template_name="email_template.html")
     return JSONResponse(status_code=200, content={"message": "email has been sent"})
 

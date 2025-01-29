@@ -12,7 +12,6 @@ class DescriptionSchema(BaseModel):
 class CPVCodeSchema(BaseModel):
     code: str
     descriptions: List[DescriptionSchema]
-    sector_name: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

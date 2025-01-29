@@ -1,4 +1,7 @@
+from openai import Client
 from pydantic_settings import BaseSettings
+
+from ai.deepseek import get_deepseek_client
 
 
 class Settings(BaseSettings):
@@ -21,6 +24,9 @@ class Settings(BaseSettings):
     mail_password: str
     mail_from: str
     debug_logs: bool = True
+
+    prefered_llm_api: Client = get_deepseek_client()
+    prefered_languages_descriptions: list[str] = ["EN", "NL", "FR"]
 
     class Config:
         env_file = "../.env", "../.env.prod"

@@ -1,16 +1,8 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import (
-    ARRAY,
-    Boolean,
-    DateTime,
-    ForeignKey,
-    Integer,
-    PickleType,
-    String,
-    Text,
-)
+from sqlalchemy import (ARRAY, Boolean, Column, DateTime, ForeignKey, Integer,
+                        PickleType, String, Table, Text)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -18,12 +10,52 @@ class Base(DeclarativeBase):
     pass
 
 
+publication_cpv_additional_codes = Table(
+    "publication_cpv_additional_codes",
+    Base.metadata,
+    Column(
+        "publication_publication_workspace_id",
+        ForeignKey("publications.publication_workspace_id"),
+    ),
+    Column("cpv_code_code", ForeignKey("cpv_codes.code")),
+)
+
+
+publication_lots = Table(
+    "publication_lots",
+    Base.metadata,
+    Column(
+        "publication_publication_workspace_id",
+        ForeignKey("publications.publication_workspace_id"),
+    ),
+    Column("lot_id", ForeignKey("lots.id")),
+)
+
+
+publications_companies = Table(
+    "publications_companies",
+    Base.metadata,
+    Column(
+        "publication_publication_workspace_id",
+        ForeignKey("publications.publication_workspace_id"),
+    ),
+    Column("company_vat_number", ForeignKey("companies.vat_number")),
+)
+
+company_cpv_codes = Table(
+    "company_cpv_codes",
+    Base.metadata,
+    Column("company_vat_number", ForeignKey("companies.vat_number")),
+    Column("cpv_code_code", ForeignKey("cpv_codes.code")),
+)
+
+
 class Description(Base):
     __tablename__ = "descriptions"
 
     id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True)
     language: Mapped[str] = mapped_column(String)
-    text: Mapped[str] = mapped_column(Text, unique=True)
+    text: Mapped[str] = mapped_column(Text)
 
     lot_id: Mapped[Optional[int]] = mapped_column(ForeignKey("lots.id"), nullable=True)
 
@@ -42,13 +74,6 @@ class CPVCode(Base):
     code: Mapped[str] = mapped_column(String, primary_key=True)
     descriptions: Mapped[List["Description"]] = relationship()
 
-    publication_workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("publications.publication_workspace_id")
-    )
-    publication: Mapped["Publication"] = relationship(back_populates="cpv_main_code")
-
-    # company_vat_number: Mapped[str] = mapped_column(ForeignKey("companies.vat_number"))
-
 
 class Company(Base):
     __tablename__ = "companies"
@@ -56,12 +81,13 @@ class Company(Base):
     vat_number: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[str] = mapped_column(String)
     email: Mapped[str] = mapped_column(String)
-    # interested_cpv_codes: Mapped[List["CPVCode"]] = relationship()
+    interested_cpv_codes: Mapped[List["CPVCode"]] = relationship(
+        secondary=company_cpv_codes
+    )
     summary_activities: Mapped[str] = mapped_column(String)
-
-    # publication_workspace_id: Mapped[str] = mapped_column(
-    #     ForeignKey("publications.publication_workspace_id")
-    # )
+    recommended_publications: Mapped[List["Publication"]] = relationship(
+        secondary=publications_companies, back_populates="recommended_companies"
+    )
 
 
 class EnterpriseCategory(Base):
@@ -94,11 +120,6 @@ class Dossier(Base):
     titles: Mapped[List["Description"]] = relationship()
     enterprise_categories: Mapped[List["EnterpriseCategory"]] = relationship()
 
-    publication_workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("publications.publication_workspace_id")
-    )
-    publication: Mapped["Publication"] = relationship(back_populates="dossier")
-
 
 class Lot(Base):
     __tablename__ = "lots"
@@ -110,17 +131,12 @@ class Lot(Base):
     descriptions: Mapped[List["Description"]] = relationship()
     titles: Mapped[List["Description"]] = relationship()
 
-    publication_workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("publications.publication_workspace_id")
-    )
-
 
 class OrganisationName(Base):
     __tablename__ = "organisation_names"
 
-    id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True)
+    text: Mapped[str] = mapped_column(Text, primary_key=True)
     language: Mapped[str] = mapped_column(String)
-    text: Mapped[str] = mapped_column(Text)
 
     organisation_id: Mapped[int] = mapped_column(
         ForeignKey("organisations.organisation_id")
@@ -134,11 +150,6 @@ class Organisation(Base):
     tree: Mapped[str] = mapped_column(String)
 
     organisation_names: Mapped[List["OrganisationName"]] = relationship()
-
-    publication_workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("publications.publication_workspace_id")
-    )
-    publication: Mapped["Publication"] = relationship(back_populates="organisation")
 
 
 class Publication(Base):
@@ -166,10 +177,21 @@ class Publication(Base):
     )
     ai_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    cpv_main_code: Mapped["CPVCode"] = relationship(back_populates="publication")
-    dossier: Mapped["Dossier"] = relationship(back_populates="publication")
-    organisation: Mapped["Organisation"] = relationship(back_populates="publication")
+    cpv_main_code_code: Mapped[str] = mapped_column(ForeignKey("cpv_codes.code"))
+    cpv_main_code: Mapped["CPVCode"] = relationship()
+    organisation_id: Mapped[int] = mapped_column(
+        ForeignKey("organisations.organisation_id")
+    )
+    organisation: Mapped["Organisation"] = relationship()
+    dossier_reference_number: Mapped[str] = mapped_column(
+        ForeignKey("dossiers.reference_number")
+    )
+    dossier: Mapped["Dossier"] = relationship()
 
-    cpv_additional_codes: Mapped[List["CPVCode"]] = relationship()
-    lots: Mapped[List["Lot"]] = relationship()
-    # recommended: Mapped[List["Company"]] = relationship()
+    cpv_additional_codes: Mapped[List["CPVCode"]] = relationship(
+        secondary=publication_cpv_additional_codes
+    )
+    lots: Mapped[List["Lot"]] = relationship(secondary=publication_lots)
+    recommended_companies: Mapped[List["Company"]] = relationship(
+        secondary=publications_companies, back_populates="recommended_publications"
+    )
