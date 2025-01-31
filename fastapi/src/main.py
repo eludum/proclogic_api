@@ -78,7 +78,7 @@ async def fetch_data() -> None:
 async def update_publications() -> None:
     pubproc_r = await get_pubproc_search_data()
 
-    pubproc_data = TypeAdapter(list[PublicationSchema]).validate_python(pubproc_r)
+    pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
     test_company = CompanySchema(
         vat_number="BE0893620715",
         name="EBM",
@@ -109,7 +109,7 @@ async def update_publications() -> None:
         break
 
 
-app = FastAPI(lifespan=lifespan)
+proclogic = FastAPI(lifespan=lifespan)
 
 
 class HealthCheck(BaseModel):
@@ -118,7 +118,7 @@ class HealthCheck(BaseModel):
     status: str = "OK"
 
 
-@app.get(
+@proclogic.get(
     "/health",
     tags=["healthcheck"],
     summary="Perform a Health Check",
@@ -143,7 +143,7 @@ def get_health() -> HealthCheck:
 #       https://www.geeksforgeeks.org/email-templates-with-jinja-in-python/
 
 
-@app.post("/email")
+@proclogic.post("/email")
 async def send_with_template(
     email: EmailSchema, company: CompanySchema
 ) -> JSONResponse:

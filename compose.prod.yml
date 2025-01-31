@@ -1,0 +1,12 @@
+services:
+  postgres:
+    volumes:
+      - psql_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  proclogic-api:
+    restart: unless-stopped
+
+volumes:
+  psql_data:
+  

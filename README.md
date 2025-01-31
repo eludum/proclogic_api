@@ -51,3 +51,12 @@ RAG:
 - mini dashboard
 - view id result
 - bestanden
+
+# build locally
+
+docker build . -t proclogic-api -f Dockerfile
+docker tag proclogic-api
+
+# prod
+
+docker-compose -f compose.yml -f compose.prod.yml up
