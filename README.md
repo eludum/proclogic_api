@@ -1,14 +1,13 @@
-# ProcLogic V1
+# API 
 
-## API
+## Build locally
 
-- send mail
-- slug endpoint (id)
-- CRUD
-- scrape endpoint
+$ python3 -m venv .venv
+$ source .venv/bin/activate.fish
+$ pip install -r requirements.txt
+$ uvicorn main:app --host 0.0.0.0 --port 9005 --reload
 
-## frontend
+## Deployment
 
-- mini dashboard
-- view id result
-- retrieve files related to publication
+$ docker build . -t proclogic-api -f Dockerfile
+$ docker compose -f compose.yml -f compose.prod.yml up
