@@ -9,4 +9,5 @@ services:
 
 volumes:
   psql_data:
-  
+
+# TODO: https://github.com/nginx-proxy/nginx-proxy
