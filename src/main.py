@@ -6,21 +6,19 @@ from datetime import date
 from typing import List
 
 import httpx
+from fastapi import FastAPI, status
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from pydantic import BaseModel, EmailStr, TypeAdapter
 from starlette.responses import JSONResponse
 
-from config.settings import Settings
-from crud.publication import create_or_update_publication, get_publication_by_workspace_id
-from crud.company import get_all_companies
 from ai.recommend import get_recommendation
-from fastapi import FastAPI, status
-from schemas.publication_schemas import (
-    CPVCodeSchema,
-    CompanySchema,
-    DescriptionSchema,
-    PublicationSchema,
-)
+from config.settings import Settings
+from crud.company import get_all_companies
+from crud.publication import (create_or_update_publication,
+                              get_publication_by_workspace_id)
+from schemas.publication_schemas import (CompanySchema, CPVCodeSchema,
+                                         DescriptionSchema, PublicationSchema)
+from util.alembic_runner import run_migration
 from util.pubproc_token import get_token
 
 settings = Settings()
@@ -51,6 +49,7 @@ email_conf = ConnectionConfig(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task = asyncio.create_task(fetch_data())
+    # run_migration()
     yield
     task.cancel()
 
@@ -94,9 +93,8 @@ async def update_publications() -> None:
     for pub in pubproc_data:
         logging.info(pub)
         # recom = get_recommendation(publication=pub, company=test_company)
-        # logging.info(recom)
-        # for company in get_all_companies():
-        #     pass
+        for company in get_all_companies():
+            pass
         break
 
 
@@ -201,38 +199,3 @@ async def get_pubproc_search_data() -> dict:
             break
 
     return publications
-
-
-# TODO: implement this API
-async def get_ted_data() -> dict:
-    today = date.today()
-    data = {
-        "query": f'publication-date={today.strftime("%Y%m%d")} AND buyer-country=BEL',
-        "fields": [
-            "publication-date",
-            "notice-title",
-            "procedure-type",
-            "contract-nature",
-            "tender-value",
-            "tender-value-cur",
-            "classification-cpv",
-            "organisation-contact-point-tenderer",
-            "document-url-lot",
-        ],
-        "page": 1,
-        "limit": 100,
-        "scope": "ACTIVE",
-        "checkQuerySyntax": False,
-        "paginationMode": "ITERATION",
-    }
-    r = httpx.post("https://api.ted.europa.eu/v3/notices/search", json=data)
-
-    notices = r.json()["notices"]
-
-    while "iterationNextToken" in r.json():
-        data["iterationNextToken"] = r.json()["iterationNextToken"]
-        r = httpx.post("https://api.ted.europa.eu/v3/notices/search", json=data)
-        notices.extend(r.json()["notices"])
-        break
-
-    return notices

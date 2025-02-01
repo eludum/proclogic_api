@@ -15,3 +15,4 @@ $ docker compose -f compose.yml -f compose.prod.yml up
 ## Alembic migration
 
 $ alembic revision --autogenerate -m "NEW MIGRATION"
+$ alembic upgrade head
