@@ -25,3 +25,4 @@ $ alembic upgrade head
 1. add test companies
 2. add test cpv codes to cpv codes param in request to pubproc
 3. make email template
+4. use notice endpoint see postman
