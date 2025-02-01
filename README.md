@@ -19,6 +19,9 @@ $ alembic upgrade head
 
 ## TODO
 
+!! FIX DB CONN !!
+!! FIX CRUD !!
+
 1. add test companies
-2. add test cpv codes
+2. add test cpv codes to cpv codes param in request to pubproc
 3. make email template
