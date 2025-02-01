@@ -11,7 +11,7 @@ from pydantic import BaseModel, EmailStr, TypeAdapter
 from starlette.responses import JSONResponse
 
 from config.settings import Settings
-from crud.publication import create_or_update_publication
+from crud.publication import create_or_update_publication, get_publication_by_workspace_id
 from crud.company import get_all_companies
 from ai.recommend import get_recommendation
 from fastapi import FastAPI, status
@@ -150,6 +150,11 @@ async def send_with_template(
     # TODO: fix email template make it pretty
     await fm.send_message(message, template_name="email_template.html")
     return JSONResponse(status_code=200, content={"message": "email has been sent"})
+
+
+@proclogic.get("/publication/{publication_workspace_id}")
+async def get_publication(publication_workspace_id: str):
+    return get_publication_by_workspace_id(publication_workspace_id)
 
 
 async def get_pubproc_search_data() -> dict:
