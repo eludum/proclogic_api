@@ -1,8 +1,9 @@
+from typing import Optional
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    openai_api_key: str
+    openai_api_key: Optional[str] = None
     deepseek_api_key: str
     pubproc_client_id: str
     pubproc_client_secret: str

@@ -16,3 +16,9 @@ $ docker compose -f compose.yml -f compose.prod.yml up
 
 $ alembic revision --autogenerate -m "NEW MIGRATION"
 $ alembic upgrade head
+
+## TODO
+
+1. add test companies
+2. add test cpv codes
+3. make email template
