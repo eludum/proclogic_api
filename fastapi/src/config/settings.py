@@ -1,7 +1,4 @@
-from openai import Client
 from pydantic_settings import BaseSettings
-
-from ai.deepseek import get_deepseek_client
 
 
 class Settings(BaseSettings):
@@ -16,7 +13,6 @@ class Settings(BaseSettings):
     path_dos_api: str = "/api/eProcurementDos/v1"
     pubproc_token: str = ""
     pubproc_token_exp: str = ""
-    redis_host: str = "localhost"
     postgres_host: str = "localhost"
     postgres_con_url: str = ""
     template_folder: str = "email_template"
@@ -25,7 +21,6 @@ class Settings(BaseSettings):
     mail_from: str
     debug_logs: bool = True
 
-    prefered_llm_api: Client = get_deepseek_client()
     prefered_languages_descriptions: list[str] = ["EN", "NL", "FR"]
 
     class Config:

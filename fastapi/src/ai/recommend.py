@@ -25,7 +25,7 @@ def get_recommendation(
     publication: PublicationSchema, company: CompanySchema, client: OpenAI = None
 ) -> str:
 
-    client = settings.prefered_llm_api if not client else client
+    client = get_deepseek_client() if not client else client
 
     interested_cpv_codes_str = ", ".join(
         cpv_code.code for cpv_code in company.interested_cpv_codes

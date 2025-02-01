@@ -28,8 +28,3 @@ services:
     image: proclogic-api
     ports:
       - "8000:8000"
-#  redis:
-#    image: "redis/redis-stack:latest"
-#    ports:
-#      - "6379:6379"
-#      - "8001:8001"

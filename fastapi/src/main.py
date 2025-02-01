@@ -6,12 +6,10 @@ from datetime import date
 from typing import List
 
 import httpx
-import redis.asyncio as redis
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from pydantic import BaseModel, EmailStr, TypeAdapter
 from starlette.responses import JSONResponse
 
-from config.redis import create_redis
 from config.settings import Settings
 from crud.publication import create_or_update_publication
 from crud.company import get_all_companies
@@ -36,8 +34,6 @@ class EmailSchema(BaseModel):
     email: List[EmailStr]
 
 
-pool = create_redis()
-
 email_conf = ConnectionConfig(
     MAIL_USERNAME=settings.mail_username,
     MAIL_PASSWORD=settings.mail_password,
@@ -50,10 +46,6 @@ email_conf = ConnectionConfig(
     USE_CREDENTIALS=True,
     VALIDATE_CERTS=True,
 )
-
-
-async def get_redis() -> redis.Redis:
-    return redis.Redis.from_pool(pool)
 
 
 @asynccontextmanager
@@ -99,11 +91,10 @@ async def update_publications() -> None:
         max_publication_value=1000000,
     )
 
-
     for pub in pubproc_data:
         logging.info(pub)
-        recom = get_recommendation(publication=pub, company=test_company)
-        logging.info(recom)
+        # recom = get_recommendation(publication=pub, company=test_company)
+        # logging.info(recom)
         # for company in get_all_companies():
         #     pass
         break
