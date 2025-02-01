@@ -11,3 +11,7 @@ $ uvicorn main:app --host 0.0.0.0 --port 9005 --reload
 
 $ docker build . -t proclogic-api -f Dockerfile
 $ docker compose -f compose.yml -f compose.prod.yml up
+
+## Alembic migration
+
+$ alembic revision --autogenerate -m "NEW MIGRATION"
