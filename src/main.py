@@ -199,3 +199,22 @@ async def get_pubproc_search_data() -> dict:
             break
 
     return publications
+
+async def get_pubproc_notice_data(notice_id= str) -> dict:
+    token = get_token()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "BelGov-Trace-Id": "2ce83af9-d524-43a6-8d1c-b19dff051aed",
+    }
+    data = {
+        # TODO: fix mediatype to html or pdf, not xml
+        "Published": "True",
+    }
+
+    r = httpx.get(
+        settings.pubproc_server + settings.path_dos_api + f"/notices/{notice_id}",
+        params=data,
+        headers=headers,
+    )
+
+    return r
