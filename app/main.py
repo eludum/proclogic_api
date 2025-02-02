@@ -1,25 +1,32 @@
 import asyncio
 import logging
 import sys
+import uuid
 from contextlib import asynccontextmanager
 from datetime import date
 from typing import List
 
 import httpx
+import xmltodict
+from app.ai.recommend import get_recommendation
+from app.config.settings import Settings
+from app.crud.company import get_all_companies
+from app.crud.publication import (
+    create_or_update_publication,
+    get_publication_by_workspace_id,
+)
 from fastapi import FastAPI, status
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from pydantic import BaseModel, EmailStr, TypeAdapter
+from app.schemas.publication_schemas import (
+    CompanySchema,
+    CPVCodeSchema,
+    DescriptionSchema,
+    PublicationSchema,
+)
 from starlette.responses import JSONResponse
-
-from ai.recommend import get_recommendation
-from config.settings import Settings
-from crud.company import get_all_companies
-from crud.publication import (create_or_update_publication,
-                              get_publication_by_workspace_id)
-from schemas.publication_schemas import (CompanySchema, CPVCodeSchema,
-                                         DescriptionSchema, PublicationSchema)
-from util.alembic_runner import run_migration
-from util.pubproc_token import get_token
+from app.util.alembic_runner import run_migration
+from app.util.pubproc_token import get_token
 
 settings = Settings()
 
@@ -155,7 +162,7 @@ async def get_publication(publication_workspace_id: str):
     return get_publication_by_workspace_id(publication_workspace_id)
 
 
-async def get_pubproc_search_data() -> dict:
+async def get_pubproc_search_data(company: CompanySchema = None) -> dict:
     token = get_token()
     today = date.today()
 
@@ -200,14 +207,17 @@ async def get_pubproc_search_data() -> dict:
 
     return publications
 
-async def get_pubproc_notice_data(notice_id= str) -> dict:
+
+async def get_pubproc_notice_data(notice_id=str) -> dict:
     token = get_token()
     headers = {
         "Authorization": f"Bearer {token}",
+        # TODO: generate_uuid
         "BelGov-Trace-Id": "2ce83af9-d524-43a6-8d1c-b19dff051aed",
     }
     data = {
         # TODO: fix mediatype to html or pdf, not xml
+        #       https://bosa.service-now.com/eprocurement?id=kb_article_view&sys_kb_id=120060811b5ea1d41cfe4042b24bcb24
         "Published": "True",
     }
 
@@ -217,4 +227,8 @@ async def get_pubproc_notice_data(notice_id= str) -> dict:
         headers=headers,
     )
 
-    return r
+    return xmltodict.parse(r.text)
+
+
+def generate_uuid():
+    return str(uuid.uuid4())

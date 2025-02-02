@@ -8,8 +8,6 @@ services:
       POSTGRES_USER: proclogic
       POSTGRES_PASSWORD: proclogic
       POSTGRES_DB: proclogic
-    volumes:
-      - psql_data:/var/lib/postgresql/data
     ports:
       - 5432:5432
     healthcheck:
@@ -24,8 +22,3 @@ services:
       PGADMIN_DEFAULT_PASSWORD: "admin"
     ports:
       - "8002:8002"
-  proclogic-api:
-    image: proclogic-api
-    ports:
-      - "8000:8000"
-    env_file: .env

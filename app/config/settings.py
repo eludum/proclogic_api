@@ -25,5 +25,5 @@ class Settings(BaseSettings):
     prefered_languages_descriptions: list[str] = ["EN", "NL", "FR"]
 
     class Config:
-        env_file = "../.env", "../.env.prod" 
+        env_file = ".env", ".env.prod" 
         env_file_encoding = "utf-8"

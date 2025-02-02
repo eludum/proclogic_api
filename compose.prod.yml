@@ -3,8 +3,10 @@ services:
     volumes:
       - psql_data:/var/lib/postgresql/data
     restart: unless-stopped
-
   proclogic-api:
+    image: proclogic-api
+    ports:
+      - "8000:8000"
     restart: unless-stopped
     env_file: .env.prod
 

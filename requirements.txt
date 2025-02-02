@@ -15,3 +15,4 @@ psycopg2-binary
 alembic
 requests-oauthlib
 asyncpg
+xmltodict

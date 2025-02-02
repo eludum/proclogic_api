@@ -1,4 +1,4 @@
-from config.settings import Settings
+from app.config.settings import Settings
 from openai import OpenAI
 
 settings = Settings()

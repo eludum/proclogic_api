@@ -1,8 +1,8 @@
 from openai import OpenAI
 
-from ai.deepseek import get_deepseek_client
-from config.settings import Settings
-from schemas.publication_schemas import CompanySchema, PublicationSchema
+from app.ai.deepseek import get_deepseek_client
+from app.config.settings import Settings
+from app.schemas.publication_schemas import CompanySchema, PublicationSchema
 
 settings = Settings()
 

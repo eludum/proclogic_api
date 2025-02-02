@@ -1,10 +1,10 @@
+import logging
 from typing import List, Optional
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from config.postgres import get_session
-from models.publication_models import Company, CPVCode, Publication
+from app.config.postgres import get_session
+from app.models.publication_models import Company, CPVCode, Publication
 
 
 def create_company(
@@ -27,24 +27,38 @@ def create_company(
         session.add(new_company)
         session.commit()
         return new_company
-    except IntegrityError:
+    except Exception as e:
+        logging.error("Error creating company: %s", e)
         session.rollback()
-        print(f"A company with VAT number {vat_number} already exists.")
         return None
+    finally:
+        session.close()
 
 
 def get_company_by_vat_number(
     vat_number: str, session: Session = get_session()
 ) -> Optional[Company]:
     """Retrieve a company by its VAT number."""
-    return session.query(Company).filter(Company.vat_number == vat_number).first()
+    try:
+        return session.query(Company).filter(Company.vat_number == vat_number).first()
+    except Exception as e:
+        logging.error("Error getting company: %s", e)
+        return None
+    finally:
+        session.close()
 
 
 def get_all_companies(
     skip: int = 0, limit: int = 100, session: Session = get_session()
 ) -> List[Company]:
     """Retrieve all companies with optional pagination."""
-    return session.query(Company).offset(skip).limit(limit).all()
+    try:
+        return session.query(Company).offset(skip).limit(limit).all()
+    except Exception as e:
+        logging.error("Error getting all companies: %s", e)
+        return None
+    finally:
+        session.close()
 
 
 def update_company(
@@ -58,8 +72,10 @@ def update_company(
     """Update the details of an existing company."""
     company = session.query(Company).filter(Company.vat_number == vat_number).first()
     if not company:
-        print(f"Company with VAT number {vat_number} not found.")
-        return None
+        logging.error(
+            "Company with VAT number %s not found. Update failed.", vat_number
+        )
+        return False
 
     if name:
         company.name = name
@@ -73,9 +89,9 @@ def update_company(
     try:
         session.commit()
         return company
-    except IntegrityError:
+    except Exception as e:
         session.rollback()
-        print("Error updating the company.")
+        logging.error("Error updating company: %s", e)
         return None
 
 
@@ -83,20 +99,35 @@ def delete_company(vat_number: str, session: Session = get_session()) -> bool:
     """Delete a company by its VAT number."""
     company = session.query(Company).filter(Company.vat_number == vat_number).first()
     if not company:
-        print(f"Company with VAT number {vat_number} not found.")
+        logging.error(
+            "Company with VAT number %s not found. Deletion failed.", vat_number
+        )
         return False
-
-    session.delete(company)
-    session.commit()
-    return True
+    try:
+        session.delete(company)
+        session.commit()
+        return True
+    except Exception as e:
+        logging.error("Error deleting company: %s", e)
+        session.rollback()
+        return False
+    finally:
+        session.close()
 
 
 def get_recommended_publications(
     vat_number: str, session: Session = get_session()
 ) -> Optional[List[Publication]]:
-    return (
-        session.query(Company)
-        .filter(Company.vat_number == vat_number)
-        .first()
-        .recommended_publications
-    )
+    try:
+        return (
+            session.query(Company)
+            .filter(Company.vat_number == vat_number)
+            .first()
+            .recommended_publications
+        )
+
+    except Exception as e:
+        logging.error("Error getting all recommended publications: %s", e)
+        return None
+    finally:
+        session.close()

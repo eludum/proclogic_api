@@ -3,11 +3,11 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from config.postgres import get_session
-from models.publication_models import (CPVCode, Description, Dossier,
+from app.config.postgres import get_session
+from app.models.publication_models import (CPVCode, Description, Dossier,
                                        EnterpriseCategory, Lot, Organisation,
                                        OrganisationName, Publication)
-from schemas.publication_schemas import PublicationSchema
+from app.schemas.publication_schemas import PublicationSchema
 
 
 def get_or_create_descriptions(descriptions: List[Description]) -> List[Description]:
@@ -187,10 +187,15 @@ def get_or_create_publication(
     )
     session.add(publication)
     session.flush()
+    try:
+        session.commit()
+        return publication
+    except Exception as e:
+        logging.error("Error creating publication: %s", e)
+        session.rollback()
+    finally:
+        session.close()
 
-    session.commit()
-
-    return publication
 
 
 def create_or_update_publication(
