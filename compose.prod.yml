@@ -3,6 +3,9 @@ services:
     volumes:
       - psql_data:/var/lib/postgresql/data
     restart: unless-stopped
+    env_file: .env.postgres.prod
+  pgadmin:
+    env_file: .env.postgres.prod
   proclogic-api:
     image: proclogic-api
     ports:

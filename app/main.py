@@ -11,10 +11,7 @@ import xmltodict
 from app.ai.recommend import get_recommendation
 from app.config.settings import Settings
 from app.crud.company import get_all_companies
-from app.crud.publication import (
-    create_or_update_publication,
-    get_publication_by_workspace_id,
-)
+from app.crud.publication import create_or_update_publication
 from fastapi import FastAPI, status
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from pydantic import BaseModel, EmailStr, TypeAdapter
@@ -157,23 +154,21 @@ async def send_with_template(
     return JSONResponse(status_code=200, content={"message": "email has been sent"})
 
 
-@proclogic.get("/publication/{publication_workspace_id}")
-async def get_publication(publication_workspace_id: str):
-    return get_publication_by_workspace_id(publication_workspace_id)
-
-
-async def get_pubproc_search_data(company: CompanySchema = None) -> dict:
+async def get_pubproc_search_data(interested_cpv_codes: List[CPVCodeSchema]) -> dict:
     token = get_token()
     today = date.today()
 
     data = {
         # TODO: add cpv based on sector in query
         # TODO: implement batch adding to sql server
-        "currency-id": "82",
-        "dispatch-date": f"{today.strftime('%d-%m-%Y')}",
+        "dispatchDateFrom": f"{today.strftime('%d-%m-%Y')}",
         "page": 1,
         "pageSize": 100,
     }
+
+    for cpv_code in interested_cpv_codes:
+        data.update({"cpvCodes": cpv_code.code})
+
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -208,26 +203,25 @@ async def get_pubproc_search_data(company: CompanySchema = None) -> dict:
     return publications
 
 
-async def get_pubproc_notice_data(notice_id=str) -> dict:
+async def get_publication_workspace_data(publication_workspace_id=str) -> dict:
+
+    # TODO: get amount of award, documents, forum, external links, all versions of publication
+    
     token = get_token()
     headers = {
         "Authorization": f"Bearer {token}",
         # TODO: generate_uuid
         "BelGov-Trace-Id": "2ce83af9-d524-43a6-8d1c-b19dff051aed",
     }
-    data = {
-        # TODO: fix mediatype to html or pdf, not xml
-        #       https://bosa.service-now.com/eprocurement?id=kb_article_view&sys_kb_id=120060811b5ea1d41cfe4042b24bcb24
-        "Published": "True",
-    }
 
     r = httpx.get(
-        settings.pubproc_server + settings.path_dos_api + f"/notices/{notice_id}",
-        params=data,
+        settings.pubproc_server
+        + settings.path_dos_api
+        + f"/publication-workspaces/{publication_workspace_id}",
         headers=headers,
     )
 
-    return xmltodict.parse(r.text)
+    return r.json()
 
 
 def generate_uuid():
