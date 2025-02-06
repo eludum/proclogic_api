@@ -10,6 +10,8 @@ services:
     image: proclogic-api
     ports:
       - "8000:8000"
+    depends_on:
+      - postgres
     restart: unless-stopped
     env_file: .env.prod
 

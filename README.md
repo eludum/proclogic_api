@@ -33,7 +33,7 @@ $ alembic upgrade head
 !! powerpoint !!
 !! add all other endpoints !!
 https://bosa.service-now.com/eprocurement?id=kb_article_view&sys_kb_id=5750575087f58a10651ec9130cbb3563
-!! PROXMOX CONTAINERS WITH SUBDOMAINS NGINX !!
+!! dynamic dns + jarvis and xcp ng !!
 
 1. add test companies
 2. add test cpv codes to cpv codes param in request to pubproc
@@ -43,3 +43,10 @@ https://bosa.service-now.com/eprocurement?id=kb_article_view&sys_kb_id=575057508
 6. healthcheck containers & apis
 7. ci/cd gitlab
 8. monitoring grafana
+
+
+## steps taken prod vm
+
+1. hostnamectl set-hostname kl-prod
+2. dnf update and install dnf-automatic, tailscale
+
