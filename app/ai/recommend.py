@@ -1,6 +1,6 @@
 from openai import OpenAI
 
-from app.ai.deepseek import get_deepseek_client
+from app.ai.openai import get_openai_client
 from app.config.settings import Settings
 from app.schemas.publication_schemas import CompanySchema, PublicationSchema
 
@@ -25,7 +25,7 @@ def get_recommendation(
     publication: PublicationSchema, company: CompanySchema, client: OpenAI = None
 ) -> str:
 
-    client = get_deepseek_client() if not client else client
+    client = get_openai_client() if not client else client
 
     interested_cpv_codes_str = ", ".join(
         cpv_code.code for cpv_code in company.interested_cpv_codes
@@ -102,4 +102,4 @@ def get_recommendation(
         # temperature=1.0,
     )
 
-    return completion.choices[0].message.content
+    return True if completion.choices[0].message.content == "yes" else False

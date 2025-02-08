@@ -74,31 +74,13 @@ async def update_publications() -> None:
     pubproc_r = await get_pubproc_search_data()
 
     pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
-    test_company = CompanySchema(
-        vat_number="BE0893620715",
-        name="EBM",
-        email="info@ebmgroup.be",
-        interested_cpv_codes=[
-            CPVCodeSchema(
-                code="45000000-7",
-                descriptions=[
-                    DescriptionSchema(
-                        language="EN",
-                        text="Construction work",
-                    )
-                ],
-            )
-        ],
-        summary_activities="bouwwerkzaamheden",
-        accreditations={},
-        max_publication_value=1000000,
-    )
 
     for pub in pubproc_data:
-        logging.info(pub)
-        # recom = get_recommendation(publication=pub, company=test_company)
         for company in get_all_companies():
-            pass
+            recom = get_recommendation(publication=pub, company=company)
+            if recom:
+                pub.recommended.append(company)
+        create_or_update_publication(publication_data=pub)
         break
 
 
@@ -154,21 +136,23 @@ async def send_with_template(
     return JSONResponse(status_code=200, content={"message": "email has been sent"})
 
 
-async def get_pubproc_search_data(interested_cpv_codes: List[CPVCodeSchema]) -> dict:
+async def get_pubproc_search_data(
+    interested_cpv_codes: List[CPVCodeSchema] = None,
+) -> dict:
     token = get_token()
     today = date.today()
 
     data = {
         # TODO: add cpv based on sector in query
         # TODO: implement batch adding to sql server
-        "dispatchDateFrom": f"{today.strftime('%d-%m-%Y')}",
+        "dispatch-date": f"{today.strftime('%d-%m-%Y')}",
         "page": 1,
         "pageSize": 100,
     }
 
-    for cpv_code in interested_cpv_codes:
-        data.update({"cpvCodes": cpv_code.code})
-
+    if interested_cpv_codes:
+        cpv_codes = [cpv_code.code for cpv_code in interested_cpv_codes]
+        data["cpv-codes"] = ", ".join(cpv_codes)
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -206,7 +190,7 @@ async def get_pubproc_search_data(interested_cpv_codes: List[CPVCodeSchema]) -> 
 async def get_publication_workspace_data(publication_workspace_id=str) -> dict:
 
     # TODO: get amount of award, documents, forum, external links, all versions of publication
-    
+
     token = get_token()
     headers = {
         "Authorization": f"Bearer {token}",

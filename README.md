@@ -40,13 +40,3 @@ https://bosa.service-now.com/eprocurement?id=kb_article_view&sys_kb_id=575057508
 3. make email template
 4. use notice and other endpoints see postman
 5. redis cache for openai/deepseek -> cache hit costs nothing?
-6. healthcheck containers & apis
-7. ci/cd gitlab
-8. monitoring grafana
-
-
-## steps taken prod vm
-
-1. hostnamectl set-hostname kl-prod
-2. dnf update and install dnf-automatic, tailscale
-
