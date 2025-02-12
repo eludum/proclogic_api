@@ -1,4 +1,4 @@
-fastapi[standard]
+fastapi[all]
 fastapi-mail
 pydantic
 uvicorn
@@ -15,4 +15,3 @@ psycopg2-binary
 alembic
 requests-oauthlib
 asyncpg
-xmltodict

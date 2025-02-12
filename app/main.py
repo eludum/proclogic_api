@@ -7,23 +7,24 @@ from datetime import date
 from typing import List
 
 import httpx
-import xmltodict
-from app.ai.recommend import get_recommendation
-from app.config.settings import Settings
-from app.crud.company import get_all_companies
-from app.crud.publication import create_or_update_publication
-from fastapi import FastAPI, status
+from fastapi import Depends, FastAPI, status
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from pydantic import BaseModel, EmailStr, TypeAdapter
-from app.schemas.publication_schemas import (
-    CompanySchema,
-    CPVCodeSchema,
-    DescriptionSchema,
-    PublicationSchema,
-)
+from sqlalchemy.orm import Session
 from starlette.responses import JSONResponse
+
+from app.ai.recommend import get_recommendation
+from app.config.postgres import get_session_generator
+from app.config.settings import Settings
+from app.crud.company import get_all_companies, get_recommended_publications
+from app.crud.mapper import convert_publication_to_out_schema
+from app.crud.publication import create_or_update_publication
+from app.schemas.publication_out_schemas import PublicationOut
+from app.schemas.publication_schemas import (CompanySchema, CPVCodeSchema,
+                                             PublicationSchema)
 from app.util.alembic_runner import run_migration
 from app.util.pubproc_token import get_token
+from app.models.publication_models import Publication
 
 settings = Settings()
 
@@ -52,8 +53,8 @@ email_conf = ConnectionConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    run_migration()
     task = asyncio.create_task(fetch_data())
-    # run_migration()
     yield
     task.cancel()
 
@@ -77,11 +78,11 @@ async def update_publications() -> None:
 
     for pub in pubproc_data:
         for company in get_all_companies():
+            
             recom = get_recommendation(publication=pub, company=company)
             if recom:
                 pub.recommended.append(company)
         create_or_update_publication(publication_data=pub)
-        break
 
 
 proclogic = FastAPI(lifespan=lifespan)
@@ -133,7 +134,22 @@ async def send_with_template(
     fm = FastMail(email_conf)
     # TODO: fix email template make it pretty
     await fm.send_message(message, template_name="email_template.html")
-    return JSONResponse(status_code=200, content={"message": "email has been sent"})
+    return JSONResponse(content={"message": "email has been sent"})
+
+
+@proclogic.get(
+    "/{company_vatnumber}/publications/recommended", response_model=List[PublicationOut]
+)
+async def get_recommended_publications_by_vat(
+    company_vatnumber: str, session: Session = Depends(get_session_generator)
+) -> List[Publication]:
+    publications = get_recommended_publications(
+        company_vatnumber=company_vatnumber, session=session
+    )
+    converted_publications = []
+    for publication in publications:
+        converted_publications.append(convert_publication_to_out_schema(publication))
+    return converted_publications
 
 
 async def get_pubproc_search_data(

@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     mail_from: str
     debug_logs: bool = True
 
-    prefered_languages_descriptions: list[str] = ["EN", "NL", "FR"]
+    prefered_languages_descriptions: list[str] = ["NL", "EN", "FR"]
 
     class Config:
         env_file = ".env", ".env.prod" 

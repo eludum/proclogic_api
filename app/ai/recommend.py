@@ -2,22 +2,10 @@ from openai import OpenAI
 
 from app.ai.openai import get_openai_client
 from app.config.settings import Settings
+from app.crud.mapper import get_descr_as_str
 from app.schemas.publication_schemas import CompanySchema, PublicationSchema
 
 settings = Settings()
-
-
-def get_preferred_text(
-    descriptions,
-    preferred_languages_descriptions=settings.prefered_languages_descriptions,
-):
-    # TODO: implement deepseek call to pick best description
-    descr_text = ""
-    for lang in preferred_languages_descriptions:
-        for desc in descriptions:
-            if desc.language == lang:
-                descr_text = desc.text
-    return "N/A" if not descr_text else descr_text
 
 
 # TODO: add recommendation engine using llm: https://cookbook.openai.com/examples/recommendation_using_embeddings
@@ -25,15 +13,16 @@ def get_recommendation(
     publication: PublicationSchema, company: CompanySchema, client: OpenAI = None
 ) -> str:
 
+    # TODO: implement PublicationOut schema
     client = get_openai_client() if not client else client
 
     interested_cpv_codes_str = ", ".join(
         cpv_code.code for cpv_code in company.interested_cpv_codes
     )
 
-    dossier_title_str = get_preferred_text(publication.dossier.titles)
+    dossier_title_str = get_descr_as_str(publication.dossier.titles)
 
-    dossier_desc_str = get_preferred_text(publication.dossier.descriptions)
+    dossier_desc_str = get_descr_as_str(publication.dossier.descriptions)
 
     lot_title_str = ""
     lot_desc_str = ""
@@ -42,7 +31,7 @@ def get_recommendation(
             lot_title_str += (
                 str(i + 1)
                 + ". lot title: "
-                + get_preferred_text(lot.titles)
+                + get_descr_as_str(lot.titles)
                 + ", "
                 + "\n"
             )
@@ -50,19 +39,19 @@ def get_recommendation(
             lot_desc_str += (
                 str(i + 1)
                 + ". lot description: "
-                + get_preferred_text(lot.descriptions)
+                + get_descr_as_str(lot.descriptions)
                 + ", "
                 + "\n"
             )
         else:
             lot_title_str += (
-                str(i + 1) + ". lot title: " + get_preferred_text(lot.titles) + "\n"
+                str(i + 1) + ". lot title: " + get_descr_as_str(lot.titles) + "\n"
             )
 
             lot_desc_str += (
                 str(i + 1)
                 + ". lot description: "
-                + get_preferred_text(lot.descriptions)
+                + get_descr_as_str(lot.descriptions)
                 + "\n"
             )
 
