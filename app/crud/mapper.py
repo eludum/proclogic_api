@@ -3,27 +3,22 @@
 from app.config.settings import Settings
 from app.models.publication_models import Company, Publication
 from app.schemas.publication_out_schemas import PublicationOut
+from app.models.publication_models import Company
+from app.schemas.publication_schemas import (
+    CPVCodeSchema,
+    CompanySchema,
+    DescriptionSchema,
+)
+from app.util.converter import get_descr_as_str
 
 settings = Settings()
-
-
-def get_descr_as_str(
-    descriptions,
-    preferred_languages_descriptions=settings.prefered_languages_descriptions,
-):
-    # TODO: implement deepseek call to pick best description
-    descr_text = ""
-    for lang in preferred_languages_descriptions:
-        for desc in descriptions:
-            if desc.language == lang:
-                descr_text = desc.text
-    return "N/A" if not descr_text else descr_text
 
 
 def convert_publication_to_out_schema(
     publication: Publication, company: Company
 ) -> PublicationOut:
 
+    parsed_org_name = ""
     for org_name in publication.organisation.organisation_names:
         if org_name.language == "en":
             parsed_org_name = org_name.text
@@ -34,7 +29,7 @@ def convert_publication_to_out_schema(
         dispatch_date=publication.dispatch_date,
         publication_date=publication.publication_date,
         submission_deadline=publication.vault_submission_deadline,
-        is_active=publication.is_active,
+        is_active=publication.vault_submission_deadline is not None,
         original_description=get_descr_as_str(publication.dossier.descriptions),
         ai_summary=publication.ai_summary,
         organisation=parsed_org_name,
@@ -44,3 +39,25 @@ def convert_publication_to_out_schema(
     )
 
     return pub_out
+
+
+def convert_company_to_schema(company: Company) -> CompanySchema:
+    """Convert a SQLAlchemy Company model instance to a Pydantic CompanySchema."""
+    return CompanySchema(
+        vat_number=company.vat_number,
+        name=company.name,
+        email=company.email,
+        interested_cpv_codes=[
+            CPVCodeSchema(
+                code=cpv_code.code,
+                descriptions=[
+                    DescriptionSchema(language=desc.language, text=desc.text)
+                    for desc in cpv_code.descriptions
+                ],
+            )
+            for cpv_code in company.interested_cpv_codes
+        ],
+        summary_activities=company.summary_activities,
+        accreditations=company.accreditations,
+        max_publication_value=company.max_publication_value,
+    )

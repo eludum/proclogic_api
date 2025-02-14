@@ -19,9 +19,6 @@ def get_token():
 
     url = settings.pubproc_token_url
 
-    print(client_id, client_secret)
-    print(url)
-
     client = BackendApplicationClient(client_id=client_id)
     oauth = OAuth2Session(client=client)
 

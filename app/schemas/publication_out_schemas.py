@@ -11,7 +11,7 @@ class PublicationOut(BaseModel):
     submission_deadline: Optional[datetime] = None
     is_active: Optional[bool] = None
     original_description: str
-    ai_summary: str
+    ai_summary: Optional[str] = None
     organisation: str
     cpv_code: str
     time_remaining: Optional[str] = None

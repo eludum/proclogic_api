@@ -20,10 +20,9 @@ class Settings(BaseSettings):
     mail_username: str
     mail_password: str
     mail_from: str
-    debug_logs: bool = True
 
     prefered_languages_descriptions: list[str] = ["NL", "EN", "FR"]
 
     class Config:
-        env_file = ".env", ".env.prod" 
+        env_file = ".env.prod", ".env"
         env_file_encoding = "utf-8"

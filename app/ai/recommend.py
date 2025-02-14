@@ -2,7 +2,7 @@ from openai import OpenAI
 
 from app.ai.openai import get_openai_client
 from app.config.settings import Settings
-from app.crud.mapper import get_descr_as_str
+from app.util.converter import get_descr_as_str
 from app.schemas.publication_schemas import CompanySchema, PublicationSchema
 
 settings = Settings()

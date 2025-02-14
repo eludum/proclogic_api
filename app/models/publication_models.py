@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import (ARRAY, Boolean, Column, DateTime, ForeignKey, Integer,
-                        PickleType, String, Table, Text)
+                        PickleType, String, Table, Text, UniqueConstraint)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -52,6 +52,7 @@ company_cpv_codes = Table(
 
 class Description(Base):
     __tablename__ = "descriptions"
+    __table_args__ = (UniqueConstraint('text', 'language', name='_text_language_uc_desc'),)
 
     id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True)
     language: Mapped[str] = mapped_column(String)
@@ -81,6 +82,8 @@ class Company(Base):
     vat_number: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[str] = mapped_column(String)
     email: Mapped[str] = mapped_column(String)
+    accreditations: Mapped[Optional[dict]] = mapped_column(PickleType, nullable=True)
+    max_publication_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     interested_cpv_codes: Mapped[List["CPVCode"]] = relationship(
         secondary=company_cpv_codes
     )
@@ -134,8 +137,10 @@ class Lot(Base):
 
 class OrganisationName(Base):
     __tablename__ = "organisation_names"
+    __table_args__ = (UniqueConstraint('text', 'language', name='_text_language_uc_org_name'),)
 
-    text: Mapped[str] = mapped_column(Text, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True)
+    text: Mapped[str] = mapped_column(Text)
     language: Mapped[str] = mapped_column(String)
 
     organisation_id: Mapped[int] = mapped_column(
