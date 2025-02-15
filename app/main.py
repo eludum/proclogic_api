@@ -13,6 +13,7 @@ from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from pydantic import BaseModel, EmailStr, TypeAdapter
 from sqlalchemy.orm import Session
 from starlette.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 import app.crud.company as crud_company
 import app.crud.publication as crud_publication
@@ -96,7 +97,6 @@ async def update_publications(client: httpx.AsyncClient) -> None:
         # pub_workspace_data = TypeAdapter(PublicationWorkspaceSchema).validate_python(
         #     pub_workspace_r
         # )
-        print("pic")
         for company in crud_company.get_all_companies():
             com_interested_cpv_codes = [cpv_code.code for cpv_code in company.interested_cpv_codes]
             publication_cpv_codes = [cpv_code.code for cpv_code in pub.cpvAdditionalCodes] + [pub.cpvMainCode.code]
@@ -104,7 +104,7 @@ async def update_publications(client: httpx.AsyncClient) -> None:
             if res:
             # TODO: add prefiltering based on CPV codes interested by company
                 recom = get_recommendation(publication=pub, company=company)
-                if recom:
+                if recom == "yes":
                     pub.recommended.append(company)
             
         crud_publication.create_or_update_publication(publication_data=pub)
@@ -112,6 +112,18 @@ async def update_publications(client: httpx.AsyncClient) -> None:
 
 proclogic = FastAPI(lifespan=lifespan, debug=True)
 
+origins = [
+    "http://localhost",
+    "http://localhost:3000",
+]
+
+proclogic.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class HealthCheck(BaseModel):
     """Response model to validate and return when performing a health check."""
