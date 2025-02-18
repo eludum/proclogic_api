@@ -9,33 +9,39 @@ from app.schemas.publication_schemas import (
     CompanySchema,
     DescriptionSchema,
 )
-from app.util.converter import get_descr_as_str
+from app.util.nuts_codes import get_nuts_code_as_str
+from app.util.cpv_codes import get_cpv_sector_and_description
+
+from app.util.converter import get_descr_as_str, get_org_name_as_str
+
 
 settings = Settings()
 
 
-def convert_publication_to_out_schema(
+def convert_publication_to_out_schema_with_company(
     publication: Publication, company: Company
 ) -> PublicationOut:
-
-    parsed_org_name = ""
-    for org_name in publication.organisation.organisation_names:
-        if org_name.language == "en":
-            parsed_org_name = org_name.text
 
     # TODO: add publication docs and value (get from workspace niffo), time remaining and isactive, lots, in your sector
     pub_out = PublicationOut(
         title=get_descr_as_str(publication.dossier.titles),
+        workspace_id=publication.publication_workspace_id,
         dispatch_date=publication.dispatch_date,
         publication_date=publication.publication_date,
         submission_deadline=publication.vault_submission_deadline,
         is_active=publication.vault_submission_deadline is not None,
         original_description=get_descr_as_str(publication.dossier.descriptions),
-        ai_summary=publication.ai_summary,
-        organisation=parsed_org_name,
+        ai_notice_summary=publication.ai_notice_summary,
+        ai_document_summary=publication.ai_document_summary,
+        organisation=get_org_name_as_str(publication.organisation.organisation_names),
         cpv_code=publication.cpv_main_code_code,
+        cpv_additional_codes=publication.cpv_additional_codes,
         accreditations=publication.dossier.accreditations,
         is_recommended=True if company in publication.recommended_companies else False,
+        region=[
+            get_nuts_code_as_str(nuts_code) for nuts_code in publication.nuts_codes
+        ],
+        sector=get_cpv_sector_and_description(publication.cpv_main_code)[1],
     )
 
     return pub_out

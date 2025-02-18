@@ -5,10 +5,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.config.postgres import get_session
 from app.models.publication_models import Company, CPVCode
+from app.schemas.publication_schemas import CompanySchema
 
 
 def create_company(
-    company: Company,
+    company: CompanySchema,
     session: Session = get_session(),
 ) -> Optional[Company]:
     """Create a new company and add it to the database."""
@@ -55,10 +56,7 @@ def get_company_by_vat_number(
         session.close()
 
 
-def get_all_companies(
-    limit: int = 100, session: Session = get_session()
-) -> List[Company]:
-    """Retrieve all companies with optional pagination."""
+def get_all_companies(session: Session = get_session()) -> List[Company]:
     try:
         return (
             session.query(Company)
@@ -68,7 +66,6 @@ def get_all_companies(
                 ),
                 joinedload(Company.recommended_publications),
             )
-            .limit(limit)
             .all()
         )
     except Exception as e:
@@ -79,11 +76,7 @@ def get_all_companies(
 
 
 def update_company(
-    vat_number: str,
-    name: Optional[str] = None,
-    email: Optional[str] = None,
-    summary_activities: Optional[str] = None,
-    interested_cpv_codes: Optional[List[CPVCode]] = None,
+    company: CompanySchema,
     session: Session = get_session(),
 ) -> Optional[Company]:
     """Update the details of an existing company."""
@@ -94,14 +87,12 @@ def update_company(
         )
         return False
 
-    if name:
-        company.name = name
-    if email:
-        company.email = email
-    if summary_activities:
-        company.summary_activities = summary_activities
-    if interested_cpv_codes is not None:
-        company.interested_cpv_codes = interested_cpv_codes
+    company.vat_number = company.vat_number
+    company.name = company.name
+    company.email = company.email
+    company.summary_activities = company.summary_activities
+    company.accreditations = company.accreditations
+    company.max_publication_value = company.max_publication_value
 
     try:
         session.commit()

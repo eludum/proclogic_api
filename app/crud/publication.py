@@ -25,6 +25,8 @@ from app.schemas.publication_schemas import (
     PublicationSchema,
 )
 from sqlalchemy.orm import joinedload
+from sqlalchemy.sql import exists
+from sqlalchemy import func
 
 
 def get_or_create_descriptions(
@@ -200,7 +202,8 @@ def update_publication(
     publication.sent_at = publication_schema.sentAt
     publication.ted_published = publication_schema.tedPublished
     publication.vault_submission_deadline = publication_schema.vaultSubmissionDeadline
-    publication.ai_summary = publication_schema.ai_summary
+    publication.ai_notice_summary = publication_schema.ai_notice_summary
+    publication.ai_document_summary = publication_schema.ai_document_summary
 
     publication.cpv_main_code = get_or_create_cpv_code(
         cpv_code_schema=publication_schema.cpvMainCode, session=session
@@ -276,7 +279,8 @@ def get_or_create_publication(
             sent_at=publication_schema.sentAt,
             ted_published=publication_schema.tedPublished,
             vault_submission_deadline=publication_schema.vaultSubmissionDeadline,
-            ai_summary=publication_schema.ai_summary,
+            ai_notice_summary=publication_schema.ai_notice_summary,
+            ai_document_summary=publication_schema.ai_document_summary,
             cpv_main_code=get_or_create_cpv_code(
                 cpv_code_schema=publication_schema.cpvMainCode, session=session
             ),
@@ -325,6 +329,15 @@ def get_publication_by_workspace_id(
     )
 
 
+def publication_exists(
+    publication_workspace_id: str, session: Session = get_session()
+) -> bool:
+    """Check if a publication already exists."""
+    return session.query(
+        exists().where(Publication.publication_workspace_id == publication_workspace_id)
+    ).scalar()
+
+
 def delete_publication(publication_workspace_id: str, session: Session = get_session()):
     """Delete a publication and its related data."""
     try:
@@ -352,7 +365,79 @@ def get_all_publications(session: Session = get_session()) -> List[Publication]:
     """Retrieve all publications related to a given VAT number."""
     return (
         session.query(Publication)
+        # filter added here to only see active ones
+        # TODO: added filter maybe needed to discard old ones that have expired deadline
         .filter(Publication.vault_submission_deadline.isnot(None))
+        .options(
+            joinedload(Publication.cpv_main_code),
+            joinedload(Publication.dossier).joinedload(Dossier.descriptions),
+            joinedload(Publication.dossier).joinedload(Dossier.titles),
+            joinedload(Publication.dossier).joinedload(Dossier.enterprise_categories),
+            joinedload(Publication.organisation).joinedload(
+                Organisation.organisation_names
+            ),
+            joinedload(Publication.cpv_additional_codes),
+            joinedload(Publication.lots).joinedload(Lot.descriptions),
+            joinedload(Publication.lots).joinedload(Lot.titles),
+            joinedload(Publication.recommended_companies),
+        )
+        .all()
+    )
+
+
+def search_publications(
+    search_term: str, session: Session = get_session()
+) -> List[Publication]:
+    """Search publications by lots titles, dossier titles, lots descriptions, dossier descriptions, and organisation names."""
+    search_pattern = f"%{search_term}%"
+
+    description_subquery = (
+        session.query(Description.id)
+        .filter(func.lower(Description.text).like(func.lower(search_pattern)))
+        .subquery()
+    )
+
+    organisation_name_subquery = (
+        session.query(OrganisationName.id)
+        .filter(func.lower(OrganisationName.text).like(func.lower(search_pattern)))
+        .subquery()
+    )
+
+    dossier_title_subquery = (
+        session.query(Description.id)
+        .filter(func.lower(Description.text).like(func.lower(search_pattern)))
+        .correlate(Dossier)
+        .subquery()
+    )
+
+    lot_title_subquery = (
+        session.query(Description.id)
+        .filter(func.lower(Description.text).like(func.lower(search_pattern)))
+        .correlate(Lot)
+        .subquery()
+    )
+
+    return (
+        session.query(Publication)
+        .join(Publication.dossier)
+        .join(Publication.organisation)
+        .join(Publication.lots)
+        .filter(
+            Publication.dossier.has(
+                Dossier.descriptions.any(Description.id.in_(description_subquery))
+            )
+            | Publication.organisation.has(
+                Organisation.organisation_names.any(
+                    OrganisationName.id.in_(organisation_name_subquery)
+                )
+            )
+            | Publication.dossier.has(
+                Dossier.titles.any(Description.id.in_(dossier_title_subquery))
+            )
+            | Publication.lots.any(
+                Lot.descriptions.any(Description.id.in_(lot_title_subquery))
+            )
+        )
         .options(
             joinedload(Publication.cpv_main_code),
             joinedload(Publication.dossier).joinedload(Dossier.descriptions),

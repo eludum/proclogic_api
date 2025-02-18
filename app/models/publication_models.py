@@ -1,8 +1,19 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import (ARRAY, Boolean, Column, DateTime, ForeignKey, Integer,
-                        PickleType, String, Table, Text, UniqueConstraint)
+from sqlalchemy import (
+    ARRAY,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    PickleType,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -52,7 +63,9 @@ company_cpv_codes = Table(
 
 class Description(Base):
     __tablename__ = "descriptions"
-    __table_args__ = (UniqueConstraint('text', 'language', name='_text_language_uc_desc'),)
+    __table_args__ = (
+        UniqueConstraint("text", "language", name="_text_language_uc_desc"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True)
     language: Mapped[str] = mapped_column(String)
@@ -137,7 +150,9 @@ class Lot(Base):
 
 class OrganisationName(Base):
     __tablename__ = "organisation_names"
-    __table_args__ = (UniqueConstraint('text', 'language', name='_text_language_uc_org_name'),)
+    __table_args__ = (
+        UniqueConstraint("text", "language", name="_text_language_uc_org_name"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True)
     text: Mapped[str] = mapped_column(Text)
@@ -180,8 +195,9 @@ class Publication(Base):
     vault_submission_deadline: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True
     )
-    ai_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
+    ai_notice_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ai_document_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
     cpv_main_code_code: Mapped[str] = mapped_column(ForeignKey("cpv_codes.code"))
     cpv_main_code: Mapped["CPVCode"] = relationship()
     organisation_id: Mapped[int] = mapped_column(

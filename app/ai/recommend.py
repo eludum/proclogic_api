@@ -1,16 +1,21 @@
+import logging
+
 from openai import OpenAI
 
 from app.ai.openai import get_openai_client
 from app.config.settings import Settings
-from app.util.converter import get_descr_as_str
 from app.schemas.publication_schemas import CompanySchema, PublicationSchema
+from app.util.converter import get_descr_as_str
 
 settings = Settings()
 
 
 # TODO: add recommendation engine using llm: https://cookbook.openai.com/examples/recommendation_using_embeddings
 def get_recommendation(
-    publication: PublicationSchema, company: CompanySchema, client: OpenAI = None
+    publication: PublicationSchema,
+    company: CompanySchema,
+    notice_xml: str,
+    client: OpenAI = None,
 ) -> str:
 
     # TODO: implement PublicationOut schema
@@ -60,14 +65,14 @@ def get_recommendation(
     )
 
     completion = client.chat.completions.create(
-        model="deepseek-chat",  # TODO: adapt according to AI model used
+        model="gpt-4o-mini",  # TODO: adapt according to AI model used
         messages=[
             {
                 "role": "system",
                 "content": [
                     {
                         "type": "text",
-                        "text": 'You are a public procurement ranking system designed to determine whether a procurement opportunity (aka publication) is a good fit for a specific company. Beware some info given in the publication is in another language please adapt accordingly. Your response to any given publication must be either "yes" or "no".',
+                        "text": 'You are a public procurement ranking system designed to determine whether a procurement opportunity (aka publication) is a good fit for a specific company. Beware some info given in the publication is in another language please adapt accordingly. You will also receive the notice in xml format containing more detailed information, adapt accordingly. Your response to any given publication must be either "yes" or "no".',
                     }
                 ],
             },
@@ -82,7 +87,11 @@ def get_recommendation(
                         + "\n"
                         + f"{lot_title_str}With their respective descriptions:"
                         + "\n"
-                        + f"{lot_desc_str}Is this a good fit for them?",
+                        + f"{lot_desc_str}"
+                        + "\n"
+                        + f"The XML content of the publication is: {notice_xml}"
+                        + "\n"
+                        + "Is this a good fit for them?",
                     }
                 ],
             },
@@ -92,3 +101,135 @@ def get_recommendation(
     )
 
     return True if completion.choices[0].message.content == "yes" else False
+
+
+def summarize_xml(xml: str, client: OpenAI = None) -> str:
+    client = get_openai_client() if not client else client
+
+    completion = client.chat.completions.create(
+        model="gpt-4o-mini",  # TODO: adapt according to AI model used
+        messages=[
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "You are a public procurement ranking system designed to determine whether a procurement opportunity (aka publication) is a good fit for a specific company. In this context, you are asked to summarize the XML content of a publication. Your response must be a summary of the XML content with all relevant info.",
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": f"{xml}"}],
+            },
+        ],
+        # TODO: to be finetuned
+        # temperature=1.0,
+    )
+
+    return completion.choices[0].message.content
+
+
+def summarize_xml_get_award_info(xml: str, client: OpenAI = None) -> str:
+    client = get_openai_client() if not client else client
+
+    completion = client.chat.completions.create(
+        model="gpt-4o-mini",  # TODO: adapt according to AI model used
+        messages=[
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "You are a public procurement ranking system designed to determine whether a procurement opportunity (aka publication) is a good fit for a specific company. In this context, you are asked to summarize the XML content of a this awarded publication. I want to get the awarded party and the value of the awarded publication. Please respond in Json format with the following fields: winner and value.",
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": f"{xml}"}],
+            },
+        ],
+        # TODO: to be finetuned
+        # temperature=1.0,
+    )
+
+    return completion.choices[0].message.content
+
+def assistant_summarize_files(filesmap: dict, client: OpenAI = None) -> str:
+    client = get_openai_client() if not client else client
+
+    try:
+        vector_store = client.beta.vector_stores.create(name="publication_workspace_xx")
+
+        file_batch = client.beta.vector_stores.file_batches.upload_and_poll(
+            vector_store_id=vector_store.id,
+            files=[file_data for file_data in filesmap.values()],
+        )
+
+        while file_batch.status != "completed":
+            if file_batch.status == "failed":
+                logging.error(f"Failed to upload files to vector store: {file_batch}")
+                return None
+            if file_batch.status == "in_progress":
+                continue
+
+        assistant = client.beta.assistants.update(
+            assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
+            tool_resources={"file_search": {"vector_store_ids": [vector_store.id]}},
+        )
+
+        # Create a thread and attach the file to the message
+        thread = client.beta.threads.create(
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Can you summarize the documents, give me the relevant information to win this publication.",
+                    # Attach the new file to the message.
+                    # "attachments": [
+                    #     { "file_id": message_file.id, "tools": [{"type": "file_search"}] }
+                    # ],
+                }
+            ]
+        )
+
+        # Use the create and poll SDK helper to create a run and poll the status of
+        # the run until it's in a terminal state.
+
+        run = client.beta.threads.runs.create_and_poll(
+            thread_id=thread.id, assistant_id=assistant.id
+        )
+
+        messages = list(
+            client.beta.threads.messages.list(thread_id=thread.id, run_id=run.id)
+        )
+
+        message_content = messages[0].content[0].text
+        annotations = message_content.annotations
+        citations = []
+        for index, annotation in enumerate(annotations):
+            message_content.value = message_content.value.replace(
+                annotation.text, f"[{index}]"
+            )
+            if file_citation := getattr(annotation, "file_citation", None):
+                cited_file = client.files.retrieve(file_citation.file_id)
+                citations.append(f"[{index}] {cited_file.filename}")
+
+        return message_content.value, "\n".join(citations)
+
+    except Exception as e:
+        logging.error(f"Failed to summarize files: {e}")
+        return None
+
+    finally:
+        assistant = client.beta.assistants.update(
+            assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
+            tool_resources={"file_search": {"vector_store_ids": []}},
+        )
+
+        client.beta.vector_stores.delete(vector_store_id=vector_store.id)
+        files = client.files.list()
+
+        for file in files:
+            client.files.delete(file.id)
+        client.files.list()

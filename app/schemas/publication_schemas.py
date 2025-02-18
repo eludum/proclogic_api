@@ -94,6 +94,7 @@ class PublicationSchema(BaseModel):
     tedPublished: bool
     vaultSubmissionDeadline: Optional[datetime] = None
     recommended: Optional[List[CompanySchema]] = None
-    ai_summary: Optional[str] = None
-
+    ai_notice_summary: Optional[str] = None
+    ai_document_summary: Optional[str] = None
+    
     model_config = ConfigDict(from_attributes=True)
