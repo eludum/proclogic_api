@@ -173,7 +173,7 @@ CPV_CODES = {
     },
 }
 
-def get_cpv_sector_and_description(input_cpv: str, cpv_codes: dict) -> tuple[bool, str, str]:
+def get_cpv_sector_and_description(input_cpv: str) -> tuple[bool, str, str]:
     # Extract the main part of the CPV code before the hyphen
     cpv_main = input_cpv.split('-')[0]  # e.g., "45232440-8" -> "45232440"
     
@@ -184,7 +184,7 @@ def get_cpv_sector_and_description(input_cpv: str, cpv_codes: dict) -> tuple[boo
     full_code = cpv_main[:8]  # The full CPV code without the checksum
     
     # Check if any of these exist in the provided CPV dictionary keys
-    for sector, codes in cpv_codes.items():
+    for sector, codes in CPV_CODES.items():
         for code in [first_two, first_three, first_six, full_code]:
             if code in codes:
                 return True, sector, codes[code]

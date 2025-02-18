@@ -29,9 +29,7 @@ async def fetch_pubproc_data() -> None:
     while True:
         try:
             async with httpx.AsyncClient() as client:
-                # await update_publications(client=client)
-                print(crud_company.get_all_companies())
-                pass
+                await update_publications(client=client)
             await asyncio.sleep(600)  # 10 minutes in seconds
         except Exception as e:
             logging.error(e, "error in fetching data")
@@ -52,6 +50,7 @@ async def update_publications(client: httpx.AsyncClient) -> None:
     pubproc_r = await get_daily_pubproc_search_data(client=client)
 
     pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
+    print(pubproc_data)
     for pub in pubproc_data:
 
         existing_publication = crud_publication.publication_exists(
@@ -61,13 +60,16 @@ async def update_publications(client: httpx.AsyncClient) -> None:
         if existing_publication and pub.vaultSubmissionDeadline is not None:
             if is_new_notice_version_available(
                 incoming_notice_ids=pub.noticeIds,
-                publication_workspace_id=pub.publication_workspace_id,
+                publication_workspace_id=pub.publicationWorkspaceId,
             ):
+                xml_content = await get_notice_xml(
+                    client=client, publication_workspace_id=pub.publicationWorkspaceId
+                )
                 ai_notice_summary = summarize_xml(xml_content)
                 pub.ai_notice_summary = ai_notice_summary
 
         if not existing_publication and pub.vaultSubmissionDeadline is not None:
-            xml_content = get_notice_xml(
+            xml_content = await get_notice_xml(
                 client=client, publication_workspace_id=pub.publicationWorkspaceId
             )
             ai_notice_summary = summarize_xml(xml_content)
@@ -76,14 +78,17 @@ async def update_publications(client: httpx.AsyncClient) -> None:
                 recom = get_recommendation(
                     publication=pub, company=company, notice_xml=xml_content
                 )
-                if recom == "yes":
-                    pub.recommended.append(company)
+                if recom:
+                    if pub.recommended:
+                        pub.recommended.append(company)
+                    else:
+                        pub.recommended = [company]
 
         # if pub.vaultSubmissionDeadline is None:
         # TODO: add field in model and schema to make sure we use these for report generation
         # info_json = summarize_xml_get_award_info(xml_content)
 
-        crud_publication.get_or_create_publication(publication_data=pub)
+        crud_publication.get_or_create_publication(publication_schema=pub)
 
 
 async def get_notice_xml(
@@ -159,7 +164,7 @@ async def get_daily_pubproc_search_data(
                     params=data,
                     headers=headers,
                 )
-                publications.extend((await r.json())["publications"])
+                publications.extend(r.json()["publications"])
 
     return publications
 
@@ -175,7 +180,7 @@ async def get_publication_workspace_data(
         "BelGov-Trace-Id": "2ce83af9-d524-43a6-8d1c-b19dff051aed",
     }
 
-    r = client.get(
+    r = await client.get(
         settings.pubproc_server
         + settings.path_dos_api
         + f"/publication-workspaces/{publication_workspace_id}",

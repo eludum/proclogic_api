@@ -40,7 +40,6 @@ async def get_publication_by_workspace_id(
     publication = crud_publication.get_publication_by_workspace_id(
         publication_workspace_id=publication_workspace_id, session=session
     )
-    print(publication.__dict__)
     return convert_publication_to_out_schema_with_company(
         publication=publication, company=None
     )

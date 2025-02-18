@@ -21,7 +21,7 @@ settings = Settings()
 def convert_publication_to_out_schema_with_company(
     publication: Publication, company: Company
 ) -> PublicationOut:
-
+    
     # TODO: add publication docs and value (get from workspace niffo), time remaining and isactive, lots, in your sector
     pub_out = PublicationOut(
         title=get_descr_as_str(publication.dossier.titles),
@@ -35,13 +35,14 @@ def convert_publication_to_out_schema_with_company(
         ai_document_summary=publication.ai_document_summary,
         organisation=get_org_name_as_str(publication.organisation.organisation_names),
         cpv_code=publication.cpv_main_code_code,
-        cpv_additional_codes=publication.cpv_additional_codes,
+        cpv_additional_codes=[
+            cpv_code.code for cpv_code in publication.cpv_additional_codes],
         accreditations=publication.dossier.accreditations,
         is_recommended=True if company in publication.recommended_companies else False,
         region=[
             get_nuts_code_as_str(nuts_code) for nuts_code in publication.nuts_codes
         ],
-        sector=get_cpv_sector_and_description(publication.cpv_main_code)[1],
+        sector=get_cpv_sector_and_description(publication.cpv_main_code.code)[1],
     )
 
     return pub_out

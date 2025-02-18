@@ -7,12 +7,14 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     PickleType,
     String,
     Table,
     Text,
     UniqueConstraint,
+    func
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -63,9 +65,10 @@ company_cpv_codes = Table(
 
 class Description(Base):
     __tablename__ = "descriptions"
-    __table_args__ = (
-        UniqueConstraint("text", "language", name="_text_language_uc_desc"),
-    )
+    # TODO: make this work with indexes
+    # __table_args__ = (
+    #     Index("idx_text_language_hash", func.md5("text"), "language", unique=True),
+    # )
 
     id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True)
     language: Mapped[str] = mapped_column(String)

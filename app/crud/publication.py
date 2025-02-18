@@ -34,16 +34,7 @@ def get_or_create_descriptions(
 ) -> List[Description]:
     description_instances = []
     for desc_schema in descriptions_schema:
-        description = (
-            session.query(Description)
-            .filter_by(language=desc_schema.language, text=desc_schema.text)
-            .first()
-        )
-        if not description:
-            description = Description(
-                language=desc_schema.language, text=desc_schema.text
-            )
-            session.add(description)
+        description = Description(language=desc_schema.language, text=desc_schema.text)
         description_instances.append(description)
     return description_instances
 
@@ -86,6 +77,7 @@ def get_or_create_organisation_names(
                 organisation_id=organisation_id,
             )
             session.add(org_name)
+            session.flush()
         organisation_name_instances.append(org_name)
 
     return organisation_name_instances
@@ -202,8 +194,6 @@ def update_publication(
     publication.sent_at = publication_schema.sentAt
     publication.ted_published = publication_schema.tedPublished
     publication.vault_submission_deadline = publication_schema.vaultSubmissionDeadline
-    publication.ai_notice_summary = publication_schema.ai_notice_summary
-    publication.ai_document_summary = publication_schema.ai_document_summary
 
     publication.cpv_main_code = get_or_create_cpv_code(
         cpv_code_schema=publication_schema.cpvMainCode, session=session
@@ -229,6 +219,13 @@ def update_publication(
         lots.append(create_lot(lot_schema=lot, session=session))
     publication.lots = lots
 
+    if publication_schema.ai_notice_summary:
+        publication.ai_notice_summary = publication_schema.ai_notice_summary
+    if publication_schema.ai_document_summary:
+        publication.ai_document_summary = publication_schema.ai_document_summary
+    if publication_schema.recommended:
+        publication.recommended_companies = publication_schema.recommended
+
     session.add(publication)
     session.flush()
 
@@ -240,6 +237,7 @@ def get_or_create_publication(
     session: Session = get_session(),
 ) -> Publication:
     publication = session.get(Publication, publication_schema.publicationWorkspaceId)
+
     if publication:
         update_publication(
             publication=publication,
@@ -281,6 +279,9 @@ def get_or_create_publication(
             vault_submission_deadline=publication_schema.vaultSubmissionDeadline,
             ai_notice_summary=publication_schema.ai_notice_summary,
             ai_document_summary=publication_schema.ai_document_summary,
+            recommended_companies=(
+                publication_schema.recommended if publication_schema.recommended else []
+            ),
             cpv_main_code=get_or_create_cpv_code(
                 cpv_code_schema=publication_schema.cpvMainCode, session=session
             ),

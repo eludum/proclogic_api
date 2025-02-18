@@ -57,6 +57,7 @@ nuts_codes = {
     "BE353": "Arr. Philippeville",
     "BE35": "Prov. Namur",
     "BE3": "Région wallonne",
+    "BE": "België"
 }
 
 def get_nuts_code_as_str(code: str):
