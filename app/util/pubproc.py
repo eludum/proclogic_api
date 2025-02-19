@@ -50,9 +50,6 @@ async def update_publications(client: httpx.AsyncClient) -> None:
         pubproc_r = await get_daily_pubproc_search_data(client=client)
         pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
 
-        # Fetch companies with eager loading for interested_cpv_codes
-        companies = crud_company.get_all_companies(session=session)
-
         for pub in pubproc_data:
             # Check if the publication already exists
             existing_publication = crud_publication.publication_exists(
@@ -65,28 +62,24 @@ async def update_publications(client: httpx.AsyncClient) -> None:
                     incoming_notice_ids=pub.notice_ids,
                     publication_workspace_id=pub.publication_workspace_id,
                 ):
-                    # xml_content = await get_notice_xml(
-                    #     client=client,
-                    #     publication_workspace_id=pub.publication_workspace_id,
-                    # )
-                    # ai_notice_summary = summarize_xml(xml_content)
-                    ai_notice_summary = "lol"
+                    xml_content = await get_notice_xml(
+                        client=client,
+                        publication_workspace_id=pub.publication_workspace_id,
+                    )
+                    ai_notice_summary = summarize_xml(xml_content)
                     pub.ai_notice_summary = ai_notice_summary
 
             # Handle new publications
             if not existing_publication and pub.vault_submission_deadline is not None:
-                # xml_content = await get_notice_xml(
-                #     client=client, publication_workspace_id=pub.publication_workspace_id
-                # )
-                # ai_notice_summary = summarize_xml(xml_content)
-                ai_notice_summary = "lol"
+                xml_content = await get_notice_xml(
+                    client=client, publication_workspace_id=pub.publication_workspace_id
+                )
+                ai_notice_summary = summarize_xml(xml_content)
                 pub.ai_notice_summary = ai_notice_summary
 
                 # Generate recommendations for each company
-                for company in companies:
-                    # company = session.merge(company)
-                    # recom = get_recommendation(publication=pub, company=company)
-                    recom = True
+                for company in crud_company.get_all_companies(session=session):
+                    recom = get_recommendation(publication=pub, company=company)
                     if recom:
                         if pub.recommended:
                             pub.recommended.append(company)
@@ -154,8 +147,7 @@ async def get_daily_pubproc_search_data(
     page_size = 100
 
     data = {
-        # "dispatch-date-from": f"{latest_business_day.strftime('%Y-%m-%d')}",
-        "dispatch-date-from": "2025-02-18",
+        "dispatch-date-from": f"{latest_business_day.strftime('%Y-%m-%d')}",
         "page": 1,
         "pageSize": page_size,
     }

@@ -21,7 +21,7 @@ def get_recommendation(
 
     interested_sectors_as_cpv_str = ""
     for sector in company.interested_sectors:
-        interested_sectors_as_cpv_str += ", ".join(sector.cpv_codes)
+        interested_sectors_as_cpv_str += "," + ", ".join(sector.cpv_codes)
 
     dossier_title_str = get_descr_as_str(publication.dossier.titles)
 
@@ -59,7 +59,7 @@ def get_recommendation(
             )
 
     additional_cpv_codes_str = ", ".join(
-        cpv_code.code for cpv_code in publication.cpvAdditionalCodes
+        cpv_code.code for cpv_code in publication.cpv_additional_codes
     )
 
     completion = client.chat.completions.create(
@@ -95,6 +95,19 @@ def get_recommendation(
         # TODO: to be finetuned
         # temperature=1.0,
     )
+
+    print({
+                        "type": "text",
+                        "text": f"The company is {company.name}, they do {company.summary_activities}. The company accreditations are {str(company.accreditations) if company.accreditations else 'not found in database'}. The max amount of publication value in EUR they are interested in is {company.max_publication_value if company.max_publication_value else 'not found in database'}. The CPV codes the company is interested in are {interested_sectors_as_cpv_str}. The publication main CPV code is {publication.cpv_main_code.code}. The additional CPV codes for the publication are: {additional_cpv_codes_str}. The publication title is {dossier_title_str} and the description is {dossier_desc_str}."
+                        + "\n"
+                        + f"The different lots within this publication are: "
+                        + "\n"
+                        + f"{lot_title_str}With their respective descriptions:"
+                        + "\n"
+                        + f"{lot_desc_str}"
+                        + "\n"
+                        + "Is this a good fit for them?",
+                    })
 
     return True if completion.choices[0].message.content == "yes" else False
 
