@@ -11,13 +11,10 @@ import numpy as np
 import pycron
 from pydantic import TypeAdapter
 
+from app.config.postgres import get_session
 import app.crud.company as crud_company
 import app.crud.publication as crud_publication
-from app.ai.recommend import (
-    get_recommendation,
-    summarize_xml,
-    summarize_xml_get_award_info,
-)
+from app.ai.recommend import get_recommendation, summarize_xml
 from app.config.settings import Settings
 from app.schemas.publication_schemas import CPVCodeSchema, PublicationSchema
 from app.util.pubproc_token import get_token
@@ -32,8 +29,8 @@ async def fetch_pubproc_data() -> None:
                 await update_publications(client=client)
             await asyncio.sleep(600)  # 10 minutes in seconds
         except Exception as e:
-            logging.error(e, "error in fetching data")
-            await asyncio.sleep(60)  # wait a minute before retrying
+            logging.error("error in fetching data: %s", e)
+            await asyncio.sleep(600)  # wait a minute before retrying
         # TODO: remove continue in prod
         continue
 
@@ -41,54 +38,68 @@ async def fetch_pubproc_data() -> None:
             try:
                 async with httpx.AsyncClient() as client:
                     await update_publications(client=client)
+                await asyncio.sleep(600)  # 10 minutes in seconds
             except Exception as e:
-                logging.error(e, "error in fetching data")
+                logging.error("error in fetching data: %s", e)
         await asyncio.sleep(60)
 
 
 async def update_publications(client: httpx.AsyncClient) -> None:
-    pubproc_r = await get_daily_pubproc_search_data(client=client)
+    with get_session() as session:
+        # Fetch publication data
+        pubproc_r = await get_daily_pubproc_search_data(client=client)
+        pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
 
-    pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
-    print(pubproc_data)
-    for pub in pubproc_data:
+        # Fetch companies with eager loading for interested_cpv_codes
+        companies = crud_company.get_all_companies(session=session)
 
-        existing_publication = crud_publication.publication_exists(
-            publication_workspace_id=pub.publicationWorkspaceId
-        )
-        # TODO: add document summary and add forum questions, also add sector logic for company scan here
-        if existing_publication and pub.vaultSubmissionDeadline is not None:
-            if is_new_notice_version_available(
-                incoming_notice_ids=pub.noticeIds,
-                publication_workspace_id=pub.publicationWorkspaceId,
-            ):
-                xml_content = await get_notice_xml(
-                    client=client, publication_workspace_id=pub.publicationWorkspaceId
-                )
-                ai_notice_summary = summarize_xml(xml_content)
+        for pub in pubproc_data:
+            # Check if the publication already exists
+            existing_publication = crud_publication.publication_exists(
+                publication_workspace_id=pub.publication_workspace_id, session=session
+            )
+
+            # Handle updates for existing publications
+            if existing_publication and pub.vault_submission_deadline is not None:
+                if is_new_notice_version_available(
+                    incoming_notice_ids=pub.notice_ids,
+                    publication_workspace_id=pub.publication_workspace_id,
+                ):
+                    # xml_content = await get_notice_xml(
+                    #     client=client,
+                    #     publication_workspace_id=pub.publication_workspace_id,
+                    # )
+                    # ai_notice_summary = summarize_xml(xml_content)
+                    ai_notice_summary = "lol"
+                    pub.ai_notice_summary = ai_notice_summary
+
+            # Handle new publications
+            if not existing_publication and pub.vault_submission_deadline is not None:
+                # xml_content = await get_notice_xml(
+                #     client=client, publication_workspace_id=pub.publication_workspace_id
+                # )
+                # ai_notice_summary = summarize_xml(xml_content)
+                ai_notice_summary = "lol"
                 pub.ai_notice_summary = ai_notice_summary
 
-        if not existing_publication and pub.vaultSubmissionDeadline is not None:
-            xml_content = await get_notice_xml(
-                client=client, publication_workspace_id=pub.publicationWorkspaceId
+                # Generate recommendations for each company
+                for company in companies:
+                    # company = session.merge(company)
+                    # recom = get_recommendation(publication=pub, company=company)
+                    recom = True
+                    if recom:
+                        if pub.recommended:
+                            pub.recommended.append(company)
+                        else:
+                            pub.recommended = [company]
+
+            # if pub.vaultSubmissionDeadline is None:
+            # TODO: add field in model and schema to make sure we use these for report generation
+            # info_json = summarize_xml_get_award_info(xml_content)
+
+            crud_publication.get_or_create_publication(
+                publication_schema=pub, session=session
             )
-            ai_notice_summary = summarize_xml(xml_content)
-            pub.ai_notice_summary = ai_notice_summary
-            for company in crud_company.get_all_companies():
-                recom = get_recommendation(
-                    publication=pub, company=company, notice_xml=xml_content
-                )
-                if recom:
-                    if pub.recommended:
-                        pub.recommended.append(company)
-                    else:
-                        pub.recommended = [company]
-
-        # if pub.vaultSubmissionDeadline is None:
-        # TODO: add field in model and schema to make sure we use these for report generation
-        # info_json = summarize_xml_get_award_info(xml_content)
-
-        crud_publication.get_or_create_publication(publication_schema=pub)
 
 
 async def get_notice_xml(
@@ -103,11 +114,27 @@ async def get_notice_xml(
 def is_new_notice_version_available(
     incoming_notice_ids: List[str], publication_workspace_id: str
 ) -> True:
-    return len(
-        crud_publication.get_publication_by_workspace_id(
-            publication_workspace_id=publication_workspace_id
-        ).notice_ids
-    ) < len(incoming_notice_ids)
+    with get_session() as session:
+        return len(
+            crud_publication.get_publication_by_workspace_id(
+                publication_workspace_id=publication_workspace_id, session=session
+            ).notice_ids
+        ) < len(incoming_notice_ids)
+
+
+def generate_uuid():
+    return str(uuid.uuid4())
+
+
+def get_nearest_business_day(date_obj: date = None) -> date:
+    if date_obj is None:
+        date_obj = date.today()  # get current date, without time
+
+    if date_obj.weekday() == 5:  # Saturday
+        return date_obj - timedelta(days=1)
+    elif date_obj.weekday() == 6:  # Sunday
+        return date_obj - timedelta(days=2)
+    return date_obj
 
 
 # TODO
@@ -127,7 +154,8 @@ async def get_daily_pubproc_search_data(
     page_size = 100
 
     data = {
-        "dispatch-date-from": f"{latest_business_day.strftime('%Y-%m-%d')}",
+        # "dispatch-date-from": f"{latest_business_day.strftime('%Y-%m-%d')}",
+        "dispatch-date-from": "2025-02-18",
         "page": 1,
         "pageSize": page_size,
     }
@@ -236,18 +264,3 @@ async def get_publication_workspace_forum(
     )
 
     return r.json()
-
-
-def generate_uuid():
-    return str(uuid.uuid4())
-
-
-def get_nearest_business_day(date_obj: date = None) -> date:
-    if date_obj is None:
-        date_obj = date.today()  # get current date, without time
-
-    if date_obj.weekday() == 5:  # Saturday
-        return date_obj - timedelta(days=1)
-    elif date_obj.weekday() == 6:  # Sunday
-        return date_obj - timedelta(days=2)
-    return date_obj

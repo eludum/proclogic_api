@@ -6,7 +6,7 @@ from pydantic import BaseModel, EmailStr
 from starlette.responses import JSONResponse
 
 from app.config.settings import Settings
-from app.schemas.publication_schemas import CompanySchema
+from app.schemas.company_schemas import CompanySchema
 
 settings = Settings()
 

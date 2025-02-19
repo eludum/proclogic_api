@@ -1,14 +1,10 @@
 # TODO: map sqlalchemy objects back to pydantic
 
 from app.config.settings import Settings
-from app.models.publication_models import Company, Publication
+from app.models.company_models import Company, Sector
+from app.models.publication_models import Publication
+from app.schemas.company_schemas import CompanySchema
 from app.schemas.publication_out_schemas import PublicationOut
-from app.models.publication_models import Company
-from app.schemas.publication_schemas import (
-    CPVCodeSchema,
-    CompanySchema,
-    DescriptionSchema,
-)
 from app.util.nuts_codes import get_nuts_code_as_str
 from app.util.cpv_codes import get_cpv_sector_and_description
 
@@ -55,14 +51,11 @@ def convert_company_to_schema(company: Company) -> CompanySchema:
         name=company.name,
         email=company.email,
         interested_cpv_codes=[
-            CPVCodeSchema(
-                code=cpv_code.code,
-                descriptions=[
-                    DescriptionSchema(language=desc.language, text=desc.text)
-                    for desc in cpv_code.descriptions
-                ],
+            Sector(
+                sector=sector.sector,
+                cpv_codes=sector.cpv_codes
             )
-            for cpv_code in company.interested_cpv_codes
+            for sector in company.interested_sectors
         ],
         summary_activities=company.summary_activities,
         accreditations=company.accreditations,

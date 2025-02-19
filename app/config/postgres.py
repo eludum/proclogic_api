@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -7,14 +9,12 @@ settings = Settings()
 
 engine = create_engine(settings.postgres_con_url)
 
-Session = sessionmaker(bind=engine)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+@contextmanager
 def get_session():
-    return Session()
-
-def get_session_generator():
-    session = Session()
+    db = SessionLocal()
     try:
-        yield session
+        yield db
     finally:
-        session.close()
+        db.close()

@@ -16,11 +16,9 @@ from sqlalchemy import (
     UniqueConstraint,
     func
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-
-class Base(DeclarativeBase):
-    pass
+from app.models.base import Base
 
 
 publication_cpv_additional_codes = Table(
@@ -55,17 +53,10 @@ publications_companies = Table(
     Column("company_vat_number", ForeignKey("companies.vat_number")),
 )
 
-company_cpv_codes = Table(
-    "company_cpv_codes",
-    Base.metadata,
-    Column("company_vat_number", ForeignKey("companies.vat_number")),
-    Column("cpv_code_code", ForeignKey("cpv_codes.code")),
-)
-
 
 class Description(Base):
     __tablename__ = "descriptions"
-    # TODO: make this work with indexes
+    # TODO: set constraint, avoid duplicates, worry about this when you have lots of clients...
     # __table_args__ = (
     #     Index("idx_text_language_hash", func.md5("text"), "language", unique=True),
     # )
@@ -74,39 +65,30 @@ class Description(Base):
     language: Mapped[str] = mapped_column(String)
     text: Mapped[str] = mapped_column(Text)
 
+    # Relationships with Lot
     lot_id: Mapped[Optional[int]] = mapped_column(ForeignKey("lots.id"), nullable=True)
+    lot_descriptions: Mapped[Optional["Lot"]] = relationship(back_populates="descriptions", overlaps="lot_titles")
+    lot_titles: Mapped[Optional["Lot"]] = relationship(back_populates="titles", overlaps="lot_descriptions")
 
+    # Relationships with Dossier
     dossier_reference_number: Mapped[Optional[str]] = mapped_column(
         ForeignKey("dossiers.reference_number"), nullable=True
     )
+    dossier_descriptions: Mapped[Optional["Dossier"]] = relationship(back_populates="descriptions", overlaps="dossier_titles")
+    dossier_titles: Mapped[Optional["Dossier"]] = relationship(back_populates="titles", overlaps="dossier_descriptions")
 
+    # Relationship with CPVCode
     cpv_code_code: Mapped[Optional[str]] = mapped_column(
         ForeignKey("cpv_codes.code"), nullable=True
     )
+    cpv_code: Mapped[Optional["CPVCode"]] = relationship(back_populates="descriptions")
 
 
 class CPVCode(Base):
     __tablename__ = "cpv_codes"
 
     code: Mapped[str] = mapped_column(String, primary_key=True)
-    descriptions: Mapped[List["Description"]] = relationship()
-
-
-class Company(Base):
-    __tablename__ = "companies"
-
-    vat_number: Mapped[str] = mapped_column(String, primary_key=True)
-    name: Mapped[str] = mapped_column(String)
-    email: Mapped[str] = mapped_column(String)
-    accreditations: Mapped[Optional[dict]] = mapped_column(PickleType, nullable=True)
-    max_publication_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    interested_cpv_codes: Mapped[List["CPVCode"]] = relationship(
-        secondary=company_cpv_codes
-    )
-    summary_activities: Mapped[str] = mapped_column(String)
-    recommended_publications: Mapped[List["Publication"]] = relationship(
-        secondary=publications_companies, back_populates="recommended_companies"
-    )
+    descriptions: Mapped[List["Description"]] = relationship(back_populates="cpv_code")
 
 
 class EnterpriseCategory(Base):
@@ -135,10 +117,11 @@ class Dossier(Base):
         String, nullable=True
     )
 
-    descriptions: Mapped[List["Description"]] = relationship()
-    titles: Mapped[List["Description"]] = relationship()
-    enterprise_categories: Mapped[List["EnterpriseCategory"]] = relationship()
+    # Relationships with Description
+    descriptions: Mapped[List["Description"]] = relationship(back_populates="dossier_descriptions", overlaps="dossier_titles")
+    titles: Mapped[List["Description"]] = relationship(back_populates="dossier_titles", overlaps="descriptions,dossier_descriptions")
 
+    enterprise_categories: Mapped[List["EnterpriseCategory"]] = relationship()
 
 class Lot(Base):
     __tablename__ = "lots"
@@ -147,8 +130,9 @@ class Lot(Base):
     reserved_execution: Mapped[List[str]] = mapped_column(ARRAY(String))
     reserved_participation: Mapped[List[str]] = mapped_column(ARRAY(String))
 
-    descriptions: Mapped[List["Description"]] = relationship()
-    titles: Mapped[List["Description"]] = relationship()
+    # Relationships with Description
+    descriptions: Mapped[List["Description"]] = relationship(back_populates="lot_descriptions", overlaps="lot_titles")
+    titles: Mapped[List["Description"]] = relationship(back_populates="lot_titles", overlaps="descriptions,lot_descriptions")
 
 
 class OrganisationName(Base):
