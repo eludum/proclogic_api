@@ -17,3 +17,4 @@ requests-oauthlib
 asyncpg
 numpy
 pycron
+python-dotenv
