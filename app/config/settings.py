@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import List, Optional
 from pydantic_settings import BaseSettings
 
@@ -14,7 +15,6 @@ class Settings(BaseSettings):
     path_dos_api: str = "/api/eProcurementDos/v1"
     pubproc_token: str = ""
     pubproc_token_exp: str = ""
-    postgres_host: str = "localhost"
     postgres_con_url: str
     template_folder: str = "email_template"
     mail_username: str

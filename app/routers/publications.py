@@ -15,6 +15,7 @@ from app.crud.mapper import convert_publication_to_out_schema_with_company
 from app.schemas.publication_out_schemas import PublicationOut
 from app.util.pubproc import get_publication_workspace_documents
 
+
 settings = Settings()
 
 publications_router = APIRouter()
@@ -142,7 +143,9 @@ async def conversation_with_files(
             filesmap = {
                 file_name: file_data
                 for file_name, file_data in filesmap.items()
-                if file_name.lower().endswith(tuple(settings.openai_vector_store_accepted_formats))
+                if file_name.lower().endswith(
+                    tuple(settings.openai_vector_store_accepted_formats)
+                )
             }
 
             # Upload files to the vector store
@@ -236,6 +239,7 @@ async def conversation_with_files(
     except Exception as e:
         logging.error(f"Error in conversation endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @publications_router.delete("/conversation/{publication_id}")
 async def end_conversation(

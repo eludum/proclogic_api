@@ -34,7 +34,6 @@ proclogic.include_router(email_router)
 
 
 origins = [
-    "http://localhost",
     "http://localhost:3000",
 ]
 
