@@ -78,6 +78,8 @@ def get_recommendation(
                 "role": "user",
                 "content": [
                     {
+                        # TODO: more info about why it is a match
+                        # keyword search documents
                         "type": "text",
                         "text": f"The company is {company.name}, they do {company.summary_activities}. The company accreditations are {str(company.accreditations) if company.accreditations else 'not found in database'}. The max amount of publication value in EUR they are interested in is {company.max_publication_value if company.max_publication_value else 'not found in database'}. The CPV codes the company is interested in are {interested_sectors_as_cpv_str}. The publication main CPV code is {publication.cpv_main_code.code}. The additional CPV codes for the publication are: {additional_cpv_codes_str}. The publication title is {dossier_title_str} and the description is {dossier_desc_str}."
                         + "\n"
@@ -110,6 +112,7 @@ def summarize_xml(xml: str, client: OpenAI = None) -> str:
                 "content": [
                     {
                         "type": "text",
+                        # TODO: give all info
                         "text": "You are a public procurement ranking system designed to determine whether a procurement opportunity (aka publication) is a good fit for a specific company. In this context, you are asked to summarize the XML content of a publication. Your response must be a summary of the XML content with all relevant info. Reply in a couple of paragraphs of fluent text. Reply in Dutch.",
                     }
                 ],
@@ -126,31 +129,6 @@ def summarize_xml(xml: str, client: OpenAI = None) -> str:
     return completion.choices[0].message.content
 
 
-def summarize_xml_get_award_info(xml: str, client: OpenAI = None) -> str:
-    client = get_openai_client() if not client else client
-
-    completion = client.chat.completions.create(
-        model="gpt-4o-mini",  # TODO: adapt according to AI model used
-        messages=[
-            {
-                "role": "system",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "You are a public procurement ranking system designed to determine whether a procurement opportunity (aka publication) is a good fit for a specific company. In this context, you are asked to summarize the XML content of a this awarded publication. I want to get the awarded party and the value of the awarded publication. Please respond in Json format with the following fields: winner and value.",
-                    }
-                ],
-            },
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": f"{xml}"}],
-            },
-        ],
-        # TODO: to be finetuned
-        # temperature=1.0,
-    )
-
-    return completion.choices[0].message.content
 
 def assistant_summarize_files(filesmap: dict, client: OpenAI = None) -> str:
     client = get_openai_client() if not client else client

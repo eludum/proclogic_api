@@ -5,7 +5,6 @@ uvicorn
 openai
 asyncio
 httpx
-aioredis
 python-multipart
 redis
 pydantic

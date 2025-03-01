@@ -10,6 +10,7 @@ from app.routers.company import companies_router
 from app.routers.email import email_router
 from app.routers.health import health_router
 from app.routers.publications import publications_router
+from app.routers.conversations import conversations_router
 from app.util.alembic_runner import run_migration
 from app.util.pubproc import fetch_pubproc_data
 
@@ -29,6 +30,7 @@ async def lifespan(app: FastAPI):
 proclogic = FastAPI(lifespan=lifespan, debug=settings.fastapi_debug)
 proclogic.include_router(health_router)
 proclogic.include_router(publications_router)
+proclogic.include_router(conversations_router)
 proclogic.include_router(companies_router)
 proclogic.include_router(email_router)
 

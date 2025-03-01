@@ -16,10 +16,15 @@ class Settings(BaseSettings):
     pubproc_token: str = ""
     pubproc_token_exp: str = ""
     postgres_con_url: str
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_password: Optional[str] = None
+    redis_db: int = 0
+    redis_agent_ttl: int = 86400  # Default TTL for agent data (24 hours)
     template_folder: str = "email_template"
-    mail_username: str
+    mail_username: str = "info@proclogic.be"
     mail_password: str
-    mail_from: str
+    mail_from: str = "info@proclogic.be"
 
     fastapi_debug: bool = True
     prefered_languages_descriptions: List[str] = ["NL", "EN", "FR"]

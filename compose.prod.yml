@@ -1,21 +1,37 @@
+# TODO: https://github.com/nginx-proxy/nginx-proxy or use caddy
+
 services:
   postgres:
     volumes:
       - psql_data:/var/lib/postgresql/data
     restart: unless-stopped
     env_file: .env.postgres.prod
+
+  redis:
+    volumes:
+      - redis_volume_data:/data
+    restart: unless-stopped
+
   pgadmin:
     env_file: .env.postgres.prod
+
   proclogic-api:
     image: proclogic-api
+    container_name: proclogic-api
     ports:
       - "8000:8000"
     depends_on:
       - postgres
+      - redis
     restart: unless-stopped
+    healthcheck:
+      test: curl --fail http://localhost:8000/health || exit 1
+      interval: 2s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     env_file: .env.prod
 
 volumes:
   psql_data:
-
-# TODO: https://github.com/nginx-proxy/nginx-proxy
+  redis_volume_data:

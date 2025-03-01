@@ -53,7 +53,7 @@ def convert_company_to_schema(company: Company) -> CompanySchema:
         vat_number=company.vat_number,
         name=company.name,
         email=company.email,
-        interested_cpv_codes=[
+        interested_sectors=[
             Sector(
                 sector=sector.sector,
                 cpv_codes=sector.cpv_codes

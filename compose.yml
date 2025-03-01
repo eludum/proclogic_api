@@ -1,14 +1,21 @@
-# TODO: https://www.beekeeperstudio.io/blog/docker-postgres
-# TODO: https://docs.drone.io/server/provider/github/
-
 services:
   postgres:
     image: postgres
+    container_name: postgres
     ports:
       - 5432:5432
     env_file: .env.postgres
+
+  redis:
+    image: redis/redis-stack
+    container_name: redis
+    ports:
+      - 6379:6379
+      - 8001:8001
+
   pgadmin:
     image: dpage/pgadmin4
+    container_name: pgadmin
     ports:
       - "8002:80"
     env_file: .env.postgres

@@ -3,22 +3,25 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.company_models import Company
+from app.models.company_models import Company, Sector
 from app.schemas.company_schemas import CompanySchema
 
 
 def create_company(
-    company: CompanySchema,
+    company_schema: CompanySchema,
     session: Session,
 ) -> Optional[Company]:
     """Create a new company and add it to the database."""
     new_company = Company(
-        vat_number=company.vat_number,
-        name=company.name,
-        email=company.email,
-        summary_activities=company.summary_activities,
-        accreditations=company.accreditations,
-        interested_sectors=company.interested_sectors,
+        vat_number=company_schema.vat_number,
+        name=company_schema.name,
+        email=company_schema.email,
+        summary_activities=company_schema.summary_activities,
+        accreditations=company_schema.accreditations,
+        interested_sectors=[
+            Sector(sector=sector_schema.sector, cpv_codes=sector_schema.cpv_codes)
+            for sector_schema in company_schema.interested_sectors
+        ],
     )
     try:
         session.add(new_company)
@@ -32,9 +35,7 @@ def create_company(
         session.close()
 
 
-def get_company_by_vat_number(
-    vat_number: str, session: Session
-) -> Optional[Company]:
+def get_company_by_vat_number(vat_number: str, session: Session) -> Optional[Company]:
     """Retrieve a company by its VAT number."""
     try:
         return (
@@ -75,10 +76,15 @@ def update_company(
     session: Session,
 ) -> Optional[Company]:
     """Update the details of an existing company."""
-    company = session.query(Company).filter(Company.vat_number == company_schema.vat_number).first()
+    company = (
+        session.query(Company)
+        .filter(Company.vat_number == company_schema.vat_number)
+        .first()
+    )
     if not company:
         logging.error(
-            "Company with VAT number %s not found. Update failed.", company_schema.vat_number
+            "Company with VAT number %s not found. Update failed.",
+            company_schema.vat_number,
         )
         return False
 
@@ -88,7 +94,12 @@ def update_company(
     company.summary_activities = company_schema.summary_activities
     company.accreditations = company_schema.accreditations
     company.max_publication_value = company_schema.max_publication_value
-    company.interested_sectors = company_schema.interested_sectors
+    company.interested_sectors = (
+        [
+            Sector(sector=sector_schema.sector, cpv_codes=sector_schema.cpv_codes)
+            for sector_schema in company_schema.interested_sectors
+        ],
+    )
 
     try:
         session.commit()
@@ -119,9 +130,7 @@ def delete_company(vat_number: str, session: Session) -> bool:
         session.close()
 
 
-def get_company_by_email(
-    email: str, session: Session
-) -> Optional[Company]:
+def get_company_by_email(email: str, session: Session) -> Optional[Company]:
     """Retrieve a company by its email."""
     try:
         return (
