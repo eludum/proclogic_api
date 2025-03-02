@@ -11,10 +11,12 @@ import numpy as np
 import pycron
 from pydantic import TypeAdapter
 
-from app.config.postgres import get_session
 import app.crud.company as crud_company
 import app.crud.publication as crud_publication
-from app.ai.recommend import get_recommendation, summarize_xml
+from app.ai.recommend import (get_recommendation, summarize_publication_award,
+                              summarize_publication_with_files,
+                              summarize_publication_without_files)
+from app.config.postgres import get_session
 from app.config.settings import Settings
 from app.schemas.publication_schemas import CPVCodeSchema, PublicationSchema
 from app.util.pubproc_token import get_token
@@ -34,7 +36,7 @@ async def fetch_pubproc_data() -> None:
         # TODO: remove continue in prod
         continue
 
-        if pycron.is_now("0 6-19 * * 1-5"):
+        if pycron.is_now("*/15 6-19 * * 1-5"):
             try:
                 async with httpx.AsyncClient() as client:
                     await update_publications(client=client)
@@ -45,55 +47,73 @@ async def fetch_pubproc_data() -> None:
 
 
 async def update_publications(client: httpx.AsyncClient) -> None:
-    with get_session() as session:
-        # Fetch publication data
-        pass
-        # pubproc_r = await get_daily_pubproc_search_data(client=client)
-        # pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
+    pass
+    # with get_session() as session:
+    #     pubproc_r = await get_daily_pubproc_search_data(client=client)
+    #     pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
 
-        # for pub in pubproc_data:
-        #     # Check if the publication already exists
-        #     existing_publication = crud_publication.publication_exists(
-        #         publication_workspace_id=pub.publication_workspace_id, session=session
-        #     )
+    #     for pub in pubproc_data:
+    #         # Check if the publication already exists
+    #         existing_publication = crud_publication.publication_exists(
+    #             publication_workspace_id=pub.publication_workspace_id, session=session
+    #         )
 
-        #     # Handle updates for existing publications
-        #     if existing_publication and pub.vault_submission_deadline is not None:
-        #         if is_new_notice_version_available(
-        #             incoming_notice_ids=pub.notice_ids,
-        #             publication_workspace_id=pub.publication_workspace_id,
-        #         ):
-        #             xml_content = await get_notice_xml(
-        #                 client=client,
-        #                 publication_workspace_id=pub.publication_workspace_id,
-        #             )
-        #             ai_notice_summary = summarize_xml(xml_content)
-        #             pub.ai_notice_summary = ai_notice_summary
+    #         # Handle updates for existing publications
+    #         if existing_publication and pub.vault_submission_deadline is not None:
+    #             if is_new_notice_version_available(
+    #                 incoming_notice_ids=pub.notice_ids,
+    #                 publication_workspace_id=pub.publication_workspace_id,
+    #             ):
+    #                 xml_content = await get_notice_xml(
+    #                     client=client,
+    #                     publication_workspace_id=pub.publication_workspace_id,
+    #                 )
+    #                 pub.ai_summary_with_documents = summarize_publication_with_files(
+    #                     publication=pub, xml_content=xml_content
+    #                 )
+    #                 pub.ai_summary_without_documents = (
+    #                     summarize_publication_without_files(
+    #                         publication=pub, xml_content=xml_content
+    #                     )
+    #                 )
 
-        #     # Handle new publications
-        #     if not existing_publication and pub.vault_submission_deadline is not None:
-        #         xml_content = await get_notice_xml(
-        #             client=client, publication_workspace_id=pub.publication_workspace_id
-        #         )
-        #         ai_notice_summary = summarize_xml(xml_content)
-        #         pub.ai_notice_summary = ai_notice_summary
+    #         # Handle new publications
+    #         if not existing_publication and pub.vault_submission_deadline is not None:
+    #             xml_content = await get_notice_xml(
+    #                 client=client, publication_workspace_id=pub.publication_workspace_id
+    #             )
+    #             xml_content = await get_notice_xml(
+    #                 client=client,
+    #                 publication_workspace_id=pub.publication_workspace_id,
+    #             )
+    #             pub.ai_summary_with_documents = summarize_publication_with_files(
+    #                 publication=pub, xml_content=xml_content
+    #             )
+    #             pub.ai_summary_without_documents = summarize_publication_without_files(
+    #                 publication=pub, xml_content=xml_content
+    #             )
 
-        #         # Generate recommendations for each company
-        #         for company in crud_company.get_all_companies(session=session):
-        #             recom = get_recommendation(publication=pub, company=company)
-        #             if recom:
-        #                 if pub.recommended:
-        #                     pub.recommended.append(company)
-        #                 else:
-        #                     pub.recommended = [company]
+    #             # Generate recommendations for each company
+    #             for company in crud_company.get_all_companies(session=session):
+    #                 recom = get_recommendation(publication=pub, company=company)
+    #                 if recom:
+    #                     if pub.recommended:
+    #                         pub.recommended.append(company)
+    #                     else:
+    #                         pub.recommended = [company]
 
-        #     # if pub.vaultSubmissionDeadline is None:
-        #     # TODO: add field in model and schema to make sure we use these for report generation
-        #     # info_json = summarize_xml_get_award_info(xml_content)
+    #         if pub.vault_submission_deadline is None:
+    #             xml_content = await get_notice_xml(
+    #                 client=client,
+    #                 publication_workspace_id=pub.publication_workspace_id,
+    #             )
+    #             pub.award = summarize_publication_award(
+    #                 publication=pub, xml_content=xml_content
+    #             )
 
-        #     crud_publication.get_or_create_publication(
-        #         publication_schema=pub, session=session
-        #     )
+    #         crud_publication.get_or_create_publication(
+    #             publication_schema=pub, session=session
+    #         )
 
 
 async def get_notice_xml(

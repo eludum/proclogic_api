@@ -12,12 +12,11 @@ class PublicationOut(BaseModel):
     submission_deadline: Optional[datetime] = None
     is_active: Optional[bool] = None
     original_description: str
-    ai_notice_summary: Optional[str] = None
-    ai_document_summary: Optional[str] = None
+    ai_summary_without_documents: Optional[str] = None
+    ai_summary_with_documents: Optional[str] = None
     organisation: str
     cpv_code: str
     cpv_additional_codes: Optional[List[str]] = None
-    time_remaining: Optional[str] = None
     accreditations: Optional[dict] = None
     publication_value: str = None
     documents: Optional[List[str]] = None

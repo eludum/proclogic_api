@@ -22,6 +22,11 @@ publications_router = APIRouter()
 )
 async def get_publications(company_vatnumber: str) -> List[PublicationOut]:
     with get_session() as session:
+        if not crud_company.get_company_by_vat_number(
+            vat_number=company_vatnumber, session=session
+        ):
+            raise HTTPException(status_code=404, detail="Company not found")
+        
         publications = crud_publication.get_all_publications(session=session)
 
         company = crud_company.get_company_by_vat_number(
@@ -52,7 +57,7 @@ async def get_publication_by_workspace_id(
         company = crud_company.get_company_by_vat_number(
             vat_number=company_vatnumber, session=session
         )
-
+        
         return convert_publication_to_out_schema_with_company(
             publication=publication, company=company
         )

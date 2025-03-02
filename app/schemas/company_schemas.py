@@ -11,6 +11,7 @@ class SectorSchema(BaseModel):
 
 class CompanySchema(BaseModel):
     vat_number: str
+    subscription: str
     name: str
     email: str
     interested_sectors: List[SectorSchema]

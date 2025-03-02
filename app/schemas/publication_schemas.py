@@ -89,7 +89,9 @@ class PublicationSchema(BaseModel):
     ted_published: bool
     vault_submission_deadline: Optional[datetime] = None
     recommended: Optional[List[CompanySchema]] = []
-    ai_notice_summary: Optional[str] = None
-    ai_document_summary: Optional[str] = None
+    saved: Optional[List[CompanySchema]] = []
+    ai_summary_without_documents: Optional[str] = None
+    ai_summary_with_documents: Optional[str] = None
+    award: Optional[dict] = None
 
     model_config = ConfigDict(from_attributes=True, alias_generator=to_camel)

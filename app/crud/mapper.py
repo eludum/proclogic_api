@@ -18,9 +18,7 @@ def convert_publication_to_out_schema_with_company(
     publication: Publication, company: Company
 ) -> PublicationOut:
     
-    # TODO: add publication docs and value (get from workspace niffo), time remaining and isactive, lots, in your sector
-
-
+    # TODO: add publication docs and value (get from workspace niffo) and isactive check date, lots, in your sector
 
     pub_out = PublicationOut(
         title=get_descr_as_str(publication.dossier.titles),
@@ -30,18 +28,20 @@ def convert_publication_to_out_schema_with_company(
         submission_deadline=publication.vault_submission_deadline,
         is_active=publication.vault_submission_deadline is not None,
         original_description=get_descr_as_str(publication.dossier.descriptions),
-        ai_notice_summary=publication.ai_notice_summary,
-        ai_document_summary=publication.ai_document_summary,
+        ai_summary_without_documents=publication.ai_summary_without_documents,
+        ai_summary_with_documents=publication.ai_summary_with_documents,
         organisation=get_org_name_as_str(publication.organisation.organisation_names),
         cpv_code=publication.cpv_main_code_code,
         cpv_additional_codes=[
             cpv_code.code for cpv_code in publication.cpv_additional_codes],
         accreditations=publication.dossier.accreditations,
         is_recommended=True if company in publication.recommended_companies else False,
+        is_saved=True if company in publication.saved_companies else False,
         region=[
             get_nuts_code_as_str(nuts_code) for nuts_code in publication.nuts_codes
         ],
         sector=get_cpv_sector_and_description(publication.cpv_main_code.code, language="nl"),
+        award=publication.award
     )
 
     return pub_out

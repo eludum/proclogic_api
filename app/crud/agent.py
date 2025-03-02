@@ -1,6 +1,7 @@
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional
 
-from app.config.redis_manager import get_redis_client
+from redis.client import Redis
+
 from app.config.settings import Settings
 
 settings = Settings()
@@ -12,8 +13,8 @@ class RedisAgentStorage:
     Class to handle storing agent data in Redis.
     """
 
-    def __init__(self):
-        self.redis = get_redis_client()
+    def __init__(self, redis_client: Redis):
+        self.redis = redis_client
         self.ttl = settings.redis_agent_ttl
 
     def store_company_assistant(self, vat_number: str, assistant_id: str) -> None:

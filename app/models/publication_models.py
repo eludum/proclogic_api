@@ -14,7 +14,7 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
-    func
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -67,15 +67,23 @@ class Description(Base):
 
     # Relationships with Lot
     lot_id: Mapped[Optional[int]] = mapped_column(ForeignKey("lots.id"), nullable=True)
-    lot_descriptions: Mapped[Optional["Lot"]] = relationship(back_populates="descriptions", overlaps="lot_titles")
-    lot_titles: Mapped[Optional["Lot"]] = relationship(back_populates="titles", overlaps="lot_descriptions")
+    lot_descriptions: Mapped[Optional["Lot"]] = relationship(
+        back_populates="descriptions", overlaps="lot_titles"
+    )
+    lot_titles: Mapped[Optional["Lot"]] = relationship(
+        back_populates="titles", overlaps="lot_descriptions"
+    )
 
     # Relationships with Dossier
     dossier_reference_number: Mapped[Optional[str]] = mapped_column(
         ForeignKey("dossiers.reference_number"), nullable=True
     )
-    dossier_descriptions: Mapped[Optional["Dossier"]] = relationship(back_populates="descriptions", overlaps="dossier_titles")
-    dossier_titles: Mapped[Optional["Dossier"]] = relationship(back_populates="titles", overlaps="dossier_descriptions")
+    dossier_descriptions: Mapped[Optional["Dossier"]] = relationship(
+        back_populates="descriptions", overlaps="dossier_titles"
+    )
+    dossier_titles: Mapped[Optional["Dossier"]] = relationship(
+        back_populates="titles", overlaps="dossier_descriptions"
+    )
 
     # Relationship with CPVCode
     cpv_code_code: Mapped[Optional[str]] = mapped_column(
@@ -118,10 +126,15 @@ class Dossier(Base):
     )
 
     # Relationships with Description
-    descriptions: Mapped[List["Description"]] = relationship(back_populates="dossier_descriptions", overlaps="dossier_titles")
-    titles: Mapped[List["Description"]] = relationship(back_populates="dossier_titles", overlaps="descriptions,dossier_descriptions")
+    descriptions: Mapped[List["Description"]] = relationship(
+        back_populates="dossier_descriptions", overlaps="dossier_titles"
+    )
+    titles: Mapped[List["Description"]] = relationship(
+        back_populates="dossier_titles", overlaps="descriptions,dossier_descriptions"
+    )
 
     enterprise_categories: Mapped[List["EnterpriseCategory"]] = relationship()
+
 
 class Lot(Base):
     __tablename__ = "lots"
@@ -131,8 +144,12 @@ class Lot(Base):
     reserved_participation: Mapped[List[str]] = mapped_column(ARRAY(String))
 
     # Relationships with Description
-    descriptions: Mapped[List["Description"]] = relationship(back_populates="lot_descriptions", overlaps="lot_titles")
-    titles: Mapped[List["Description"]] = relationship(back_populates="lot_titles", overlaps="descriptions,lot_descriptions")
+    descriptions: Mapped[List["Description"]] = relationship(
+        back_populates="lot_descriptions", overlaps="lot_titles"
+    )
+    titles: Mapped[List["Description"]] = relationship(
+        back_populates="lot_titles", overlaps="descriptions,lot_descriptions"
+    )
 
 
 class OrganisationName(Base):
@@ -182,9 +199,14 @@ class Publication(Base):
     vault_submission_deadline: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True
     )
-    ai_notice_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    ai_document_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    
+    ai_summary_without_documents: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
+    ai_summary_with_documents: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
+    award: Mapped[Optional[dict]] = mapped_column(PickleType, nullable=True)
+
     cpv_main_code_code: Mapped[str] = mapped_column(ForeignKey("cpv_codes.code"))
     cpv_main_code: Mapped["CPVCode"] = relationship()
     organisation_id: Mapped[int] = mapped_column(
@@ -202,4 +224,7 @@ class Publication(Base):
     lots: Mapped[List["Lot"]] = relationship(secondary=publication_lots)
     recommended_companies: Mapped[List["Company"]] = relationship(
         secondary=publications_companies, back_populates="recommended_publications"
+    )
+    saved_companies: Mapped[List["Company"]] = relationship(
+        secondary=publications_companies, back_populates="saved_publications"
     )

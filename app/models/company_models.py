@@ -38,3 +38,6 @@ class Company(Base):
     recommended_publications: Mapped[List["Publication"]] = relationship(
         secondary=publications_companies, back_populates="recommended_companies"
     )
+    saved_publications: Mapped[List["Publication"]] = relationship(
+        secondary=publications_companies, back_populates="saved_companies"
+    )

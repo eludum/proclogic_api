@@ -43,6 +43,7 @@ def get_company_by_vat_number(vat_number: str, session: Session) -> Optional[Com
             .options(
                 joinedload(Company.interested_sectors),
                 joinedload(Company.recommended_publications),
+                joinedload(Company.saved_publications),
             )
             .filter(Company.vat_number == vat_number)
             .first()
@@ -61,6 +62,7 @@ def get_all_companies(session: Session) -> List[Company]:
             .options(
                 joinedload(Company.interested_sectors),
                 joinedload(Company.recommended_publications),
+                joinedload(Company.saved_publications),
             )
             .all()
         )

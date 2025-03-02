@@ -236,13 +236,14 @@ def update_publication(
     publication.sent_at = publication_schema.sent_at
     publication.ted_published = publication_schema.ted_published
     publication.vault_submission_deadline = publication_schema.vault_submission_deadline
-    if publication_schema.ai_notice_summary:
-        publication.ai_notice_summary = publication_schema.ai_notice_summary
-    if publication_schema.ai_document_summary:
-        publication.ai_document_summary = publication_schema.ai_document_summary
+    if publication_schema.ai_summary_without_documents:
+        publication.ai_summary_without_documents = publication_schema.ai_summary_without_documents
+    if publication_schema.ai_summary_with_documents:
+        publication.ai_summary_with_documents = publication_schema.ai_summary_with_documents
     if publication_schema.recommended:
         publication.recommended_companies = publication_schema.recommended
-
+    if publication_schema.saved:
+        publication.saved_companies = publication_schema.saved
     publication.cpv_main_code = get_or_create_cpv_code(
         cpv_code_schema=publication_schema.cpv_main_code, session=session
     )
@@ -321,9 +322,10 @@ def get_or_create_publication(
             sent_at=publication_schema.sent_at,
             ted_published=publication_schema.ted_published,
             vault_submission_deadline=publication_schema.vault_submission_deadline,
-            ai_notice_summary=publication_schema.ai_notice_summary,
-            ai_document_summary=publication_schema.ai_document_summary,
+            ai_summary_without_documents=publication_schema.ai_summary_without_documents,
+            ai_summary_with_documents=publication_schema.ai_summary_with_documents,
             recommended_companies=publication_schema.recommended,
+            saved_companies=publication_schema.saved,
             cpv_main_code=cpv_main_code,
             dossier=dossier,
             organisation=organisation,
@@ -362,6 +364,7 @@ def get_publication_by_workspace_id(
             joinedload(Publication.lots).joinedload(Lot.descriptions),
             joinedload(Publication.lots).joinedload(Lot.titles),
             joinedload(Publication.recommended_companies),
+            joinedload(Publication.saved_companies),
         )
         .first()
     )
@@ -416,6 +419,7 @@ def get_all_publications(session: Session) -> List[Publication]:
             joinedload(Publication.lots).joinedload(Lot.descriptions),
             joinedload(Publication.lots).joinedload(Lot.titles),
             joinedload(Publication.recommended_companies),
+            joinedload(Publication.saved_companies),
         )
         .all()
     )
@@ -484,6 +488,7 @@ def search_publications(search_term: str, session: Session) -> List[Publication]
             joinedload(Publication.lots).joinedload(Lot.descriptions),
             joinedload(Publication.lots).joinedload(Lot.titles),
             joinedload(Publication.recommended_companies),
+            joinedload(Publication.saved_companies),
         )
         .all()
     )

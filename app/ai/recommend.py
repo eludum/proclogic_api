@@ -1,12 +1,13 @@
 import logging
+import json
 
 from openai import OpenAI
-
+from app.util.converter import PublicationInfo
 from app.ai.openai import get_openai_client
 from app.config.settings import Settings
 from app.schemas.company_schemas import CompanySchema
 from app.schemas.publication_schemas import PublicationSchema
-from app.util.converter import get_descr_as_str
+from app.util.converter import get_accreditations_as_str
 
 settings = Settings()
 
@@ -19,48 +20,12 @@ def get_recommendation(
 
     client = get_openai_client() if not client else client
 
+    publication_info = PublicationInfo()
+    publication_info.convert_publication_to_str(publication)
+
     interested_sectors_as_cpv_str = ""
     for sector in company.interested_sectors:
-        interested_sectors_as_cpv_str += "," + ", ".join(sector.cpv_codes)
-
-    dossier_title_str = get_descr_as_str(publication.dossier.titles)
-
-    dossier_desc_str = get_descr_as_str(publication.dossier.descriptions)
-
-    lot_title_str = ""
-    lot_desc_str = ""
-    for i, lot in enumerate(publication.lots):
-        if i < len(publication.lots) - 1:
-            lot_title_str += (
-                str(i + 1)
-                + ". lot title: "
-                + get_descr_as_str(lot.titles)
-                + ", "
-                + "\n"
-            )
-
-            lot_desc_str += (
-                str(i + 1)
-                + ". lot description: "
-                + get_descr_as_str(lot.descriptions)
-                + ", "
-                + "\n"
-            )
-        else:
-            lot_title_str += (
-                str(i + 1) + ". lot title: " + get_descr_as_str(lot.titles) + "\n"
-            )
-
-            lot_desc_str += (
-                str(i + 1)
-                + ". lot description: "
-                + get_descr_as_str(lot.descriptions)
-                + "\n"
-            )
-
-    additional_cpv_codes_str = ", ".join(
-        cpv_code.code for cpv_code in publication.cpv_additional_codes
-    )
+        interested_sectors_as_cpv_str += f"{sector.sector}: " + str(sector.cpv_codes)
 
     completion = client.chat.completions.create(
         model="gpt-4o-mini",  # TODO: adapt according to AI model used
@@ -81,13 +46,13 @@ def get_recommendation(
                         # TODO: more info about why it is a match
                         # keyword search documents
                         "type": "text",
-                        "text": f"The company is {company.name}, they do {company.summary_activities}. The company accreditations are {str(company.accreditations) if company.accreditations else 'not found in database'}. The max amount of publication value in EUR they are interested in is {company.max_publication_value if company.max_publication_value else 'not found in database'}. The CPV codes the company is interested in are {interested_sectors_as_cpv_str}. The publication main CPV code is {publication.cpv_main_code.code}. The additional CPV codes for the publication are: {additional_cpv_codes_str}. The publication title is {dossier_title_str} and the description is {dossier_desc_str}."
+                        "text": f"The company is {company.name}, they do {company.summary_activities}. The company accreditations are {get_accreditations_as_str(company.accreditations) if company.accreditations else 'not found in database'}. The max amount of publication value in EUR they are interested in is {company.max_publication_value if company.max_publication_value else 'not found in database'}. The CPV codes the company is interested in are {interested_sectors_as_cpv_str}. The publication main CPV code is {publication.cpv_main_code.code}. The additional CPV codes for the publication are: {publication_info.additional_cpv_codes_str}. The publication title is {publication_info.dossier_title_str} and the description is {publication_info.dossier_desc_str}."
                         + "\n"
                         + f"The different lots within this publication are: "
                         + "\n"
-                        + f"{lot_title_str}With their respective descriptions:"
+                        + f"{publication_info.lot_title_str}With their respective descriptions:"
                         + "\n"
-                        + f"{lot_desc_str}"
+                        + f"{publication_info.lot_desc_str}"
                         + "\n"
                         + "Is this a good fit for them?",
                     }
@@ -101,8 +66,46 @@ def get_recommendation(
     return True if completion.choices[0].message.content.lower() == "yes" else False
 
 
-def summarize_xml(xml: str, client: OpenAI = None) -> str:
+def summarize_publication_award(
+    xml: str, client: OpenAI = None
+) -> str:
     client = get_openai_client() if not client else client
+    
+    completion = client.chat.completions.create(
+        model="gpt-4o-mini",  # TODO: adapt according to AI model used
+        messages=[
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "You are a public procurement ranking system designed to determine whether a procurement opportunity (aka publication) is a good fit for a specific company. In this context, you are asked to summarize the award for a publication. Respond in a json format with the following keys: winner, value and currency. Keep it concise.",
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"The xml of the publication is: {xml}",
+                    }
+                ],
+            },
+        ],
+        # TODO: to be finetuned
+        # temperature=1.0,
+    )
+
+    return json.loads(completion.choices[0].message.content)
+
+
+def summarize_publication_without_files(
+    publication: PublicationSchema, xml: str, client: OpenAI = None
+) -> str:
+    client = get_openai_client() if not client else client
+    publication_info = PublicationInfo()
+    publication_info.convert_publication_to_str(publication)
 
     completion = client.chat.completions.create(
         model="gpt-4o-mini",  # TODO: adapt according to AI model used
@@ -112,14 +115,26 @@ def summarize_xml(xml: str, client: OpenAI = None) -> str:
                 "content": [
                     {
                         "type": "text",
-                        # TODO: give all info
-                        "text": "You are a public procurement ranking system designed to determine whether a procurement opportunity (aka publication) is a good fit for a specific company. In this context, you are asked to summarize the XML content of a publication. Your response must be a summary of the XML content with all relevant info. Reply in a couple of paragraphs of fluent text. Reply in Dutch.",
+                        "text": "You are a public procurement ranking system designed to determine whether a procurement opportunity (aka publication) is a good fit for a specific company. In this context, you are asked to summarize a publication. Your response must be a summary with all relevant info. Reply in a couple of paragraphs of fluent text. Keep it concise. Reply in Dutch.",
                     }
                 ],
             },
             {
                 "role": "user",
-                "content": [{"type": "text", "text": f"{xml}"}],
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"The publication main CPV code is {publication.cpv_main_code.code}. The additional CPV codes for the publication are: {publication_info.additional_cpv_codes_str}. The publication title is {publication_info.dossier_title_str} and the description is {publication_info.dossier_desc_str}."
+                        + "\n"
+                        + f"The different lots within this publication are: "
+                        + "\n"
+                        + f"{publication_info.lot_title_str}With their respective descriptions:"
+                        + "\n"
+                        + f"{publication_info.lot_desc_str}"
+                        + "\n"
+                        + f"The xml of the publication is: {xml}",
+                    }
+                ],
             },
         ],
         # TODO: to be finetuned
@@ -129,12 +144,18 @@ def summarize_xml(xml: str, client: OpenAI = None) -> str:
     return completion.choices[0].message.content
 
 
-
-def assistant_summarize_files(filesmap: dict, client: OpenAI = None) -> str:
+def summarize_publication_with_files(
+    publication: PublicationSchema, xml: str, filesmap: dict, client: OpenAI = None
+) -> str:
     client = get_openai_client() if not client else client
 
+    publication_info = PublicationInfo()
+    publication_info.convert_publication_to_str(publication)
+
     try:
-        vector_store = client.beta.vector_stores.create(name="publication_workspace_xx")
+        vector_store = client.beta.vector_stores.create(
+            name=f"publication_workspace_{publication.publication_workspace_id}"
+        )
 
         file_batch = client.beta.vector_stores.file_batches.upload_and_poll(
             vector_store_id=vector_store.id,
@@ -158,7 +179,20 @@ def assistant_summarize_files(filesmap: dict, client: OpenAI = None) -> str:
             messages=[
                 {
                     "role": "user",
-                    "content": "Can you summarize the documents, give me the relevant information to win this publication.",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Can you summarize the publication and the documents attached. The publication main CPV code is {publication.cpv_main_code.code}. The additional CPV codes for the publication are: {publication_info.additional_cpv_codes_str}. The publication title is {publication_info.dossier_title_str} and the description is {publication_info.dossier_desc_str}."
+                            + "\n"
+                            + f"The different lots within this publication are: "
+                            + "\n"
+                            + f"{publication_info.lot_title_str}With their respective descriptions:"
+                            + "\n"
+                            + f"{publication_info.lot_desc_str}"
+                            + "\n"
+                            + f"The xml of the publication is: {xml}",
+                        }
+                    ],
                     # Attach the new file to the message.
                     # "attachments": [
                     #     { "file_id": message_file.id, "tools": [{"type": "file_search"}] }
@@ -195,15 +229,15 @@ def assistant_summarize_files(filesmap: dict, client: OpenAI = None) -> str:
         logging.error(f"Failed to summarize files: {e}")
         return None
 
-    finally:
-        assistant = client.beta.assistants.update(
-            assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
-            tool_resources={"file_search": {"vector_store_ids": []}},
-        )
+    # finally:
+    #     assistant = client.beta.assistants.update(
+    #         assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
+    #         tool_resources={"file_search": {"vector_store_ids": []}},
+    #     )
 
-        client.beta.vector_stores.delete(vector_store_id=vector_store.id)
-        files = client.files.list()
+    #     client.beta.vector_stores.delete(vector_store_id=vector_store.id)
+    #     files = client.files.list()
 
-        for file in files:
-            client.files.delete(file.id)
-        client.files.list()
+    #     for file in files:
+    #         client.files.delete(file.id)
+    #     client.files.list()
