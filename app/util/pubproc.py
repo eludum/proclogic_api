@@ -21,6 +21,7 @@ from app.config.settings import Settings
 from app.models.publication_models import CompanyPublicationMatch
 from app.schemas.publication_schemas import CPVCodeSchema, PublicationSchema
 from app.util.pubproc_token import get_token
+from app.util.redis_cache import redis_cache, invalidate_publication_cache
 
 settings = Settings()
 
@@ -65,6 +66,10 @@ async def update_publications(client: httpx.AsyncClient) -> None:
                     incoming_notice_ids=pub.notice_ids,
                     publication_workspace_id=pub.publication_workspace_id,
                 ):
+                    # Invalidate the cache for this publication workspace before making new API calls
+                    logging.info(f"New notice version detected for {pub.publication_workspace_id}. Invalidating cache.")
+                    invalidate_publication_cache(pub.publication_workspace_id)
+                    
                     xml_content = await get_notice_xml(
                         client=client,
                         publication_workspace_id=pub.publication_workspace_id,
@@ -158,13 +163,6 @@ def get_nearest_business_day(date_obj: date = None) -> date:
     return date_obj
 
 
-# TODO
-# get all gunning publications, filter on who won the contract, make report
-# get my publications, track publications for me, get notifications
-# get recommended publications, make chart
-# get sectors for onboarding part, get sector for each publication filter on sector
-
-
 async def get_daily_pubproc_search_data(
     client: httpx.AsyncClient,
     interested_cpv_codes: List[CPVCodeSchema] = None,
@@ -218,14 +216,12 @@ async def get_daily_pubproc_search_data(
 
 
 async def get_publication_workspace_data(
-    client: httpx.AsyncClient, publication_workspace_id=str
+    client: httpx.AsyncClient, publication_workspace_id: str
 ) -> dict:
-
     token = get_token()
     headers = {
         "Authorization": f"Bearer {token}",
-        # TODO: generate_uuid
-        "BelGov-Trace-Id": "2ce83af9-d524-43a6-8d1c-b19dff051aed",
+        "BelGov-Trace-Id": generate_uuid(),
     }
 
     r = await client.get(
@@ -238,14 +234,14 @@ async def get_publication_workspace_data(
     return r.json()
 
 
+@redis_cache("pubproc:documents")
 async def get_publication_workspace_documents(
     client: httpx.AsyncClient, publication_workspace_id: str
 ) -> dict:
     token = get_token()
     headers = {
         "Authorization": f"Bearer {token}",
-        # TODO: generate_uuid
-        "BelGov-Trace-Id": "2ce83af9-d524-43a6-8d1c-b19dff051aed",
+        "BelGov-Trace-Id": generate_uuid(),
     }
 
     r = await client.get(
@@ -266,14 +262,14 @@ async def get_publication_workspace_documents(
     return file_map
 
 
+@redis_cache("pubproc:forum")
 async def get_publication_workspace_forum(
     client: httpx.AsyncClient, forum_id: str
 ) -> dict:
     token = get_token()
     headers = {
         "Authorization": f"Bearer {token}",
-        # TODO: generate_uuid
-        "BelGov-Trace-Id": "2ce83af9-d524-43a6-8d1c-b19dff051aed",
+        "BelGov-Trace-Id": generate_uuid(),
     }
 
     r = await client.get(

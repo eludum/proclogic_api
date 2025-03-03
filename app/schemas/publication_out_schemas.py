@@ -3,6 +3,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
+from app.util.converter import LotInfo
+
 
 class PublicationOut(BaseModel):
     title: str
@@ -25,3 +27,4 @@ class PublicationOut(BaseModel):
     is_saved: Optional[bool] = None
     region: Optional[List[str]] = None
     sector: str
+    lots: Optional[List[LotInfo]] = None
