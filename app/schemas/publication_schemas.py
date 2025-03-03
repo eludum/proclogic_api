@@ -6,6 +6,17 @@ from pydantic.alias_generators import to_camel
 from app.schemas.company_schemas import CompanySchema
 
 
+class CompanyPublicationMatchSchema(BaseModel):
+    company_vat_number: str
+    publication_workspace_id: str
+    match_percentage: float = 0.0
+    is_recommended: bool = False
+    is_saved: bool = False
+    is_viewed: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class DescriptionSchema(BaseModel):
     language: str
     text: str
@@ -79,8 +90,12 @@ class PublicationSchema(BaseModel):
     procedure_id: str
     publication_date: datetime
     publication_languages: List[str]
-    publication_reference_numbers_bda: List[str] = Field(alias="publicationReferenceNumbersBDA")
-    publication_reference_numbers_ted: List[str] = Field(alias="publicationReferenceNumbersTED")
+    publication_reference_numbers_bda: List[str] = Field(
+        alias="publicationReferenceNumbersBDA"
+    )
+    publication_reference_numbers_ted: List[str] = Field(
+        alias="publicationReferenceNumbersTED"
+    )
     publication_type: str
     publication_workspace_id: str
     published_at: List[datetime]
@@ -93,5 +108,10 @@ class PublicationSchema(BaseModel):
     ai_summary_without_documents: Optional[str] = None
     ai_summary_with_documents: Optional[str] = None
     award: Optional[dict] = None
+
+    estimated_value: Optional[int] = None
+    extracted_keywords: Optional[List[str]] = None
+
+    company_matches: Optional[List[CompanyPublicationMatchSchema]] = []
 
     model_config = ConfigDict(from_attributes=True, alias_generator=to_camel)

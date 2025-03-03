@@ -6,6 +6,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -21,6 +22,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 
+# Association table for CPV codes and publications
 publication_cpv_additional_codes = Table(
     "publication_cpv_additional_codes",
     Base.metadata,
@@ -32,6 +34,7 @@ publication_cpv_additional_codes = Table(
 )
 
 
+# Association table for lots and publications
 publication_lots = Table(
     "publication_lots",
     Base.metadata,
@@ -43,23 +46,43 @@ publication_lots = Table(
 )
 
 
-publications_companies = Table(
-    "publications_companies",
-    Base.metadata,
-    Column(
-        "publication_publication_workspace_id",
-        ForeignKey("publications.publication_workspace_id"),
-    ),
-    Column("company_vat_number", ForeignKey("companies.vat_number")),
-)
+# Association model for company-publication relationships with match data
+class CompanyPublicationMatch(Base):
+    __tablename__ = "company_publication_matches"
+
+    # Primary keys and foreign keys
+    company_vat_number: Mapped[str] = mapped_column(
+        ForeignKey("companies.vat_number"), primary_key=True
+    )
+    publication_workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("publications.publication_workspace_id"), primary_key=True
+    )
+
+    # Match data
+    match_percentage: Mapped[float] = mapped_column(
+        Float, default=0.0
+    )  # Overall match percentage (0-100)
+
+    # Status flags
+    is_recommended: Mapped[bool] = mapped_column(
+        Boolean, default=False
+    )  # AI recommendation flag
+    is_saved: Mapped[bool] = mapped_column(Boolean, default=False)  # User saved flag
+    is_viewed: Mapped[bool] = mapped_column(Boolean, default=False)  # User viewed flag
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=func.now(), onupdate=func.now()
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship(back_populates="publication_matches")
+    publication: Mapped["Publication"] = relationship(back_populates="company_matches")
 
 
 class Description(Base):
     __tablename__ = "descriptions"
-    # TODO: set constraint, avoid duplicates, worry about this when you have lots of clients...
-    # __table_args__ = (
-    #     Index("idx_text_language_hash", func.md5("text"), "language", unique=True),
-    # )
 
     id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True)
     language: Mapped[str] = mapped_column(String)
@@ -179,13 +202,14 @@ class Organisation(Base):
 class Publication(Base):
     __tablename__ = "publications"
 
+    # Primary key and identification
     publication_workspace_id: Mapped[str] = mapped_column(String, primary_key=True)
     dispatch_date: Mapped[datetime] = mapped_column(DateTime)
     insertion_date: Mapped[datetime] = mapped_column(DateTime)
     natures: Mapped[List[str]] = mapped_column(ARRAY(String))
     notice_ids: Mapped[List[str]] = mapped_column(ARRAY(String))
     notice_sub_type: Mapped[str] = mapped_column(String)
-    nuts_codes: Mapped[List[str]] = mapped_column(ARRAY(String))
+    nuts_codes: Mapped[List[str]] = mapped_column(ARRAY(String), index=True)
     procedure_id: Mapped[str] = mapped_column(String)
     publication_date: Mapped[datetime] = mapped_column(DateTime)
     publication_languages: Mapped[List[str]] = mapped_column(ARRAY(String))
@@ -197,7 +221,7 @@ class Publication(Base):
     sent_at: Mapped[List[datetime]] = mapped_column(ARRAY(DateTime))
     ted_published: Mapped[bool] = mapped_column(Boolean)
     vault_submission_deadline: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, nullable=True
+        DateTime, nullable=True, index=True
     )
     ai_summary_without_documents: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True
@@ -207,24 +231,58 @@ class Publication(Base):
     )
     award: Mapped[Optional[dict]] = mapped_column(PickleType, nullable=True)
 
+    # Added fields for better matching
+    estimated_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    extracted_keywords: Mapped[Optional[List[str]]] = mapped_column(
+        ARRAY(String), nullable=True
+    )
+
+    # Foreign keys relationships
     cpv_main_code_code: Mapped[str] = mapped_column(ForeignKey("cpv_codes.code"))
     cpv_main_code: Mapped["CPVCode"] = relationship()
+
     organisation_id: Mapped[int] = mapped_column(
         ForeignKey("organisations.organisation_id")
     )
     organisation: Mapped["Organisation"] = relationship()
+
     dossier_reference_number: Mapped[str] = mapped_column(
         ForeignKey("dossiers.reference_number")
     )
     dossier: Mapped["Dossier"] = relationship()
 
+    # Many-to-Many relationships
     cpv_additional_codes: Mapped[List["CPVCode"]] = relationship(
         secondary=publication_cpv_additional_codes
     )
     lots: Mapped[List["Lot"]] = relationship(secondary=publication_lots)
-    recommended_companies: Mapped[List["Company"]] = relationship(
-        secondary=publications_companies, back_populates="recommended_publications"
+
+    # Match relationships
+    company_matches: Mapped[List["CompanyPublicationMatch"]] = relationship(
+        back_populates="publication"
     )
-    saved_companies: Mapped[List["Company"]] = relationship(
-        secondary=publications_companies, back_populates="saved_publications"
-    )
+
+    # Helper properties
+    @property
+    def is_active(self) -> bool:
+        """Check if the publication is still active based on submission deadline"""
+        if not self.vault_submission_deadline:
+            return False
+        from datetime import datetime
+
+        return self.vault_submission_deadline > datetime.now()
+
+    @property
+    def recommended_companies(self):
+        return [match.company for match in self.company_matches if match.is_recommended]
+
+    @property
+    def saved_companies(self):
+        return [match.company for match in self.company_matches if match.is_saved]
+
+
+# Create indexes for better performance
+Index("idx_match_company", CompanyPublicationMatch.company_vat_number)
+Index("idx_match_publication", CompanyPublicationMatch.publication_workspace_id)
+Index("idx_match_percentage", CompanyPublicationMatch.match_percentage)
+Index("idx_match_recommended", CompanyPublicationMatch.is_recommended)

@@ -18,10 +18,10 @@ class PublicationOut(BaseModel):
     cpv_code: str
     cpv_additional_codes: Optional[List[str]] = None
     accreditations: Optional[dict] = None
-    publication_value: str = None
-    documents: Optional[List[str]] = None
+    estimated_value: str = None
+    documents: Optional[dict] = None
     publication_in_your_sector: Optional[bool] = None
     is_recommended: Optional[bool] = None
+    is_saved: Optional[bool] = None
     region: Optional[List[str]] = None
     sector: str
-    

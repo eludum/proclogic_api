@@ -1,9 +1,8 @@
-import logging
 from typing import List, Optional
-
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.sql import exists
+import logging
 
 from app.models.publication_models import (
     CPVCode,
@@ -14,9 +13,11 @@ from app.models.publication_models import (
     Organisation,
     OrganisationName,
     Publication,
+    CompanyPublicationMatch,
 )
 from app.schemas.publication_schemas import (
     CPVCodeSchema,
+    CompanyPublicationMatchSchema,
     DescriptionSchema,
     DossierSchema,
     EnterpriseCategorySchema,
@@ -130,6 +131,7 @@ def get_or_create_organisation(
 def create_enterprise_categories(
     enterprise_categories_schema: List[EnterpriseCategorySchema],
     dossier_reference_number: str,
+    session: Session,
 ) -> List[EnterpriseCategory]:
     enterprise_categories_instances = []
     for entc_schema in enterprise_categories_schema:
@@ -138,6 +140,8 @@ def create_enterprise_categories(
             levels=entc_schema.levels,
             dossier_reference_number=dossier_reference_number,
         )
+        session.add(entc)
+        session.flush()
         enterprise_categories_instances.append(entc)
     return enterprise_categories_instances
 
@@ -159,7 +163,7 @@ def get_or_create_dossier(dossier_schema: DossierSchema, session: Session) -> Do
                 descriptions_schema=dossier_schema.titles, session=session
             ),
             enterprise_categories=create_enterprise_categories(
-                dossier_schema.enterprise_categories, dossier_schema.reference_number
+                dossier_schema.enterprise_categories, dossier_schema.reference_number, session
             ),
         )
         session.add(dossier)
@@ -171,7 +175,7 @@ def get_or_create_dossier(dossier_schema: DossierSchema, session: Session) -> Do
 def create_lot(lot_schema: LotSchema, session: Session) -> Lot:
     lot = Lot(
         reserved_execution=lot_schema.reserved_execution,
-        reserved_participation=lot_schema.reserved_execution,
+        reserved_participation=lot_schema.reserved_participation,
         descriptions=get_or_create_descriptions(
             descriptions_schema=lot_schema.descriptions, session=session
         ),
@@ -240,26 +244,48 @@ def update_publication(
         publication.ai_summary_without_documents = publication_schema.ai_summary_without_documents
     if publication_schema.ai_summary_with_documents:
         publication.ai_summary_with_documents = publication_schema.ai_summary_with_documents
-    if publication_schema.recommended:
-        publication.recommended_companies = publication_schema.recommended
-    if publication_schema.saved:
-        publication.saved_companies = publication_schema.saved
-    publication.cpv_main_code = get_or_create_cpv_code(
-        cpv_code_schema=publication_schema.cpv_main_code, session=session
-    )
-    publication.dossier = get_or_create_dossier(
-        dossier_schema=publication_schema.dossier,
-        session=session,
-    )
-    publication.organisation = get_or_create_organisation(
-        organisation_schema=publication_schema.organisation,
-        session=session,
-    )
+    if publication_schema.estimated_value:
+        publication.estimated_value = publication_schema.estimated_value
+    if publication_schema.extracted_keywords:
+        publication.extracted_keywords = publication_schema.extracted_keywords
+    if publication_schema.award:
+        publication.award = publication_schema.award
+
     publication.cpv_main_code = cpv_main_code
     publication.dossier = dossier
     publication.organisation = organisation
     publication.cpv_additional_codes = cpv_additional_codes
     publication.lots = lots
+
+    if publication_schema.company_matches:
+        # Get existing matches to update them
+        existing_matches = {
+            match.company_vat_number: match 
+            for match in session.query(CompanyPublicationMatch).filter(
+                CompanyPublicationMatch.publication_workspace_id == publication.publication_workspace_id
+            ).all()
+        }
+        
+        # Create or update matches
+        for match_schema in publication_schema.company_matches:
+            if match_schema.company_vat_number in existing_matches:
+                match = existing_matches[match_schema.company_vat_number]
+                # Update existing match
+                match.match_percentage = match_schema.match_percentage
+                match.is_recommended = match_schema.is_recommended
+                match.is_saved = match_schema.is_saved
+                match.is_viewed = match_schema.is_viewed
+            else:
+                # Create new match
+                new_match = CompanyPublicationMatch(
+                    company_vat_number=match_schema.company_vat_number,
+                    publication_workspace_id=publication.publication_workspace_id,
+                    match_percentage=match_schema.match_percentage,
+                    is_recommended=match_schema.is_recommended,
+                    is_saved=match_schema.is_saved,
+                    is_viewed=match_schema.is_viewed
+                )
+                session.add(new_match)
 
     session.add(publication)
     session.flush()
@@ -278,8 +304,7 @@ def get_or_create_publication(
             publication_schema=publication_schema,
             session=session,
         )
-    if not publication:
-
+    else:
         cpv_main_code = get_or_create_cpv_code(
             cpv_code_schema=publication_schema.cpv_main_code, session=session
         )
@@ -303,6 +328,7 @@ def get_or_create_publication(
         for lot in publication_schema.lots:
             lots.append(create_lot(lot_schema=lot, session=session))
 
+        # Create new publication with updated fields
         publication = Publication(
             publication_workspace_id=publication_schema.publication_workspace_id,
             dispatch_date=publication_schema.dispatch_date,
@@ -324,8 +350,9 @@ def get_or_create_publication(
             vault_submission_deadline=publication_schema.vault_submission_deadline,
             ai_summary_without_documents=publication_schema.ai_summary_without_documents,
             ai_summary_with_documents=publication_schema.ai_summary_with_documents,
-            recommended_companies=publication_schema.recommended,
-            saved_companies=publication_schema.saved,
+            estimated_value=publication_schema.estimated_value,
+            extracted_keywords=publication_schema.extracted_keywords,
+            award=publication_schema.award,
             cpv_main_code=cpv_main_code,
             dossier=dossier,
             organisation=organisation,
@@ -335,12 +362,28 @@ def get_or_create_publication(
 
         session.add(publication)
         session.flush()
+        
+        # Create company matches if they exist in the schema
+        if publication_schema.company_matches:
+            for match_schema in publication_schema.company_matches:
+                company_match = CompanyPublicationMatch(
+                    company_vat_number=match_schema.company_vat_number,
+                    publication_workspace_id=publication.publication_workspace_id,
+                    match_percentage=match_schema.match_percentage,
+                    is_recommended=match_schema.is_recommended,
+                    is_saved=match_schema.is_saved,
+                    is_viewed=match_schema.is_viewed
+                )
+                session.add(company_match)
+            session.flush()
+
     try:
         session.commit()
         return publication
     except Exception as e:
         logging.error("Error creating publication: %s", e)
         session.rollback()
+        raise
     finally:
         session.close()
 
@@ -363,8 +406,7 @@ def get_publication_by_workspace_id(
             joinedload(Publication.cpv_additional_codes),
             joinedload(Publication.lots).joinedload(Lot.descriptions),
             joinedload(Publication.lots).joinedload(Lot.titles),
-            joinedload(Publication.recommended_companies),
-            joinedload(Publication.saved_companies),
+            joinedload(Publication.company_matches),
         )
         .first()
     )
@@ -380,6 +422,12 @@ def publication_exists(publication_workspace_id: str, session: Session) -> bool:
 def delete_publication(publication_workspace_id: str, session: Session):
     """Delete a publication and its related data."""
     try:
+        # First delete the company-publication matches
+        session.query(CompanyPublicationMatch).filter(
+            CompanyPublicationMatch.publication_workspace_id == publication_workspace_id
+        ).delete(synchronize_session=False)
+        
+        # Then delete the publication
         publication = (
             session.query(Publication)
             .filter_by(publication_workspace_id=publication_workspace_id)
@@ -398,14 +446,14 @@ def delete_publication(publication_workspace_id: str, session: Session):
     except Exception as e:
         logging.error("Error deleting publication: %s", e)
         session.rollback()
+        raise
 
 
 def get_all_publications(session: Session) -> List[Publication]:
-    """Retrieve all publications related to a given VAT number."""
+    """Retrieve all publications."""
     return (
         session.query(Publication)
         # filter added here to only see active ones
-        # TODO: added filter maybe needed to discard old ones that have expired deadline
         .filter(Publication.vault_submission_deadline.isnot(None))
         .options(
             joinedload(Publication.cpv_main_code),
@@ -418,8 +466,7 @@ def get_all_publications(session: Session) -> List[Publication]:
             joinedload(Publication.cpv_additional_codes),
             joinedload(Publication.lots).joinedload(Lot.descriptions),
             joinedload(Publication.lots).joinedload(Lot.titles),
-            joinedload(Publication.recommended_companies),
-            joinedload(Publication.saved_companies),
+            joinedload(Publication.company_matches),
         )
         .all()
     )
@@ -455,6 +502,15 @@ def search_publications(search_term: str, session: Session) -> List[Publication]
         .subquery()
     )
 
+    # Add search in extracted_keywords
+    publications_with_keywords = (
+        session.query(Publication)
+        .filter(
+            Publication.extracted_keywords.isnot(None),
+            func.array_to_string(Publication.extracted_keywords, ',', '').ilike(search_pattern)
+        )
+    )
+
     return (
         session.query(Publication)
         .join(Publication.dossier)
@@ -475,6 +531,9 @@ def search_publications(search_term: str, session: Session) -> List[Publication]
             | Publication.lots.any(
                 Lot.descriptions.any(Description.id.in_(lot_title_subquery))
             )
+            | Publication.publication_workspace_id.in_(
+                publications_with_keywords.with_entities(Publication.publication_workspace_id)
+            )
         )
         .options(
             joinedload(Publication.cpv_main_code),
@@ -487,8 +546,7 @@ def search_publications(search_term: str, session: Session) -> List[Publication]
             joinedload(Publication.cpv_additional_codes),
             joinedload(Publication.lots).joinedload(Lot.descriptions),
             joinedload(Publication.lots).joinedload(Lot.titles),
-            joinedload(Publication.recommended_companies),
-            joinedload(Publication.saved_companies),
+            joinedload(Publication.company_matches),
         )
         .all()
     )
