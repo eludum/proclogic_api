@@ -1,16 +1,11 @@
-import logging
 import json
-from typing import List, Optional, Any
+import logging
+from typing import Any, List, Optional
 
 import httpx
-from fastapi import (
-    APIRouter,
-    Depends,
-    HTTPException,
-    WebSocket,
-    WebSocketDisconnect,
-    status,
-)
+from fastapi import (APIRouter, Depends, HTTPException, WebSocket,
+                     WebSocketDisconnect, status)
+from fastapi.security import HTTPAuthorizationCredentials
 from openai import OpenAI
 from pydantic import BaseModel
 from redis.client import Redis
@@ -18,11 +13,12 @@ from redis.client import Redis
 import app.crud.company as crud_company
 from app.ai.openai import get_openai_client
 from app.config.postgres import get_session
-from app.config.settings import Settings
 from app.config.redis_manager import get_redis_client
+from app.config.settings import Settings
 from app.crud.agent import RedisAgentStorage
-from app.util.pubproc import get_publication_workspace_documents
+from app.models.company_models import Company
 from app.util.clerk import AuthUser, get_auth_user
+from app.util.pubproc import get_publication_workspace_documents
 
 conversations_router = APIRouter()
 
@@ -113,9 +109,6 @@ async def websocket_conversation(
 
         # Authenticate user with token
         try:
-            from app.util.clerk import decode_token, get_auth_user
-            from fastapi.security import HTTPAuthorizationCredentials
-
             # Create credentials object for auth_user function
             credentials = HTTPAuthorizationCredentials(
                 scheme="Bearer", credentials=auth_token
@@ -198,7 +191,7 @@ async def process_websocket_conversation(
     vat_number: str,
     publication_workspace_id: str,
     thread_id: Optional[str],
-    company: Any,
+    company: Company,
     client: OpenAI,
     agent_storage: RedisAgentStorage,
 ):
@@ -215,7 +208,7 @@ async def process_websocket_conversation(
         assistant = client.beta.assistants.create(
             name=f"Company Assistant {company.name}",
             instructions=f"You are an assistant for {company.name}. Help with procurement files analysis.",
-            model="gpt-4-turbo",
+            model="gpt-4o-mini",
             tools=[{"type": "file_search"}],
         )
 

@@ -52,13 +52,19 @@ async def fetch_pubproc_data() -> None:
 
 
 async def retrieve_publications(client: httpx.AsyncClient) -> None:
-    print("fetching pubproc data")
     with get_session() as session:
         pubproc_r = await get_daily_pubproc_search_data(client=client)
         pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
 
         # TODO: check realtime with xml endpoint if new notice version is available, when details are opened
         for pub in pubproc_data:
+            print(pub.__dict__)
+
+            # get documents, TODO: store in bucket, dont use redis to store files
+            filesmap = await get_publication_workspace_documents(
+                client=client, publication_workspace_id=pub.publication_workspace_id
+            )
+
             # Check if the publication already exists
             existing_publication = crud_publication.publication_exists(
                 publication_workspace_id=pub.publication_workspace_id, session=session
@@ -66,7 +72,7 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
 
             # Handle updates for existing publications
             if existing_publication and pub.vault_submission_deadline is not None:
-                print("you should not be here")
+                print("wtf you should not be here")
                 if is_new_notice_version_available(
                     incoming_notice_ids=pub.notice_ids,
                     publication_workspace_id=pub.publication_workspace_id,
@@ -83,31 +89,33 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
                     )
                     estimated_value, summary, citations = (
                         summarize_publication_with_files(
-                            publication=pub, xml_content=xml_content
+                            publication=pub, xml=xml_content, filesmap=filesmap
                         )
                     )
                     pub.ai_summary_with_documents = summary + citations
                     pub.estimated_value = estimated_value
                     pub.ai_summary_without_documents = (
                         summarize_publication_without_files(
-                            publication=pub, xml_content=xml_content
+                            publication=pub, xml=xml_content
                         )
                     )
 
             # Handle new publications
             if not existing_publication and pub.vault_submission_deadline is not None:
-                print("you should be here")
+                print("creating new one step 1")
                 xml_content = await get_notice_xml(
                     client=client, publication_workspace_id=pub.publication_workspace_id
                 )
                 estimated_value, summary, citations = summarize_publication_with_files(
-                    publication=pub, xml_content=xml_content
+                    publication=pub, xml=xml_content, filesmap=filesmap
                 )
                 pub.ai_summary_with_documents = summary + citations
                 pub.estimated_value = estimated_value
                 pub.ai_summary_without_documents = summarize_publication_without_files(
-                    publication=pub, xml_content=xml_content
+                    publication=pub, xml=xml_content
                 )
+
+                print("creating new one step 2")
 
                 # Generate recommendations for each company
                 for company in crud_company.get_all_companies(session=session):
@@ -122,15 +130,17 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
                             is_recommended=match_result["is_recommended"],
                         )
                         session.add(match)
+                print("creating new one step complete")
 
             # Handle awarded publications
             if pub.vault_submission_deadline is None:
+                print("awards")
                 xml_content = await get_notice_xml(
                     client=client,
                     publication_workspace_id=pub.publication_workspace_id,
                 )
                 pub.award = summarize_publication_award(
-                    publication=pub, xml_content=xml_content
+                    xml=xml_content
                 )
 
             crud_publication.get_or_create_publication(
@@ -261,6 +271,9 @@ async def get_publication_workspace_documents(
         + f"/publication-workspaces/{publication_workspace_id}/archive",
         headers=headers,
     )
+
+    if r.status_code != 200:
+        return {}
 
     zf = zipfile.ZipFile(BytesIO(r.content))
     file_map = {}

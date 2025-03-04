@@ -5,7 +5,7 @@ from typing import Callable
 from app.config.redis_manager import get_redis_client
 
 # Cache TTL in seconds
-CACHE_TTL = 60 * 60
+CACHE_TTL = 24 * 60 * 60
 
 
 def redis_cache(key_prefix: str, ttl: int = CACHE_TTL):

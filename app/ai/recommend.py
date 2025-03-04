@@ -21,7 +21,6 @@ def get_recommendation(
 
     publication_info = PublicationInfo()
     publication_info.convert_publication_to_str(publication)
-    
 
     interested_sectors_as_cpv_str = ", ".join(
         f"{sector.sector}: {sector.cpv_codes}" for sector in company.interested_sectors
@@ -112,23 +111,30 @@ def summarize_publication_with_files(
     publication_info.convert_publication_to_str(publication)
 
     try:
-        vector_store = client.beta.vector_stores.create(
-            name=f"publication_workspace_{publication.publication_workspace_id}"
-        )
+        if filesmap:
+            vector_store = client.beta.vector_stores.create(
+                name=f"publication_workspace_{publication.publication_workspace_id}"
+            )
 
-        file_batch = client.beta.vector_stores.file_batches.upload_and_poll(
-            vector_store_id=vector_store.id,
-            files=list(filesmap.values()),
-        )
+            file_batch = client.beta.vector_stores.file_batches.upload_and_poll(
+                vector_store_id=vector_store.id,
+                files=list(filesmap.values()),
+            )
 
-        if file_batch.status != "completed":
-            logging.error("File upload failed.")
-            return None, None, None
+            if file_batch.status != "completed":
+                logging.error("File upload failed.")
+                return None, None, None
 
-        assistant = client.beta.assistants.update(
-            assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
-            tool_resources={"file_search": {"vector_store_ids": [vector_store.id]}},
-        )
+            assistant = client.beta.assistants.update(
+                assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
+                tool_resources={"file_search": {"vector_store_ids": [vector_store.id]}},
+            )
+
+        else:
+            assistant = client.beta.assistants.update(
+                assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
+                tool_resources={"file_search": {"vector_store_ids": []}},
+            )
 
         thread = client.beta.threads.create(
             messages=[

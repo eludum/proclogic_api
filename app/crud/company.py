@@ -30,6 +30,7 @@ def create_company(
         # Create the new company
         new_company = Company(
             vat_number=company_schema.vat_number,
+            subscription=company_schema.subscription,
             name=company_schema.name,
             emails=company_schema.emails,
             summary_activities=company_schema.summary_activities,
@@ -119,6 +120,7 @@ def update_company(
 
         # Update basic fields
         company.name = company_schema.name
+        company.subscription = company_schema.subscription,
         company.emails = company_schema.emails
         company.summary_activities = company_schema.summary_activities
         company.accreditations = company_schema.accreditations
