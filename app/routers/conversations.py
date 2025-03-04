@@ -22,6 +22,7 @@ from app.config.settings import Settings
 from app.config.redis_manager import get_redis_client
 from app.crud.agent import RedisAgentStorage
 from app.util.pubproc import get_publication_workspace_documents
+from app.util.clerk import AuthUser, get_auth_user
 
 conversations_router = APIRouter()
 
@@ -82,32 +83,90 @@ async def websocket_conversation(
 
         # Extract connection parameters
         params = request_data.get("data", {})
-        vat_number = params.get("vat_number")
         publication_workspace_id = params.get("publication_workspace_id")
         thread_id = params.get("thread_id")
+        auth_token = params.get("token")
 
         # Validate required parameters
-        if not vat_number or not publication_workspace_id:
+        if not publication_workspace_id:
             await websocket.send_json(
                 {
                     "type": WSMessageType.ERROR,
                     "data": {
-                        "detail": "Missing required parameters: vat_number and publication_workspace_id"
+                        "detail": "Missing required parameter: publication_workspace_id"
                     },
                 }
             )
             await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
             return
 
-        # Verify the company exists
-        with get_session() as session:
-            company = crud_company.get_company_by_vat_number(
-                vat_number=vat_number, session=session
+        # Validate auth token
+        if not auth_token:
+            await websocket.send_json(
+                {
+                    "type": WSMessageType.ERROR,
+                    "data": {"detail": "Authentication token is required"},
+                }
+            )
+            await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
+            return
+
+        # Authenticate user with token
+        try:
+            from app.util.clerk import decode_token, get_auth_user
+            from fastapi.security import HTTPAuthorizationCredentials
+
+            # Create credentials object for auth_user function
+            credentials = HTTPAuthorizationCredentials(
+                scheme="Bearer", credentials=auth_token
             )
 
-        if not company:
+            # Use the existing get_auth_user function to validate the token and get the user
+            auth_user = await get_auth_user(credentials)
+
+            if not auth_user or not auth_user.email:
+                await websocket.send_json(
+                    {
+                        "type": WSMessageType.ERROR,
+                        "data": {
+                            "detail": "Invalid authentication token or user email not available"
+                        },
+                    }
+                )
+                await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
+                return
+
+            # Use the email from the authenticated user
+            email = auth_user.email
+
+            # Get company from the authenticated user's email
+            with get_session() as session:
+                company = crud_company.get_company_by_email(
+                    email=email, session=session
+                )
+
+                if not company:
+                    await websocket.send_json(
+                        {
+                            "type": WSMessageType.ERROR,
+                            "data": {
+                                "detail": "Company not found for authenticated user"
+                            },
+                        }
+                    )
+                    await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
+                    return
+
+                # Get the VAT number from the user's company
+                vat_number = company.vat_number
+
+        except Exception as e:
+            logging.error(f"Authentication error: {str(e)}")
             await websocket.send_json(
-                {"type": WSMessageType.ERROR, "data": {"detail": "Company not found"}}
+                {
+                    "type": WSMessageType.ERROR,
+                    "data": {"detail": f"Authentication failed: {str(e)}"},
+                }
             )
             await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
             return
@@ -165,7 +224,9 @@ async def process_websocket_conversation(
         assistant_id = assistant.id
 
     # Check if we're starting a new conversation for this publication and there's already data
-    if not thread_id and agent_storage.publication_exists(vat_number, publication_workspace_id):
+    if not thread_id and agent_storage.publication_exists(
+        vat_number, publication_workspace_id
+    ):
         # Clean up the old session if starting a new conversation
         await cleanup_publication_session(
             vat_number,
@@ -436,35 +497,76 @@ async def process_websocket_conversation(
             )
 
 
-@conversations_router.delete("/conversation/{vat_number}/{publication_workspace_id}")
+@conversations_router.delete(
+    "/conversation/{publication_workspace_id}", status_code=200
+)
 async def end_conversation(
-    vat_number: str,
     publication_workspace_id: str,
+    auth_user: AuthUser = Depends(get_auth_user),
     client: OpenAI = Depends(get_openai_client),
     agent_storage: RedisAgentStorage = Depends(get_agent_storage),
 ):
     """
     End a conversation and clean up resources for a specific publication and company.
+    Requires authentication.
     """
+    # Get the user's company
+    with get_session() as session:
+        if not auth_user.email:
+            raise HTTPException(status_code=400, detail="User email not available")
+
+        company = crud_company.get_company_by_email(
+            email=auth_user.email, session=session
+        )
+
+        if not company:
+            raise HTTPException(
+                status_code=404, detail="Company not found for authenticated user"
+            )
+
+        # Get the VAT number from the user's company
+        vat_number = company.vat_number
+
+    # Check if the conversation exists
     if not agent_storage.publication_exists(vat_number, publication_workspace_id):
         raise HTTPException(
             status_code=404,
             detail="No active conversation for this publication and company",
         )
 
-    await cleanup_publication_session(vat_number, publication_workspace_id, client, agent_storage)
+    await cleanup_publication_session(
+        vat_number, publication_workspace_id, client, agent_storage
+    )
     return {"message": "Conversation ended and resources cleaned up"}
 
 
-@conversations_router.delete("/conversation/company/{vat_number}")
+@conversations_router.delete("/conversation/company", status_code=200)
 async def cleanup_company(
-    vat_number: str,
+    auth_user: AuthUser = Depends(get_auth_user),
     client: OpenAI = Depends(get_openai_client),
     agent_storage: RedisAgentStorage = Depends(get_agent_storage),
 ):
     """
-    Clean up all resources for a company.
+    Clean up all resources for the authenticated user's company.
+    Requires authentication.
     """
+    # Get the user's company
+    with get_session() as session:
+        if not auth_user.email:
+            raise HTTPException(status_code=400, detail="User email not available")
+
+        company = crud_company.get_company_by_email(
+            email=auth_user.email, session=session
+        )
+
+        if not company:
+            raise HTTPException(
+                status_code=404, detail="Company not found for authenticated user"
+            )
+
+        # Get the VAT number from the user's company
+        vat_number = company.vat_number
+
     if not agent_storage.company_exists(vat_number):
         raise HTTPException(status_code=404, detail="No active agent for this company")
 
@@ -524,7 +626,9 @@ async def cleanup_company_agent(
             assistant_id = agent_storage.get_company_assistant_id(vat_number)
 
             # Clean up each active publication
-            for publication_workspace_id in agent_storage.get_active_publications(vat_number):
+            for publication_workspace_id in agent_storage.get_active_publications(
+                vat_number
+            ):
                 await cleanup_publication_session(
                     vat_number, publication_workspace_id, client, agent_storage
                 )

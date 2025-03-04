@@ -73,6 +73,40 @@ async def get_publication_by_workspace_id(
             publication=publication, company=company
         )
 
+@publications_router.get(
+    "/publications/search/{search_term}/",
+    response_model=List[PublicationOut],
+)
+async def search_publications_paid(
+    search_term: str,
+    auth_user: AuthUser = Depends(get_auth_user),
+) -> List[PublicationOut]:
+    """Search publications without authentication"""
+    # TODO: add extra filters like region and cpv
+    if not auth_user.email:
+        raise HTTPException(status_code=400, detail="User email not available")
+
+    with get_session() as session:
+        company = crud_company.get_company_by_email(
+            email=auth_user.email, session=session
+        )
+
+        if not search_term:
+            publications = crud_publication.get_all_publications(session=session)
+            return [
+                convert_publications_to_out_schema_list_free(publication=publication)
+                for publication in publications
+            ]
+        else:
+            publications = crud_publication.search_publications(
+                search_term=search_term, session=session
+            )
+
+            return [
+                convert_publications_to_out_schema_list_paid(publication=publication, company=company)
+                for publication in publications
+            ]
+
 
 @publications_router.get(
     "/publications/free/search/{search_term}/",
