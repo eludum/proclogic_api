@@ -1,9 +1,10 @@
 import httpx
 from app.config.settings import Settings
-from app.models.company_models import Company, Sector
-from app.models.publication_models import CompanyPublicationMatch, Publication
-from app.schemas.company_schemas import CompanySchema
+from app.models.company_models import Company
+from app.models.publication_models import Publication
+from app.schemas.company_schemas import CompanySchema, SectorSchema
 from app.schemas.publication_out_schemas import PublicationOut
+from app.schemas.publication_schemas import CompanyPublicationMatchSchema
 from app.util.nuts_codes import get_nuts_code_as_str
 from app.util.cpv_codes import get_cpv_sector_and_description
 from app.util.pubproc import get_publication_workspace_documents, get_publication_workspace_forum
@@ -145,7 +146,7 @@ async def convert_company_to_schema(company: Company) -> CompanySchema:
         name=company.name,
         emails=company.emails,
         interested_sectors=[
-            Sector(
+            SectorSchema(
                 sector=sector.sector,
                 cpv_codes=sector.cpv_codes
             )
@@ -157,7 +158,9 @@ async def convert_company_to_schema(company: Company) -> CompanySchema:
         activity_keywords=company.activity_keywords,
         operating_regions=company.operating_regions,
         publication_matches=[
-            CompanyPublicationMatch(
+            CompanyPublicationMatchSchema(
+                publication_workspace_id=match.publication_workspace_id,
+                company_vat_number=match.company_vat_number,
                 is_recommended=match.is_recommended,
                 is_saved=match.is_saved,
                 is_viewed=match.is_viewed

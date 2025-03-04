@@ -34,11 +34,9 @@ def create_company(
             emails=company_schema.emails,
             summary_activities=company_schema.summary_activities,
             accreditations=company_schema.accreditations,
-            max_publication_value=getattr(
-                company_schema, "max_publication_value", None
-            ),
-            activity_keywords=getattr(company_schema, "activity_keywords", None),
-            operating_regions=getattr(company_schema, "operating_regions", None),
+            max_publication_value=company_schema.max_publication_value,
+            activity_keywords=company_schema.activity_keywords,
+            operating_regions=company_schema.operating_regions,
         )
 
         # Create sectors

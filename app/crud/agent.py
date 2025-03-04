@@ -30,13 +30,13 @@ class RedisAgentStorage:
         return self.redis.get(f"company:{vat_number}:assistant_id")
 
     def store_publication_data(
-        self, vat_number: str, publication_id: str, vector_store_id: str, thread_id: str
+        self, vat_number: str, publication_workspace_id: str, vector_store_id: str, thread_id: str
     ) -> None:
         """
         Store publication data for a company.
         """
         # Store as a hash
-        publication_key = f"company:{vat_number}:publication:{publication_id}"
+        publication_key = f"company:{vat_number}:publication:{publication_workspace_id}"
         self.redis.hset(
             publication_key,
             mapping={
@@ -47,16 +47,16 @@ class RedisAgentStorage:
         self.redis.expire(publication_key, self.ttl)
 
         # Also keep track of active publications for a company
-        self.redis.sadd(f"company:{vat_number}:active_publications", publication_id)
+        self.redis.sadd(f"company:{vat_number}:active_publications", publication_workspace_id)
         self.redis.expire(f"company:{vat_number}:active_publications", self.ttl)
 
     def get_publication_data(
-        self, vat_number: str, publication_id: str
+        self, vat_number: str, publication_workspace_id: str
     ) -> Optional[Dict[str, str]]:
         """
         Get publication data for a company and publication.
         """
-        publication_key = f"company:{vat_number}:publication:{publication_id}"
+        publication_key = f"company:{vat_number}:publication:{publication_workspace_id}"
         data = self.redis.hgetall(publication_key)
         return data if data else None
 
@@ -66,15 +66,15 @@ class RedisAgentStorage:
         """
         return list(self.redis.smembers(f"company:{vat_number}:active_publications"))
 
-    def delete_publication_data(self, vat_number: str, publication_id: str) -> None:
+    def delete_publication_data(self, vat_number: str, publication_workspace_id: str) -> None:
         """
         Delete publication data for a company.
         """
         # Remove the publication data
-        self.redis.delete(f"company:{vat_number}:publication:{publication_id}")
+        self.redis.delete(f"company:{vat_number}:publication:{publication_workspace_id}")
 
         # Remove from active publications
-        self.redis.srem(f"company:{vat_number}:active_publications", publication_id)
+        self.redis.srem(f"company:{vat_number}:active_publications", publication_workspace_id)
 
     def delete_company_data(self, vat_number: str) -> None:
         """
@@ -84,8 +84,8 @@ class RedisAgentStorage:
         active_publications = self.get_active_publications(vat_number)
 
         # Delete each publication's data
-        for publication_id in active_publications:
-            self.delete_publication_data(vat_number, publication_id)
+        for publication_workspace_id in active_publications:
+            self.delete_publication_data(vat_number, publication_workspace_id)
 
         # Delete the active publications set
         self.redis.delete(f"company:{vat_number}:active_publications")
@@ -99,16 +99,16 @@ class RedisAgentStorage:
         """
         return self.redis.exists(f"company:{vat_number}:assistant_id") > 0
 
-    def publication_exists(self, vat_number: str, publication_id: str) -> bool:
+    def publication_exists(self, vat_number: str, publication_workspace_id: str) -> bool:
         """
         Check if a publication exists for a company.
         """
         return (
-            self.redis.exists(f"company:{vat_number}:publication:{publication_id}") > 0
+            self.redis.exists(f"company:{vat_number}:publication:{publication_workspace_id}") > 0
         )
 
     def refresh_ttl(
-        self, vat_number: str, publication_id: Optional[str] = None
+        self, vat_number: str, publication_workspace_id: Optional[str] = None
     ) -> None:
         """
         Refresh TTL for company data and optionally for a specific publication.
@@ -118,7 +118,7 @@ class RedisAgentStorage:
         self.redis.expire(f"company:{vat_number}:active_publications", self.ttl)
 
         # If publication ID is provided, refresh that publication's TTL
-        if publication_id:
+        if publication_workspace_id:
             self.redis.expire(
-                f"company:{vat_number}:publication:{publication_id}", self.ttl
+                f"company:{vat_number}:publication:{publication_workspace_id}", self.ttl
             )

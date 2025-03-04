@@ -3,16 +3,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
-from app.schemas.company_schemas import CompanySchema
-
-
-class CompanyPublicationMatchSchema(BaseModel):
-    match_percentage: float = 0.0
-    is_recommended: bool = False
-    is_saved: bool = False
-    is_viewed: bool = False
-
-    model_config = ConfigDict(from_attributes=True)
+from app.schemas.company_schemas import CompanySchema, CompanyPublicationMatchSchema
 
 
 class DescriptionSchema(BaseModel):

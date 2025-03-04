@@ -18,3 +18,5 @@ numpy
 pycron
 python-dotenv
 nltk
+clerk-backend-api
+python-jose

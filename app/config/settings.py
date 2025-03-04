@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     pubproc_client_secret: str
     pubproc_server: str
     pubproc_token_url: str
+    clerk_secret_key: str
     path_sea_api: str = "/api/eProcurementSea/v1"
     path_loc_api: str = "/api/eProcurementLoc/v1"
     path_dos_api: str = "/api/eProcurementDos/v1"

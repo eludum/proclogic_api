@@ -52,86 +52,88 @@ async def fetch_pubproc_data() -> None:
 
 
 async def retrieve_publications(client: httpx.AsyncClient) -> None:
-    with get_session() as session:
-        pubproc_r = await get_daily_pubproc_search_data(client=client)
-        pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
+    print("fetching pubproc data")
+    # with get_session() as session:
+    #     pubproc_r = await get_daily_pubproc_search_data(client=client)
+    #     pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
 
-        # TODO: check realtime with xml endpoint if new notice version is available, when details are opened
-        for pub in pubproc_data:
-            # Check if the publication already exists
-            existing_publication = crud_publication.publication_exists(
-                publication_workspace_id=pub.publication_workspace_id, session=session
-            )
+    #     # TODO: check realtime with xml endpoint if new notice version is available, when details are opened
+    #     for pub in pubproc_data:
+    #         # Check if the publication already exists
+    #         existing_publication = crud_publication.publication_exists(
+    #             publication_workspace_id=pub.publication_workspace_id, session=session
+    #         )
 
-            # Handle updates for existing publications
-            if existing_publication and pub.vault_submission_deadline is not None:
-                if is_new_notice_version_available(
-                    incoming_notice_ids=pub.notice_ids,
-                    publication_workspace_id=pub.publication_workspace_id,
-                ):
-                    # Invalidate the cache for this publication workspace before making new API calls
-                    logging.info(
-                        f"New notice version detected for {pub.publication_workspace_id}. Invalidating cache."
-                    )
-                    invalidate_publication_cache(pub.publication_workspace_id)
+    #         # Handle updates for existing publications
+    #         if existing_publication and pub.vault_submission_deadline is not None:
+    #             if is_new_notice_version_available(
+    #                 incoming_notice_ids=pub.notice_ids,
+    #                 publication_workspace_id=pub.publication_workspace_id,
+    #             ):
+    #                 # Invalidate the cache for this publication workspace before making new API calls
+    #                 logging.info(
+    #                     f"New notice version detected for {pub.publication_workspace_id}. Invalidating cache."
+    #                 )
+    #                 invalidate_publication_cache(pub.publication_workspace_id)
 
-                    xml_content = await get_notice_xml(
-                        client=client,
-                        publication_workspace_id=pub.publication_workspace_id,
-                    )
-                    estimated_value, summary, citations = (
-                        summarize_publication_with_files(
-                            publication=pub, xml_content=xml_content
-                        )
-                    )
-                    pub.ai_summary_with_documents = summary + citations
-                    pub.estimated_value = estimated_value
-                    pub.ai_summary_without_documents = (
-                        summarize_publication_without_files(
-                            publication=pub, xml_content=xml_content
-                        )
-                    )
+    #                 xml_content = await get_notice_xml(
+    #                     client=client,
+    #                     publication_workspace_id=pub.publication_workspace_id,
+    #                 )
+    #                 estimated_value, summary, citations = (
+    #                     summarize_publication_with_files(
+    #                         publication=pub, xml_content=xml_content
+    #                     )
+    #                 )
+    #                 pub.ai_summary_with_documents = summary + citations
+    #                 pub.estimated_value = estimated_value
+    #                 pub.ai_summary_without_documents = (
+    #                     summarize_publication_without_files(
+    #                         publication=pub, xml_content=xml_content
+    #                     )
+    #                 )
 
-            # Handle new publications
-            if not existing_publication and pub.vault_submission_deadline is not None:
-                xml_content = await get_notice_xml(
-                    client=client, publication_workspace_id=pub.publication_workspace_id
-                )
-                estimated_value, summary, citations = summarize_publication_with_files(
-                    publication=pub, xml_content=xml_content
-                )
-                pub.ai_summary_with_documents = summary + citations
-                pub.estimated_value = estimated_value
-                pub.ai_summary_without_documents = summarize_publication_without_files(
-                    publication=pub, xml_content=xml_content
-                )
+    #         # Handle new publications
+    #         if not existing_publication and pub.vault_submission_deadline is not None:
+    #             xml_content = await get_notice_xml(
+    #                 client=client, publication_workspace_id=pub.publication_workspace_id
+    #             )
+    #             estimated_value, summary, citations = summarize_publication_with_files(
+    #                 publication=pub, xml_content=xml_content
+    #             )
+    #             pub.ai_summary_with_documents = summary + citations
+    #             pub.estimated_value = estimated_value
+    #             pub.ai_summary_without_documents = summarize_publication_without_files(
+    #                 publication=pub, xml_content=xml_content
+    #             )
 
-                # Generate recommendations for each company
-                for company in crud_company.get_all_companies(session=session):
-                    match_result = get_recommendation(publication=pub, company=company)
+    #             # Generate recommendations for each company
+    #             for company in crud_company.get_all_companies(session=session):
+    #                 match_result = get_recommendation(publication=pub, company=company)
 
-                    if match_result:
-                        # Create match record with appropriate percentage
-                        match = CompanyPublicationMatch(
-                            company_vat_number=company.vat_number,
-                            publication_workspace_id=pub.publication_workspace_id,
-                            match_percentage=match_result["match_percentage"],
-                            is_recommended=match_result["is_recommended"],
-                        )
-                        session.add(match)
+    #                 if match_result:
+    #                     # Create match record with appropriate percentage
+    #                     match = CompanyPublicationMatch(
+    #                         company_vat_number=company.vat_number,
+    #                         publication_workspace_id=pub.publication_workspace_id,
+    #                         match_percentage=match_result["match_percentage"],
+    #                         is_recommended=match_result["is_recommended"],
+    #                     )
+    #                     session.add(match)
 
-            if pub.vault_submission_deadline is None:
-                xml_content = await get_notice_xml(
-                    client=client,
-                    publication_workspace_id=pub.publication_workspace_id,
-                )
-                pub.award = summarize_publication_award(
-                    publication=pub, xml_content=xml_content
-                )
+    #         # Handle awarded publications
+    #         if pub.vault_submission_deadline is None:
+    #             xml_content = await get_notice_xml(
+    #                 client=client,
+    #                 publication_workspace_id=pub.publication_workspace_id,
+    #             )
+    #             pub.award = summarize_publication_award(
+    #                 publication=pub, xml_content=xml_content
+    #             )
 
-            crud_publication.get_or_create_publication(
-                publication_schema=pub, session=session
-            )
+    #         crud_publication.get_or_create_publication(
+    #             publication_schema=pub, session=session
+    #         )
 
 
 async def get_notice_xml(
@@ -273,6 +275,7 @@ async def get_publication_workspace_documents(
 async def get_publication_workspace_forum(
     client: httpx.AsyncClient, forum_id: str
 ) -> dict:
+    
     token = get_token()
     headers = {
         "Authorization": f"Bearer {token}",

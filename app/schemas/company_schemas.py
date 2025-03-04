@@ -1,6 +1,15 @@
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
-from app.models.publication_models import CompanyPublicationMatch
+
+class CompanyPublicationMatchSchema(BaseModel):
+    publication_workspace_id: str
+    company_vat_number: str
+    match_percentage: float = 0.0
+    is_recommended: bool = False
+    is_saved: bool = False
+    is_viewed: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SectorSchema(BaseModel):
@@ -21,6 +30,6 @@ class CompanySchema(BaseModel):
     max_publication_value: Optional[int]
     activity_keywords: Optional[List[str]] = []
     operating_regions: Optional[List[str]] = []
-    publication_matches: Optional[List[CompanyPublicationMatch]]
+    publication_matches: Optional[List[CompanyPublicationMatchSchema]]
 
     model_config = ConfigDict(from_attributes=True)
