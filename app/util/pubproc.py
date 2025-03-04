@@ -275,7 +275,6 @@ async def get_publication_workspace_documents(
 async def get_publication_workspace_forum(
     client: httpx.AsyncClient, forum_id: str
 ) -> dict:
-    
     token = get_token()
     headers = {
         "Authorization": f"Bearer {token}",

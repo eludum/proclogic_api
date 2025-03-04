@@ -1,16 +1,17 @@
 from typing import List
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer
 
+from app.config.settings import Settings
+from app.schemas.publication_out_schemas import PublicationOut
+from app.config.postgres import get_session
 import app.crud.company as crud_company
 import app.crud.publication as crud_publication
-from app.config.postgres import get_session
-from app.config.settings import Settings
-from app.crud.mapper import (convert_publication_to_out_schema_details_paid,
-                             convert_publications_to_out_schema_list_free,
-                             convert_publications_to_out_schema_list_paid)
-from app.schemas.publication_out_schemas import PublicationOut
+from app.crud.mapper import (
+    convert_publications_to_out_schema_list_paid,
+    convert_publication_to_out_schema_details_paid,
+    convert_publications_to_out_schema_list_free,
+)
 from app.util.clerk import AuthUser, get_auth_user
 
 settings = Settings()
@@ -21,7 +22,6 @@ security = HTTPBearer()
 @publications_router.get("/publications/", response_model=List[PublicationOut])
 async def get_publications(auth_user: AuthUser = Depends(get_auth_user)):
     """Get all publications for an authenticated user"""
-
     if not auth_user.email:
         raise HTTPException(status_code=400, detail="User email not available")
 
@@ -51,6 +51,9 @@ async def get_publication_by_workspace_id(
     auth_user: AuthUser = Depends(get_auth_user),
 ) -> PublicationOut:
     """Get a specific publication by workspace ID"""
+    if not auth_user.email:
+        raise HTTPException(status_code=400, detail="User email not available")
+
     with get_session() as session:
         company = crud_company.get_company_by_email(
             email=auth_user.email, session=session

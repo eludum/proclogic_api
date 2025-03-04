@@ -3,6 +3,7 @@ from fastapi import HTTPException, Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import jwt, jwk
 from jose.exceptions import JWTError
+from pydantic import BaseModel
 import requests
 import logging
 from clerk_backend_api import Clerk
@@ -17,12 +18,9 @@ security = HTTPBearer()
 _jwks_cache = None
 
 
-class AuthUser:
-    """Class to hold authenticated user information"""
-
-    def __init__(self, user_id: str, email: Optional[str] = None):
-        self.user_id = user_id
-        self.email = email
+class AuthUser(BaseModel):
+    user_id: str
+    email: Optional[str] = None
 
 
 def get_jwks():
@@ -30,7 +28,7 @@ def get_jwks():
     global _jwks_cache
     if _jwks_cache is None:
         logging.info("Fetching JWKS from Clerk")
-        response = requests.get(settings.)
+        response = requests.get(settings.clerk_jwks_url)
         if response.status_code != 200:
             logging.error(f"Failed to get JWKS: {response.status_code}")
             raise HTTPException(
@@ -86,7 +84,6 @@ def get_clerk_client():
         yield clerk
 
 
-
 async def get_auth_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Authenticate the user and return their user information"""
     token = credentials.credentials
@@ -116,9 +113,19 @@ async def get_auth_user(credentials: HTTPAuthorizationCredentials = Depends(secu
                 if not email and user.email_addresses:
                     # Fallback to first email if no primary is marked
                     email = user.email_addresses[0].email_address
-
+            
+            # Ensure we have an email
+            if not email:
+                logging.error(f"No email found for user: {user_id}")
+                raise HTTPException(status_code=400, detail="User email not available")
+                
+            # Return with user_id and email
             return AuthUser(user_id=user_id, email=email)
+            
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     except Exception as e:
         logging.error(f"Error retrieving user data from Clerk: {str(e)}")
-        # We still have a valid token, so we can return basic user info
-        return AuthUser(user_id=user_id)
+        # Don't return a user without an email
+        raise HTTPException(status_code=500, detail="Failed to retrieve user email")

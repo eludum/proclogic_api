@@ -8,7 +8,7 @@ from app.config.redis_manager import get_redis_client
 CACHE_TTL = 60 * 60
 
 
-async def redis_cache(key_prefix: str, ttl: int = CACHE_TTL):
+def redis_cache(key_prefix: str, ttl: int = CACHE_TTL):
     """
     Decorator for caching async function results in Redis.
 
