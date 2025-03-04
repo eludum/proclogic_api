@@ -7,8 +7,6 @@ from app.schemas.company_schemas import CompanySchema
 
 
 class CompanyPublicationMatchSchema(BaseModel):
-    company_vat_number: str
-    publication_workspace_id: str
     match_percentage: float = 0.0
     is_recommended: bool = False
     is_saved: bool = False

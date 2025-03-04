@@ -1,7 +1,6 @@
 import pickle
-import re
 from functools import wraps
-from typing import Any, Callable, List
+from typing import Callable
 
 from app.config.redis_manager import get_redis_client
 

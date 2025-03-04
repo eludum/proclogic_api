@@ -31,9 +31,10 @@ class Company(Base):
     # Primary identification
     vat_number: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[str] = mapped_column(String)
-    email: Mapped[str] = mapped_column(String, index=True)
+    emails: Mapped[List[str]] = mapped_column(ARRAY(String), index=True)
 
     # Company profile data
+    subscription: Mapped[str] = mapped_column(String)
     summary_activities: Mapped[str] = mapped_column(String)
     accreditations: Mapped[Optional[dict]] = mapped_column(PickleType, nullable=True)
     max_publication_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

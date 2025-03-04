@@ -13,9 +13,12 @@ from pydantic import TypeAdapter
 
 import app.crud.company as crud_company
 import app.crud.publication as crud_publication
-from app.ai.recommend import (get_recommendation, summarize_publication_award,
-                              summarize_publication_with_files,
-                              summarize_publication_without_files)
+from app.ai.recommend import (
+    get_recommendation,
+    summarize_publication_award,
+    summarize_publication_with_files,
+    summarize_publication_without_files,
+)
 from app.config.postgres import get_session
 from app.config.settings import Settings
 from app.models.publication_models import CompanyPublicationMatch
@@ -30,7 +33,7 @@ async def fetch_pubproc_data() -> None:
     while True:
         try:
             async with httpx.AsyncClient() as client:
-                await update_publications(client=client)
+                await retrieve_publications(client=client)
             await asyncio.sleep(600)  # 10 minutes in seconds
         except Exception as e:
             logging.error("error in fetching data: %s", e)
@@ -41,19 +44,19 @@ async def fetch_pubproc_data() -> None:
         if pycron.is_now("*/15 6-19 * * 1-5"):
             try:
                 async with httpx.AsyncClient() as client:
-                    await update_publications(client=client)
+                    await retrieve_publications(client=client)
                 await asyncio.sleep(600)  # 10 minutes in seconds
             except Exception as e:
                 logging.error("error in fetching data: %s", e)
         await asyncio.sleep(60)
 
 
-async def update_publications(client: httpx.AsyncClient) -> None:
+async def retrieve_publications(client: httpx.AsyncClient) -> None:
     with get_session() as session:
         pubproc_r = await get_daily_pubproc_search_data(client=client)
         pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
 
-        # TODO: check realtime with xml endpoint if new notice version is available
+        # TODO: check realtime with xml endpoint if new notice version is available, when details are opened
         for pub in pubproc_data:
             # Check if the publication already exists
             existing_publication = crud_publication.publication_exists(
@@ -67,15 +70,19 @@ async def update_publications(client: httpx.AsyncClient) -> None:
                     publication_workspace_id=pub.publication_workspace_id,
                 ):
                     # Invalidate the cache for this publication workspace before making new API calls
-                    logging.info(f"New notice version detected for {pub.publication_workspace_id}. Invalidating cache.")
+                    logging.info(
+                        f"New notice version detected for {pub.publication_workspace_id}. Invalidating cache."
+                    )
                     invalidate_publication_cache(pub.publication_workspace_id)
-                    
+
                     xml_content = await get_notice_xml(
                         client=client,
                         publication_workspace_id=pub.publication_workspace_id,
                     )
-                    estimated_value, summary, citations = summarize_publication_with_files(
-                        publication=pub, xml_content=xml_content
+                    estimated_value, summary, citations = (
+                        summarize_publication_with_files(
+                            publication=pub, xml_content=xml_content
+                        )
                     )
                     pub.ai_summary_with_documents = summary + citations
                     pub.estimated_value = estimated_value
@@ -102,7 +109,7 @@ async def update_publications(client: httpx.AsyncClient) -> None:
                 # Generate recommendations for each company
                 for company in crud_company.get_all_companies(session=session):
                     match_result = get_recommendation(publication=pub, company=company)
-                    
+
                     if match_result:
                         # Create match record with appropriate percentage
                         match = CompanyPublicationMatch(

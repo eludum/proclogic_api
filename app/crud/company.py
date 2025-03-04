@@ -31,7 +31,7 @@ def create_company(
         new_company = Company(
             vat_number=company_schema.vat_number,
             name=company_schema.name,
-            email=company_schema.email,
+            emails=company_schema.emails,
             summary_activities=company_schema.summary_activities,
             accreditations=company_schema.accreditations,
             max_publication_value=getattr(
@@ -121,7 +121,7 @@ def update_company(
 
         # Update basic fields
         company.name = company_schema.name
-        company.email = company_schema.email
+        company.emails = company_schema.emails
         company.summary_activities = company_schema.summary_activities
         company.accreditations = company_schema.accreditations
 
@@ -203,7 +203,7 @@ def get_company_by_email(email: str, session: Session) -> Optional[Company]:
                 joinedload(Company.interested_sectors),
                 joinedload(Company.publication_matches),
             )
-            .filter(Company.email == email)
+            .filter(email in Company.emails)
             .first()
         )
     except Exception as e:

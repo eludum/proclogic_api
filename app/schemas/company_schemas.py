@@ -2,6 +2,7 @@ from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
 from app.models.publication_models import CompanyPublicationMatch
 
+
 class SectorSchema(BaseModel):
     sector: str
     cpv_codes: List[str]
@@ -13,7 +14,7 @@ class CompanySchema(BaseModel):
     vat_number: str
     subscription: str
     name: str
-    email: str
+    emails: List[str]
     interested_sectors: List[SectorSchema]
     summary_activities: str
     accreditations: Optional[dict]
