@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     pubproc_server: str
     pubproc_token_url: str
     clerk_secret_key: str
+    clerk_jwks_url: str = (
+        "https://immune-pegasus-53.clerk.accounts.dev/.well-known/jwks.json"
+    )
     path_sea_api: str = "/api/eProcurementSea/v1"
     path_loc_api: str = "/api/eProcurementLoc/v1"
     path_dos_api: str = "/api/eProcurementDos/v1"
