@@ -62,8 +62,6 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
 
         # Process each publication
         for pub in pubproc_data:
-            break
-            print(f"Processing publication {pub.publication_workspace_id}")
             try:
                 await process_publication(client, pub, session)
             except Exception as e:
@@ -230,6 +228,9 @@ async def generate_company_recommendations(
 
     # If we have matches, update the publication
     if match_schemas:
+        # Add matches to publication schema before saving
+        pub.company_matches = match_schemas
+        
         crud_publication.get_or_create_publication(
             publication_schema=pub, session=session
         )

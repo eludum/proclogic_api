@@ -39,8 +39,19 @@ async def convert_publications_to_out_schema_list_free(
     return pub_out
 
 async def convert_publications_to_out_schema_list_paid(
-    company: Company,publication: Publication
+    company: Company, publication: Publication
 ) -> PublicationOut:
+    
+    # Get recommendation status directly from the match table instead of using the property
+    is_recommended = False
+    is_saved = False
+    
+    # Check company_matches directly
+    for match in publication.company_matches:
+        if match.company_vat_number == company.vat_number:
+            is_recommended = match.is_recommended
+            is_saved = match.is_saved
+            break
     
     pub_out = PublicationOut(
         title=get_descr_as_str(publication.dossier.titles),
@@ -49,8 +60,8 @@ async def convert_publications_to_out_schema_list_paid(
         publication_date=publication.publication_date,
         submission_deadline=publication.vault_submission_deadline,
         is_active=publication.is_active,
-        is_recommended=True if company in publication.recommended_companies else False,
-        is_saved=True if company in publication.saved_companies else False,
+        is_recommended=is_recommended,
+        is_saved=is_saved,
         original_description=get_descr_as_str(publication.dossier.descriptions),
         organisation=get_org_name_as_str(publication.organisation.organisation_names),
         cpv_code=publication.cpv_main_code_code,
@@ -81,7 +92,7 @@ async def convert_publication_to_out_schema_details_free(
         dispatch_date=publication.dispatch_date,
         publication_date=publication.publication_date,
         submission_deadline=publication.vault_submission_deadline,
-        is_active=publication.vault_submission_deadline is not None,
+        is_active=publication.is_active,
         original_description=get_descr_as_str(publication.dossier.descriptions),
         organisation=get_org_name_as_str(publication.organisation.organisation_names),
         cpv_code=publication.cpv_main_code_code,
@@ -105,6 +116,12 @@ async def convert_publication_to_out_schema_details_paid(
     
     # TODO: add publication docs and value (get from workspace niffo) and isactive check date, lots, in your sector
 
+    for match in publication.company_matches:
+        if match.company_vat_number == company.vat_number:
+            is_recommended = match.is_recommended
+            is_saved = match.is_saved
+            break
+
     async with httpx.AsyncClient() as client:
         documents = await get_publication_workspace_documents(client, publication.publication_workspace_id)
         forum = await get_publication_workspace_forum(client, publication.publication_workspace_id)
@@ -115,7 +132,7 @@ async def convert_publication_to_out_schema_details_paid(
         dispatch_date=publication.dispatch_date,
         publication_date=publication.publication_date,
         submission_deadline=publication.vault_submission_deadline,
-        is_active=publication.vault_submission_deadline is not None,
+        is_active=publication.is_active,
         original_description=get_descr_as_str(publication.dossier.descriptions),
         ai_summary_without_documents=publication.ai_summary_without_documents,
         ai_summary_with_documents=publication.ai_summary_with_documents,
@@ -124,8 +141,8 @@ async def convert_publication_to_out_schema_details_paid(
         cpv_additional_codes=[
             cpv_code.code for cpv_code in publication.cpv_additional_codes],
         accreditations=publication.dossier.accreditations,
-        is_recommended=True if company in publication.recommended_companies else False,
-        is_saved=True if company in publication.saved_companies else False,
+        is_recommended=is_recommended,
+        is_saved=is_saved,
         region=[
             get_nuts_code_as_str(nuts_code) for nuts_code in publication.nuts_codes
         ],
@@ -163,7 +180,8 @@ async def convert_company_to_schema(company: Company) -> CompanySchema:
                 company_vat_number=match.company_vat_number,
                 is_recommended=match.is_recommended,
                 is_saved=match.is_saved,
-                is_viewed=match.is_viewed
+                is_viewed=match.is_viewed,
+                match_percentage=match.match_percentage
             )
             for match in company.publication_matches
         ],
