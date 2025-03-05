@@ -64,6 +64,7 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
         for pub in pubproc_data:
             print(f"Processing publication {pub.publication_workspace_id}")
             if pub.publication_workspace_id == "8837f2a9-9f5d-4868-aa3e-f76e70ac82f6":
+                print(pub.__dict__)
                 try:
                     await process_publication(client, pub, session)
                 except Exception as e:
@@ -79,10 +80,10 @@ async def process_publication(
     Process an individual publication by checking if it exists and handling it accordingly.
     """
     # Get documents
-    print("lol")
     filesmap = await get_publication_workspace_documents(
         client=client, publication_workspace_id=pub.publication_workspace_id
     )
+    print("cache works")
 
     # Check if the publication already exists
     existing_publication = crud_publication.publication_exists(
