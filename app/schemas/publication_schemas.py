@@ -92,14 +92,12 @@ class PublicationSchema(BaseModel):
     sent_at: List[datetime]
     ted_published: bool
     vault_submission_deadline: Optional[datetime] = None
-    recommended: Optional[List[CompanySchema]] = []
-    saved: Optional[List[CompanySchema]] = []
     ai_summary_without_documents: Optional[str] = None
     ai_summary_with_documents: Optional[str] = None
     award: Optional[dict] = None
 
     estimated_value: Optional[int] = None
-    extracted_keywords: Optional[List[str]] = None
+    extracted_keywords: Optional[List[str]] = []
 
     company_matches: Optional[List[CompanyPublicationMatchSchema]] = []
 

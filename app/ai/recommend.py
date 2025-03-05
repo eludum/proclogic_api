@@ -31,7 +31,7 @@ def get_recommendation(
         messages=[
             {
                 "role": "system",
-                "content": "You are a public procurement ranking system designed to determine whether a procurement opportunity is a good fit for a specific company. Your response must be a JSON with keys: match (True/False) and match_percentage (float between 0 and 100).",
+                "content": "You are a public procurement ranking system designed to determine whether a procurement opportunity is a good fit for a specific company. Your response must be a JSON with keys: match (True/False, True if match_percentage > 25%) and match_percentage (float between 0 and 100).",
             },
             {
                 "role": "user",

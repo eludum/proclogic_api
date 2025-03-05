@@ -22,6 +22,7 @@ from app.ai.recommend import (
 from app.config.postgres import get_session
 from app.config.settings import Settings
 from app.models.publication_models import CompanyPublicationMatch
+from app.schemas.company_schemas import CompanyPublicationMatchSchema
 from app.schemas.publication_schemas import CPVCodeSchema, PublicationSchema
 from app.util.pubproc_token import get_token
 from app.util.redis_cache import redis_cache, invalidate_publication_cache
@@ -94,10 +95,13 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
                         pub.ai_summary_with_documents = summary + citations
                         pub.estimated_value = float(estimated_value)
                     else:
-                        pub.ai_summary_with_documents = "Geen documenten beschikbaar."
                         pub.ai_summary_without_documents = summarize_publication_without_files(
                             publication=pub, xml=xml_content
                         )
+                    # TODO: update matches with new information
+                    crud_publication.update_publication(
+                        publication_schema=pub, session=session
+                    )
 
             # Handle new publications
             if not existing_publication and pub.vault_submission_deadline is not None:
@@ -105,7 +109,7 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
                 xml_content = await get_notice_xml(
                     client=client, publication_workspace_id=pub.publication_workspace_id
                 )
-                if filesmap:
+                if filesmap: # TODO include 3P files
                     estimated_value, summary, citations = summarize_publication_with_files(
                         publication=pub, xml=xml_content, filesmap=filesmap
                     )
@@ -113,31 +117,42 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
                     pub.ai_summary_with_documents = summary + citations
                     pub.estimated_value = float(estimated_value)
                 else:
-                    pub.ai_summary_with_documents = "Geen documenten beschikbaar."
                     pub.ai_summary_without_documents = summarize_publication_without_files(
                         publication=pub, xml=xml_content
                     )
 
                 print("creating new one step 2")
+                pub_db = crud_publication.get_or_create_publication(
+                    publication_schema=pub, session=session
+                )
 
-                # Generate recommendations for each company
+                match_schemas = []
                 for company in crud_company.get_all_companies(session=session):
                     match, match_percentage = get_recommendation(publication=pub, company=company)
-                    print(match, match_percentage)
+                    print(f"Company {company.vat_number}: match={match}, percentage={match_percentage}")
+                    
                     if match:
-                        # Create match record with appropriate percentage
-                        match = CompanyPublicationMatch(
+                        # Create match record
+                        match_schema = CompanyPublicationMatchSchema(
                             company_vat_number=company.vat_number,
                             publication_workspace_id=pub.publication_workspace_id,
                             match_percentage=float(match_percentage),
-                            is_recommended=match,
+                            is_recommended=True,
+                            is_saved=False,
+                            is_viewed=False
                         )
-                        session.add(match)
-                print("creating new one step complete")
+                        match_schemas.append(match_schema)
+                if match_schemas:
+                    pub.company_matches = match_schemas
+                    crud_publication.update_publication(
+                        publication=pub_db,
+                        publication_schema=pub,
+                        session=session
+                    )
+                    session.commit()
 
             # Handle awarded publications
             if pub.vault_submission_deadline is None:
-                continue
                 print("awards")
                 xml_content = await get_notice_xml(
                     client=client,
@@ -146,10 +161,9 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
                 pub.award = summarize_publication_award(
                     xml=xml_content
                 )
-
-            crud_publication.get_or_create_publication(
-                publication_schema=pub, session=session
-            )
+                crud_publication.get_or_create_publication(
+                    publication_schema=pub, session=session
+                )
 
 
 async def get_notice_xml(
