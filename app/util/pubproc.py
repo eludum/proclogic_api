@@ -63,14 +63,12 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
         # Process each publication
         for pub in pubproc_data:
             print(f"Processing publication {pub.publication_workspace_id}")
-            if pub.publication_workspace_id == "8837f2a9-9f5d-4868-aa3e-f76e70ac82f6":
-                print(pub.__dict__)
-                try:
-                    await process_publication(client, pub, session)
-                except Exception as e:
-                    logging.error(
-                        f"Error processing publication {pub.publication_workspace_id}: {e}"
-                    )
+            try:
+                await process_publication(client, pub, session)
+            except Exception as e:
+                logging.error(
+                    f"Error processing publication {pub.publication_workspace_id}: {e}"
+                )
 
 
 async def process_publication(

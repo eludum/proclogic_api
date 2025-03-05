@@ -162,11 +162,13 @@ def get_or_create_dossier(dossier_schema: DossierSchema, session: Session) -> Do
             titles=get_or_create_descriptions(
                 descriptions_schema=dossier_schema.titles, session=session
             ),
-            enterprise_categories=create_enterprise_categories(
-                dossier_schema.enterprise_categories, dossier_schema.reference_number, session
-            ),
         )
         session.add(dossier)
+        session.flush()
+        
+        dossier.enterprise_categories = create_enterprise_categories(
+            dossier_schema.enterprise_categories, dossier_schema.reference_number, session
+        )
         session.flush()
 
     return dossier
