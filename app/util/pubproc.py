@@ -83,7 +83,6 @@ async def process_publication(
     filesmap = await get_publication_workspace_documents(
         client=client, publication_workspace_id=pub.publication_workspace_id
     )
-    print("cache works")
 
     # Check if the publication already exists
     existing_publication = crud_publication.publication_exists(
