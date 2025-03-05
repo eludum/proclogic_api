@@ -87,18 +87,17 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
                         client=client,
                         publication_workspace_id=pub.publication_workspace_id,
                     )
-                    estimated_value, summary, citations = (
-                        summarize_publication_with_files(
+                    if filesmap:
+                        estimated_value, summary, citations = summarize_publication_with_files(
                             publication=pub, xml=xml_content, filesmap=filesmap
                         )
-                    )
-                    pub.ai_summary_with_documents = summary + citations
-                    pub.estimated_value = float(estimated_value)
-                    pub.ai_summary_without_documents = (
-                        summarize_publication_without_files(
+                        pub.ai_summary_with_documents = summary + citations
+                        pub.estimated_value = float(estimated_value)
+                    else:
+                        pub.ai_summary_with_documents = "Geen documenten beschikbaar."
+                        pub.ai_summary_without_documents = summarize_publication_without_files(
                             publication=pub, xml=xml_content
                         )
-                    )
 
             # Handle new publications
             if not existing_publication and pub.vault_submission_deadline is not None:
@@ -106,15 +105,18 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
                 xml_content = await get_notice_xml(
                     client=client, publication_workspace_id=pub.publication_workspace_id
                 )
-                estimated_value, summary, citations = summarize_publication_with_files(
-                    publication=pub, xml=xml_content, filesmap=filesmap
-                )
-                print("uhm")
-                pub.ai_summary_with_documents = summary + citations
-                pub.estimated_value = float(estimated_value)
-                pub.ai_summary_without_documents = summarize_publication_without_files(
-                    publication=pub, xml=xml_content
-                )
+                if filesmap:
+                    estimated_value, summary, citations = summarize_publication_with_files(
+                        publication=pub, xml=xml_content, filesmap=filesmap
+                    )
+                    print("uhm")
+                    pub.ai_summary_with_documents = summary + citations
+                    pub.estimated_value = float(estimated_value)
+                else:
+                    pub.ai_summary_with_documents = "Geen documenten beschikbaar."
+                    pub.ai_summary_without_documents = summarize_publication_without_files(
+                        publication=pub, xml=xml_content
+                    )
 
                 print("creating new one step 2")
 
