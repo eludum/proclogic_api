@@ -1,3 +1,4 @@
+from io import BytesIO
 import json
 import logging
 from typing import List, Optional
@@ -10,7 +11,6 @@ from fastapi import (
     HTTPException,
     WebSocket,
     WebSocketDisconnect,
-    status,
 )
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from openai import OpenAI
@@ -60,7 +60,6 @@ class ConversationResponse(BaseModel):
 def get_redis() -> Redis:
     return get_redis_client()
 
-
 @conversations_router.websocket("/ws/conversation")
 async def websocket_conversation(
     websocket: WebSocket,
@@ -68,125 +67,96 @@ async def websocket_conversation(
     redis: Redis = Depends(get_redis),
 ):
     await websocket.accept()
+    logging.info("WebSocket connection accepted")
 
     try:
-        # Wait for initial connection message with conversation params
+        # Wait for initial connection message
         data = await websocket.receive_text()
+        logging.info(f"Received initial data: {data[:100]}...")
         
         try:
             request_data = json.loads(data)
-        except json.JSONDecodeError:
-            await websocket.send_json(
-                {
-                    "type": WSMessageType.ERROR,
-                    "data": {"detail": "Invalid JSON format in connection request"},
-                }
-            )
-            await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
-            return
-
-        # Extract connection parameters
-        params = request_data.get("data", {})
-        publication_workspace_id = params.get("publication_workspace_id")
-        thread_id = params.get("thread_id")
-        auth_token = params.get("token")
-
-        # Validate required parameters
-        if not publication_workspace_id:
-            await websocket.send_json(
-                {
-                    "type": WSMessageType.ERROR,
-                    "data": {
-                        "detail": "Missing required parameter: publication_workspace_id"
-                    },
-                }
-            )
-            await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
-            return
-
-        # Validate auth token
-        if not auth_token:
-            await websocket.send_json(
-                {
-                    "type": WSMessageType.ERROR,
-                    "data": {"detail": "Authentication token is required"},
-                }
-            )
-            await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
-            return
-
-        # Authenticate user with token
-        try:
-            # Create credentials object for auth_user function
-            credentials = HTTPAuthorizationCredentials(
-                scheme="Bearer", credentials=auth_token
-            )
-            auth_user = await get_auth_user(credentials)
-
-            if not auth_user or not auth_user.email:
-                await websocket.send_json(
-                    {
-                        "type": WSMessageType.ERROR,
-                        "data": {
-                            "detail": "Invalid authentication token or user email not available"
-                        },
-                    }
-                )
-                await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
+            
+            # Extract connection parameters, be flexible about structure
+            params = request_data.get("data", {})
+            if not params and isinstance(request_data, dict):
+                # Try to use the top level if data is missing
+                params = request_data
+                
+            publication_workspace_id = params.get("publication_workspace_id")
+            thread_id = params.get("thread_id")
+            auth_token = params.get("token")
+            
+            logging.info(f"Extracted params: ws_id={publication_workspace_id}, thread={thread_id}, token={auth_token is not None}")
+            
+            # Validate minimum requirements
+            if not publication_workspace_id or not auth_token:
+                error_msg = "Missing required parameters: publication_workspace_id and token are required"
+                logging.error(error_msg)
+                await websocket.send_json({"type": "error", "data": {"detail": error_msg}})
                 return
-
-            # Get company from the authenticated user's email
+                
+            # Create credentials object for auth
+            credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=auth_token)
+            auth_user = await get_auth_user(credentials)
+            
+            if not auth_user or not auth_user.email:
+                error_msg = "Invalid authentication token or email not available"
+                logging.error(error_msg)
+                await websocket.send_json({"type": "error", "data": {"detail": error_msg}})
+                return
+                
+            # Get company
             with get_session() as session:
-                company = crud_company.get_company_by_email(
-                    email=auth_user.email, session=session
-                )
+                company = crud_company.get_company_by_email(email=auth_user.email, session=session)
                 if not company:
-                    await websocket.send_json(
-                        {
-                            "type": WSMessageType.ERROR,
-                            "data": {
-                                "detail": "Company not found for authenticated user"
-                            },
-                        }
-                    )
-                    await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
+                    error_msg = "Company not found for authenticated user"
+                    logging.error(error_msg)
+                    await websocket.send_json({"type": "error", "data": {"detail": error_msg}})
                     return
-
+                    
                 vat_number = company.vat_number
-
-        except Exception as e:
-            logging.error(f"Authentication error: {str(e)}")
-            await websocket.send_json(
-                {
-                    "type": WSMessageType.ERROR,
-                    "data": {"detail": f"Authentication failed: {str(e)}"},
+                logging.info(f"Authentication successful: company VAT={vat_number}")
+                
+            # Send a confirmation that connection is set up
+            await websocket.send_json({
+                "type": "response_chunk",
+                "data": {
+                    "content": "Connected successfully. Ready to chat.",
+                    "done": False,
                 }
+            })
+            
+            # Process conversation
+            conversation_handler = ConversationHandler(
+                websocket=websocket,
+                company=company,
+                vat_number=vat_number,
+                publication_workspace_id=publication_workspace_id,
+                thread_id=thread_id,
+                client=client,
+                redis=redis,
             )
-            await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
-            return
-
-        # Process conversation
-        conversation_handler = ConversationHandler(
-            websocket=websocket,
-            company=company,
-            vat_number=vat_number,
-            publication_workspace_id=publication_workspace_id,
-            thread_id=thread_id,
-            client=client,
-            redis=redis,
-        )
-
-        await conversation_handler.process()
-
+            
+            await conversation_handler.process()
+            
+        except json.JSONDecodeError as e:
+            logging.error(f"JSON decode error: {e}, raw data: {data[:50]}...")
+            await websocket.send_json({
+                "type": "error", 
+                "data": {"detail": f"Invalid JSON format: {str(e)}"}
+            })
+        except Exception as e:
+            logging.error(f"Setup error: {str(e)}")
+            await websocket.send_json({
+                "type": "error",
+                "data": {"detail": f"Connection setup error: {str(e)}"}
+            })
+            
     except WebSocketDisconnect:
         logging.info("WebSocket client disconnected")
     except Exception as e:
-        logging.error(f"Error in WebSocket conversation: {e}")
-        await websocket.send_json(
-            {"type": WSMessageType.ERROR, "data": {"detail": str(e)}}
-        )
-        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
-
+        logging.error(f"Unhandled WebSocket error: {str(e)}")
 
 class ConversationHandler:
     """Handles the conversation flow and state for a WebSocket connection"""
@@ -219,36 +189,57 @@ class ConversationHandler:
         # Process messages
         await self.process_messages()
 
-async def setup_conversation(self):
-    """Set up the conversation by creating or retrieving the assistant and thread"""
-    # First, check if we have a thread ID in Redis
-    if not self.thread_id:
-        try:
-            existing_thread_id = get_thread_id(
-                self.redis, self.vat_number, self.publication_workspace_id
-            )
-            if existing_thread_id:
-                self.thread_id = existing_thread_id
-                logging.info(f"Retrieved thread ID from Redis: {self.thread_id}")
-
-                # Send status to client
-                await self.websocket.send_json(
-                    {
-                        "type": WSMessageType.RESPONSE_CHUNK,
-                        "data": {
-                            "content": "Continuing previous conversation...",
-                            "done": False,
-                        },
-                    }
-                )
-
-                # Refresh TTL
-                refresh_thread_ttl(
+    async def setup_conversation(self):
+        """Set up the conversation by creating or retrieving the assistant and thread"""
+        # First, check if we have a thread ID in Redis
+        if not self.thread_id:
+            try:
+                existing_thread_id = get_thread_id(
                     self.redis, self.vat_number, self.publication_workspace_id
                 )
+                if existing_thread_id:
+                    self.thread_id = existing_thread_id
+                    logging.info(f"Retrieved thread ID from Redis: {self.thread_id}")
+
+                    # Send status to client
+                    await self.websocket.send_json(
+                        {
+                            "type": WSMessageType.RESPONSE_CHUNK,
+                            "data": {
+                                "content": "Continuing previous conversation...",
+                                "done": False,
+                            },
+                        }
+                    )
+
+                    # Refresh TTL
+                    refresh_thread_ttl(
+                        self.redis, self.vat_number, self.publication_workspace_id
+                    )
+            except Exception as e:
+                logging.warning(f"Error retrieving thread ID: {str(e)}")
+                # Continue without the thread ID - we'll create a new one
+
+        # Set up the assistant
+        try:
+            self.assistant_id = await self.setup_assistant()
+            
+            # Create a new thread if we don't have one
+            if not self.thread_id:
+                thread = self.client.beta.threads.create()
+                self.thread_id = thread.id
+                
+                # Store the thread ID in Redis
+                store_thread_id(
+                    self.redis, self.vat_number, self.publication_workspace_id, self.thread_id
+                )
+                logging.info(f"Created new thread ID: {self.thread_id}")
         except Exception as e:
-            logging.warning(f"Error retrieving thread ID: {str(e)}")
-            # Continue without the thread ID - we'll create a new one
+            logging.error(f"Error setting up conversation: {str(e)}")
+            await self.websocket.send_json(
+                {"type": WSMessageType.ERROR, "data": {"detail": f"Error setting up conversation: {str(e)}"}}
+            )
+            raise
 
     async def setup_assistant(self) -> str:
         """Set up the assistant with vector store for file search"""
@@ -299,33 +290,57 @@ async def setup_conversation(self):
             }
 
             if filtered_filesmap:
-                # Upload files to vector store
-                file_batch = (
-                    self.client.beta.vector_stores.file_batches.upload_and_poll(
-                        vector_store_id=vector_store.id,
-                        files=list(filtered_filesmap.values()),
+                # Upload files to vector store - ensure we have proper file objects
+                file_objects = []
+                for file_name, file_data in filtered_filesmap.items():
+                    # Make sure each file is a proper file-like object
+                    if not hasattr(file_data, 'read') or not hasattr(file_data, 'seek'):
+                        # If this is a dict from cache, reconstruct the file-like object
+                        if isinstance(file_data, dict) and 'content' in file_data:
+                            byte_io = BytesIO(file_data['content'])
+                            byte_io.name = file_data.get('name', file_name)
+                            file_objects.append(byte_io)
+                    else:
+                        # Reset the file pointer to the beginning
+                        file_data.seek(0)
+                        file_objects.append(file_data)
+                
+                # Only proceed if we have valid file objects
+                if file_objects:
+                    file_batch = (
+                        self.client.beta.vector_stores.file_batches.upload_and_poll(
+                            vector_store_id=vector_store.id,
+                            files=file_objects,
+                        )
                     )
-                )
 
-                if file_batch.status != "completed":
-                    logging.error(f"Failed to upload files: {file_batch.status}")
-                    await self.websocket.send_json(
-                        {
-                            "type": WSMessageType.ERROR,
-                            "data": {"detail": "Failed to process files"},
-                        }
+                    if file_batch.status != "completed":
+                        logging.error(f"Failed to upload files: {file_batch.status}")
+                        await self.websocket.send_json(
+                            {
+                                "type": WSMessageType.ERROR,
+                                "data": {"detail": "Failed to process files"},
+                            }
+                        )
+                        raise HTTPException(
+                            status_code=500, detail="Failed to process files"
+                        )
+                    
+                    # Update assistant with vector store
+                    self.client.beta.assistants.update(
+                        assistant_id=assistant_id,
+                        tool_resources={
+                            "file_search": {"vector_store_ids": [vector_store.id]}
+                        },
                     )
-                    raise HTTPException(
-                        status_code=500, detail="Failed to process files"
+                else:
+                    # No valid file objects
+                    self.client.beta.assistants.update(
+                        assistant_id=assistant_id,
+                        tool_resources={"file_search": {"vector_store_ids": []}},
                     )
 
-                # Update assistant with vector store
-                self.client.beta.assistants.update(
-                    assistant_id=assistant_id,
-                    tool_resources={
-                        "file_search": {"vector_store_ids": [vector_store.id]}
-                    },
-                )
+                # This is now handled inside the file upload block
             else:
                 # Update assistant with empty vector store
                 self.client.beta.assistants.update(
