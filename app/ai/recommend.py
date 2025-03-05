@@ -116,6 +116,14 @@ def summarize_publication_with_files(
 
     try:
         if filesmap:
+            # Filter files with the right extensions
+            filesmap = {
+                file_name: file_data
+                for file_name, file_data in filesmap.items()
+                if file_name.lower().endswith(
+                    tuple(settings.openai_vector_store_accepted_formats)
+                )
+            }
             vector_store = client.beta.vector_stores.create(
                 name=f"publication_workspace_{publication.publication_workspace_id}"
             )
