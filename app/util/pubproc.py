@@ -10,6 +10,7 @@ import httpx
 import numpy as np
 import pycron
 from pydantic import TypeAdapter
+from sqlalchemy.orm import Session
 
 import app.crud.company as crud_company
 import app.crud.publication as crud_publication
@@ -21,11 +22,10 @@ from app.ai.recommend import (
 )
 from app.config.postgres import get_session
 from app.config.settings import Settings
-from app.models.publication_models import CompanyPublicationMatch
 from app.schemas.company_schemas import CompanyPublicationMatchSchema
 from app.schemas.publication_schemas import CPVCodeSchema, PublicationSchema
 from app.util.pubproc_token import get_token
-from app.util.redis_cache import redis_cache, invalidate_publication_cache
+from app.util.redis_cache import invalidate_publication_cache, redis_cache
 
 settings = Settings()
 
@@ -53,117 +53,177 @@ async def fetch_pubproc_data() -> None:
 
 
 async def retrieve_publications(client: httpx.AsyncClient) -> None:
+    """
+    Main function that retrieves and processes publications.
+    """
     with get_session() as session:
         pubproc_r = await get_daily_pubproc_search_data(client=client)
         pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
 
-        # TODO: check realtime with xml endpoint if new notice version is available, when details are opened
+        # Process each publication
         for pub in pubproc_data:
-            print(pub.__dict__)
+            try:
+                await process_publication(client, pub, session)
+            except Exception as e:
+                logging.error(
+                    f"Error processing publication {pub.publication_workspace_id}: {e}"
+                )
 
-            # get documents, TODO: store in bucket, dont use redis to store files
-            filesmap = await get_publication_workspace_documents(
-                client=client, publication_workspace_id=pub.publication_workspace_id
+
+async def process_publication(
+    client: httpx.AsyncClient, pub: PublicationSchema, session: Session
+) -> None:
+    """
+    Process an individual publication by checking if it exists and handling it accordingly.
+    """
+    # Get documents
+    filesmap = await get_publication_workspace_documents(
+        client=client, publication_workspace_id=pub.publication_workspace_id
+    )
+
+    # Check if the publication already exists
+    existing_publication = crud_publication.publication_exists(
+        publication_workspace_id=pub.publication_workspace_id, session=session
+    )
+
+    if existing_publication and pub.vault_submission_deadline is not None:
+        await update_existing_publication(client=client, pub=pub, filesmap=filesmap, session=session)
+    elif not existing_publication and pub.vault_submission_deadline is not None:
+        await create_new_publication(client, pub, filesmap, session)
+    elif pub.vault_submission_deadline is None:
+        await process_award_publication(client, pub, session)
+
+
+async def update_existing_publication(
+    client: httpx.AsyncClient, pub: PublicationSchema, filesmap: dict, session: Session
+) -> None:
+    """
+    Update an existing publication with new information if necessary.
+    """
+    if is_new_notice_version_available(
+        incoming_notice_ids=pub.notice_ids,
+        publication_workspace_id=pub.publication_workspace_id,
+    ):
+        invalidate_publication_cache(pub.publication_workspace_id)
+
+        # Get fresh data
+        xml_content = await get_notice_xml(
+            client=client,
+            publication_workspace_id=pub.publication_workspace_id,
+        )
+
+        await enrich_publication_with_ai(client, pub, xml_content, filesmap)
+
+        # First update the publication
+        crud_publication.get_or_create_publication(
+            publication_schema=pub, session=session
+        )
+
+        # Then generate (new) recommendations
+        await generate_company_recommendations(pub=pub, session=session)
+
+
+
+async def create_new_publication(
+    client: httpx.AsyncClient, pub: PublicationSchema, filesmap: dict, session: Session
+) -> None:
+    """
+    Create a new publication and generate recommendations for companies.
+    """
+    xml_content = await get_notice_xml(
+        client=client, publication_workspace_id=pub.publication_workspace_id
+    )
+
+    # Add AI-generated content
+    await enrich_publication_with_ai(client, pub, xml_content, filesmap)
+
+    # First create the publication
+    crud_publication.get_or_create_publication(
+        publication_schema=pub, session=session
+    )
+
+    # Then generate recommendations
+    await generate_company_recommendations(pub=pub, session=session)
+
+
+async def process_award_publication(
+    client: httpx.AsyncClient, pub: PublicationSchema, session: Session
+) -> None:
+    """
+    Process a publication that represents an award.
+    """
+    xml_content = await get_notice_xml(
+        client=client,
+        publication_workspace_id=pub.publication_workspace_id,
+    )
+
+    # Get award information
+    pub.award = summarize_publication_award(xml=xml_content)
+
+    # Save to database
+    crud_publication.get_or_create_publication(publication_schema=pub, session=session)
+
+
+async def enrich_publication_with_ai(
+    pub: PublicationSchema, xml_content: str, filesmap: dict
+) -> None:
+    """
+    Enrich a publication with AI-generated content.
+    """
+    if filesmap:
+        try:
+            estimated_value, summary, citations = summarize_publication_with_files(
+                publication=pub, xml=xml_content, filesmap=filesmap
+            )
+            pub.ai_summary_with_documents = summary + citations
+            pub.estimated_value = float(estimated_value)
+        except Exception as e:
+            logging.error(f"Error in summarize_publication_with_files: {e}")
+            pub.ai_summary_with_documents = "Error processing documents."
+    else:
+        try:
+            pub.ai_summary_without_documents = summarize_publication_without_files(
+                publication=pub, xml=xml_content
+            )
+        except Exception as e:
+            logging.error(f"Error in summarize_publication_without_files: {e}")
+            pub.ai_summary_without_documents = "Error generating summary."
+
+
+async def generate_company_recommendations(
+    pub: PublicationSchema, session: Session
+) -> None:
+    """
+    Generate company recommendations for a publication.
+    """
+    match_schemas = []
+
+    # Process each company
+    for company in crud_company.get_all_companies(session=session):
+        try:
+            match, match_percentage = get_recommendation(
+                publication=pub, company=company
             )
 
-            # Check if the publication already exists
-            existing_publication = crud_publication.publication_exists(
-                publication_workspace_id=pub.publication_workspace_id, session=session
+            if match:
+                # Create match record
+                match_schema = CompanyPublicationMatchSchema(
+                    company_vat_number=company.vat_number,
+                    publication_workspace_id=pub.publication_workspace_id,
+                    match_percentage=float(match_percentage),
+                    is_recommended=True,
+                    is_saved=False,
+                    is_viewed=False,
+                )
+                match_schemas.append(match_schema)
+        except Exception as e:
+            logging.error(
+                f"Error generating recommendation for company {company.vat_number}: {e}"
             )
 
-            # Handle updates for existing publications
-            if existing_publication and pub.vault_submission_deadline is not None:
-                print("wtf you should not be here")
-                if is_new_notice_version_available(
-                    incoming_notice_ids=pub.notice_ids,
-                    publication_workspace_id=pub.publication_workspace_id,
-                ):
-                    # Invalidate the cache for this publication workspace before making new API calls
-                    logging.info(
-                        f"New notice version detected for {pub.publication_workspace_id}. Invalidating cache."
-                    )
-                    invalidate_publication_cache(pub.publication_workspace_id)
-
-                    xml_content = await get_notice_xml(
-                        client=client,
-                        publication_workspace_id=pub.publication_workspace_id,
-                    )
-                    if filesmap:
-                        estimated_value, summary, citations = summarize_publication_with_files(
-                            publication=pub, xml=xml_content, filesmap=filesmap
-                        )
-                        pub.ai_summary_with_documents = summary + citations
-                        pub.estimated_value = float(estimated_value)
-                    else:
-                        pub.ai_summary_without_documents = summarize_publication_without_files(
-                            publication=pub, xml=xml_content
-                        )
-                    # TODO: update matches with new information
-                    crud_publication.update_publication(
-                        publication_schema=pub, session=session
-                    )
-
-            # Handle new publications
-            if not existing_publication and pub.vault_submission_deadline is not None:
-                print("creating new one step 1")
-                xml_content = await get_notice_xml(
-                    client=client, publication_workspace_id=pub.publication_workspace_id
-                )
-                if filesmap: # TODO include 3P files
-                    estimated_value, summary, citations = summarize_publication_with_files(
-                        publication=pub, xml=xml_content, filesmap=filesmap
-                    )
-                    print("uhm")
-                    pub.ai_summary_with_documents = summary + citations
-                    pub.estimated_value = float(estimated_value)
-                else:
-                    pub.ai_summary_without_documents = summarize_publication_without_files(
-                        publication=pub, xml=xml_content
-                    )
-
-                print("creating new one step 2")
-                pub_db = crud_publication.get_or_create_publication(
-                    publication_schema=pub, session=session
-                )
-
-                match_schemas = []
-                for company in crud_company.get_all_companies(session=session):
-                    match, match_percentage = get_recommendation(publication=pub, company=company)
-                    print(f"Company {company.vat_number}: match={match}, percentage={match_percentage}")
-                    
-                    if match:
-                        # Create match record
-                        match_schema = CompanyPublicationMatchSchema(
-                            company_vat_number=company.vat_number,
-                            publication_workspace_id=pub.publication_workspace_id,
-                            match_percentage=float(match_percentage),
-                            is_recommended=True,
-                            is_saved=False,
-                            is_viewed=False
-                        )
-                        match_schemas.append(match_schema)
-                if match_schemas:
-                    pub.company_matches = match_schemas
-                    crud_publication.update_publication(
-                        publication=pub_db,
-                        publication_schema=pub,
-                        session=session
-                    )
-                    session.commit()
-
-            # Handle awarded publications
-            if pub.vault_submission_deadline is None:
-                print("awards")
-                xml_content = await get_notice_xml(
-                    client=client,
-                    publication_workspace_id=pub.publication_workspace_id,
-                )
-                pub.award = summarize_publication_award(
-                    xml=xml_content
-                )
-                crud_publication.get_or_create_publication(
-                    publication_schema=pub, session=session
-                )
+    # If we have matches, update the publication
+    if match_schemas:
+        crud_publication.get_or_create_publication(publication_schema=pub, session=session)
 
 
 async def get_notice_xml(
@@ -178,7 +238,7 @@ async def get_notice_xml(
 
 def is_new_notice_version_available(
     incoming_notice_ids: List[str], publication_workspace_id: str
-) -> True:
+) -> bool:
     with get_session() as session:
         return len(
             crud_publication.get_publication_by_workspace_id(

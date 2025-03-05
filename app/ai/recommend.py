@@ -49,12 +49,10 @@ def get_recommendation(
         ],
         response_format={ "type": "json_object" }
     )
-    print("ur here")
-    print(completion.choices[0].message.content)
     match_result = json.loads(completion.choices[0].message.content)
     match = match_result["match"]
     match_percentage = match_result["match_percentage"]
-
+    print(match, match_percentage)
     return match, match_percentage
 
 
