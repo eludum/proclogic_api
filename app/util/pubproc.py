@@ -87,11 +87,17 @@ async def process_publication(
     )
 
     if existing_publication and pub.vault_submission_deadline is not None:
-        await update_existing_publication(client=client, pub=pub, filesmap=filesmap, session=session)
+        await update_existing_publication(
+            client=client, pub=pub, filesmap=filesmap, session=session
+        )
     elif not existing_publication and pub.vault_submission_deadline is not None:
-        await create_new_publication(client, pub, filesmap, session)
+        await create_new_publication(
+            client=client, pub=pub, filesmap=filesmap, session=session
+        )
     elif pub.vault_submission_deadline is None:
-        await process_award_publication(client, pub, session)
+        await process_award_publication(
+            client=client, pub=pub, filesmap=filesmap, session=session
+        )
 
 
 async def update_existing_publication(
@@ -112,7 +118,9 @@ async def update_existing_publication(
             publication_workspace_id=pub.publication_workspace_id,
         )
 
-        await enrich_publication_with_ai(client, pub, xml_content, filesmap)
+        await enrich_publication_with_ai(
+            pub=pub, xml_content=xml_content, filesmap=filesmap
+        )
 
         # First update the publication
         crud_publication.get_or_create_publication(
@@ -121,7 +129,6 @@ async def update_existing_publication(
 
         # Then generate (new) recommendations
         await generate_company_recommendations(pub=pub, session=session)
-
 
 
 async def create_new_publication(
@@ -135,12 +142,12 @@ async def create_new_publication(
     )
 
     # Add AI-generated content
-    await enrich_publication_with_ai(client, pub, xml_content, filesmap)
+    await enrich_publication_with_ai(
+        pub=pub, xml_content=xml_content, filesmap=filesmap
+    )
 
     # First create the publication
-    crud_publication.get_or_create_publication(
-        publication_schema=pub, session=session
-    )
+    crud_publication.get_or_create_publication(publication_schema=pub, session=session)
 
     # Then generate recommendations
     await generate_company_recommendations(pub=pub, session=session)
@@ -223,7 +230,9 @@ async def generate_company_recommendations(
 
     # If we have matches, update the publication
     if match_schemas:
-        crud_publication.get_or_create_publication(publication_schema=pub, session=session)
+        crud_publication.get_or_create_publication(
+            publication_schema=pub, session=session
+        )
 
 
 async def get_notice_xml(
