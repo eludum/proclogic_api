@@ -93,7 +93,7 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
                         )
                     )
                     pub.ai_summary_with_documents = summary + citations
-                    pub.estimated_value = estimated_value
+                    pub.estimated_value = float(estimated_value)
                     pub.ai_summary_without_documents = (
                         summarize_publication_without_files(
                             publication=pub, xml=xml_content
@@ -109,8 +109,9 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
                 estimated_value, summary, citations = summarize_publication_with_files(
                     publication=pub, xml=xml_content, filesmap=filesmap
                 )
+                print("uhm")
                 pub.ai_summary_with_documents = summary + citations
-                pub.estimated_value = estimated_value
+                pub.estimated_value = float(estimated_value)
                 pub.ai_summary_without_documents = summarize_publication_without_files(
                     publication=pub, xml=xml_content
                 )
@@ -119,21 +120,22 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
 
                 # Generate recommendations for each company
                 for company in crud_company.get_all_companies(session=session):
-                    match_result = get_recommendation(publication=pub, company=company)
-
-                    if match_result:
+                    match, match_percentage = get_recommendation(publication=pub, company=company)
+                    print(match, match_percentage)
+                    if match:
                         # Create match record with appropriate percentage
                         match = CompanyPublicationMatch(
                             company_vat_number=company.vat_number,
                             publication_workspace_id=pub.publication_workspace_id,
-                            match_percentage=match_result["match_percentage"],
-                            is_recommended=match_result["is_recommended"],
+                            match_percentage=float(match_percentage),
+                            is_recommended=match,
                         )
                         session.add(match)
                 print("creating new one step complete")
 
             # Handle awarded publications
             if pub.vault_submission_deadline is None:
+                continue
                 print("awards")
                 xml_content = await get_notice_xml(
                     client=client,

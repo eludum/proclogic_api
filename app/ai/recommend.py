@@ -18,7 +18,7 @@ def get_recommendation(
     client: OpenAI = None,
 ) -> dict:
     client = client or get_openai_client()
-
+    print("do i even get here")
     publication_info = PublicationInfo()
     publication_info.convert_publication_to_str(publication)
 
@@ -31,7 +31,7 @@ def get_recommendation(
         messages=[
             {
                 "role": "system",
-                "content": "You are a public procurement ranking system designed to determine whether a procurement opportunity is a good fit for a specific company. Your response must be a JSON with keys: match (True/False) and match_percentage.",
+                "content": "You are a public procurement ranking system designed to determine whether a procurement opportunity is a good fit for a specific company. Your response must be a JSON with keys: match (True/False) and match_percentage (float between 0 and 100).",
             },
             {
                 "role": "user",
@@ -44,12 +44,18 @@ def get_recommendation(
                     f"Title: {publication_info.dossier_title_str}. "
                     f"Description: {publication_info.dossier_desc_str}. "
                     f"Lots: {publication_info.lot_str}. "
-                    "Is this a good fit for them?"
                 ),
             },
         ],
+        response_format={ "type": "json_object" }
     )
-    return json.loads(completion.choices[0].message.content)
+    print("ur here")
+    print(completion.choices[0].message.content)
+    match_result = json.loads(completion.choices[0].message.content)
+    match = match_result["match"]
+    match_percentage = match_result["match_percentage"]
+
+    return match, match_percentage
 
 
 def summarize_publication_award(xml: str, client: OpenAI = None) -> dict:
@@ -60,13 +66,14 @@ def summarize_publication_award(xml: str, client: OpenAI = None) -> dict:
         messages=[
             {
                 "role": "system",
-                "content": "You are a public procurement assistant tasked with summarizing the award of a publication. Respond in JSON with keys: winner and value.",
+                "content": "You are a public procurement assistant tasked with summarizing the award of a publication. Respond in JSON with keys: winner (str) and value (int).",
             },
             {
                 "role": "user",
                 "content": f"The XML of the publication is: {xml}",
             },
         ],
+        response_format={ "type": "json_object" }
     )
     return json.loads(completion.choices[0].message.content)
 
@@ -128,12 +135,15 @@ def summarize_publication_with_files(
             assistant = client.beta.assistants.update(
                 assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
                 tool_resources={"file_search": {"vector_store_ids": [vector_store.id]}},
+                response_format={ "type": "json_object" }
+
             )
 
         else:
             assistant = client.beta.assistants.update(
                 assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
                 tool_resources={"file_search": {"vector_store_ids": []}},
+                response_format={ "type": "json_object" }
             )
 
         thread = client.beta.threads.create(
@@ -156,18 +166,27 @@ def summarize_publication_with_files(
             logging.error("No response from assistant.")
             return None, None, None
 
-        message_content = json.loads(messages[0].content[0].text)
-        summary = message_content.get("summary", "No summary available.")
-        estimated_value = message_content.get(
-            "estimated_value", "No estimated value available."
-        )
+        response_text = messages[0].content[0].text.value
+        if "```json" in response_text:
+            json_start = response_text.find("```json\n") + len("```json\n")
+            json_end = response_text.rfind("\n```")
+            json_content = response_text[json_start:json_end]
+        else:
+            # If not in code block format, try to parse the entire text
+            json_content = response_text
+                    
+        message_content = json.loads(json_content)
+        summary = message_content.get("summary", "Geen samenvatting beschikbaar.")
+        estimated_value = message_content.get("estimated_value", 0)
+        
         citations = [
             f"[{i}] {client.files.retrieve(ann['file_citation']['file_id']).filename}"
-            for i, ann in enumerate(message_content.get("annotations", []))
+            for i, ann in enumerate(messages[0].content[0].text.annotations)
             if "file_citation" in ann
         ]
-
+        print(estimated_value, summary, "\n".join(citations))
         return estimated_value, summary, "\n".join(citations)
     except Exception as e:
         logging.error(f"Failed to summarize files: {e}")
         return None, None, None
+
