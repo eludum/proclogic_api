@@ -1,7 +1,8 @@
 import pickle
 from functools import wraps
-from typing import Callable, Any
+from typing import Callable, Any, Dict
 import logging
+import io
 
 from app.config.redis_manager import get_redis_client
 
@@ -52,23 +53,15 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
                         key_parts.append(f"{k}:{v}")
 
                 cache_key = ":".join(key_parts)
-                return await original_caching_logic(
-                    func, cache_key, is_document_func, *args, **kwargs
-                )
+                return await original_caching_logic(func, cache_key, is_document_func, *args, **kwargs)
 
             # Create a simpler cache key using only the key_prefix and entity_id
             cache_key = f"{key_prefix}:{entity_id}"
 
-            return await original_caching_logic(
-                func, cache_key, is_document_func, *args, **kwargs
-            )
+            return await original_caching_logic(func, cache_key, is_document_func, *args, **kwargs)
 
         async def original_caching_logic(
-            func: Callable,
-            cache_key: str,
-            is_document_func: bool,
-            *args: Any,
-            **kwargs: Any,
+            func: Callable, cache_key: str, is_document_func: bool, *args: Any, **kwargs: Any
         ):
             # Get Redis client
             redis = get_redis_client()
@@ -79,13 +72,23 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
                 try:
                     # Return the cached result
                     result = pickle.loads(cached_result)
-
+                    
                     # For document functions, we need to reconstruct BytesIO objects
                     if is_document_func and isinstance(result, dict):
-                        # Skip document caching for now - binary data needs special handling
-                        # This forces a refresh of the data
-                        raise ValueError("Skipping document cache to get fresh data")
-
+                        # Reconstruct BytesIO objects from serialized data
+                        reconstructed_files = {}
+                        for file_name, file_data in result.items():
+                            if isinstance(file_data, dict) and 'content' in file_data and 'name' in file_data:
+                                # Create a new BytesIO object
+                                bytes_io = io.BytesIO(file_data['content'])
+                                bytes_io.name = file_data['name']
+                                reconstructed_files[file_name] = bytes_io
+                            else:
+                                # Skip invalid entries
+                                logging.warning(f"Skipping invalid cache entry for {file_name}")
+                                continue
+                        return reconstructed_files
+                        
                     return result
                 except Exception as e:
                     logging.warning(f"Cache retrieval error for {cache_key}: {str(e)}")
@@ -97,8 +100,33 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
             # Only cache successful results
             if result:  # Don't cache empty results
                 try:
-                    # For document functions, we'll skip caching for now
-                    if not is_document_func:
+                    if is_document_func and isinstance(result, dict):
+                        # Serialize BytesIO objects before caching
+                        serializable_files = {}
+                        for file_name, file_data in result.items():
+                            if hasattr(file_data, 'read') and callable(file_data.read):
+                                # Store current position
+                                current_pos = file_data.tell()
+                                # Seek to beginning and read all content
+                                file_data.seek(0)
+                                content = file_data.read()
+                                # Restore position
+                                file_data.seek(current_pos)
+                                
+                                # Store as dict with content and name
+                                serializable_files[file_name] = {
+                                    'content': content,
+                                    'name': getattr(file_data, 'name', file_name)
+                                }
+                            else:
+                                # Skip non-file objects
+                                continue
+                        
+                        # Only cache if we have serializable files
+                        if serializable_files:
+                            redis.set(cache_key, pickle.dumps(serializable_files), ex=ttl)
+                    else:
+                        # Normal caching for non-document data
                         redis.set(cache_key, pickle.dumps(result), ex=ttl)
                 except Exception as e:
                     logging.warning(f"Cache storage error for {cache_key}: {str(e)}")
