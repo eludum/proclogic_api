@@ -1,6 +1,7 @@
 import pickle
 from functools import wraps
 from typing import Callable, Any
+import logging
 
 from app.config.redis_manager import get_redis_client
 
@@ -21,6 +22,9 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):
+            # Check if we're caching documents - binary data needs special handling
+            is_document_func = "documents" in key_prefix
+
             # Skip first argument if it's 'self' or client
             skip_args = 1
 
@@ -48,15 +52,23 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
                         key_parts.append(f"{k}:{v}")
 
                 cache_key = ":".join(key_parts)
-                return await original_caching_logic(func, cache_key, *args, **kwargs)
+                return await original_caching_logic(
+                    func, cache_key, is_document_func, *args, **kwargs
+                )
 
             # Create a simpler cache key using only the key_prefix and entity_id
             cache_key = f"{key_prefix}:{entity_id}"
 
-            return await original_caching_logic(func, cache_key, *args, **kwargs)
+            return await original_caching_logic(
+                func, cache_key, is_document_func, *args, **kwargs
+            )
 
         async def original_caching_logic(
-            func: Callable, cache_key: str, *args: Any, **kwargs: Any
+            func: Callable,
+            cache_key: str,
+            is_document_func: bool,
+            *args: Any,
+            **kwargs: Any,
         ):
             # Get Redis client
             redis = get_redis_client()
@@ -66,21 +78,31 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
             if cached_result:
                 try:
                     # Return the cached result
-                    return pickle.loads(cached_result)
-                except Exception:
-                    # Log error and proceed with the function call
-                    pass
+                    result = pickle.loads(cached_result)
 
-            # Call the function and cache the result
+                    # For document functions, we need to reconstruct BytesIO objects
+                    if is_document_func and isinstance(result, dict):
+                        # Skip document caching for now - binary data needs special handling
+                        # This forces a refresh of the data
+                        raise ValueError("Skipping document cache to get fresh data")
+
+                    return result
+                except Exception as e:
+                    logging.warning(f"Cache retrieval error for {cache_key}: {str(e)}")
+                    # Proceed with function call
+
+            # Call the function and get the result
             result = await func(*args, **kwargs)
 
             # Only cache successful results
             if result:  # Don't cache empty results
                 try:
-                    redis.set(cache_key, pickle.dumps(result), ex=ttl)
-                except Exception:
+                    # For document functions, we'll skip caching for now
+                    if not is_document_func:
+                        redis.set(cache_key, pickle.dumps(result), ex=ttl)
+                except Exception as e:
+                    logging.warning(f"Cache storage error for {cache_key}: {str(e)}")
                     # If caching fails, just return the result
-                    pass
 
             return result
 
