@@ -92,7 +92,7 @@ async def convert_publication_to_out_schema_details_free(
             get_nuts_code_as_str(nuts_code) for nuts_code in publication.nuts_codes
         ],
         sector=get_cpv_sector_and_description(publication.cpv_main_code.code, language="nl"),
-        documents=get_publication_workspace_documents(documents), # TODO: limit these two
+        documents=documents, # TODO: limit these two
         forum=forum
     )
 

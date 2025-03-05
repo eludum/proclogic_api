@@ -203,7 +203,7 @@ def get_company_by_email(email: str, session: Session) -> Optional[Company]:
                 joinedload(Company.interested_sectors),
                 joinedload(Company.publication_matches),
             )
-            .filter(email in Company.emails)
+            .filter(Company.emails.any(email))  # Use .any() for array contains
             .first()
         )
     except Exception as e:

@@ -26,7 +26,7 @@ async def get_publications(auth_user: AuthUser = Depends(get_auth_user)):
     """Get all publications for an authenticated user"""
     if not auth_user.email:
         raise HTTPException(status_code=400, detail="User email not available")
-
+    print(auth_user.email)
     with get_session() as session:
         company = crud_company.get_company_by_email(
             email=auth_user.email, session=session

@@ -62,6 +62,7 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
 
         # Process each publication
         for pub in pubproc_data:
+            break
             print(f"Processing publication {pub.publication_workspace_id}")
             try:
                 await process_publication(client, pub, session)
