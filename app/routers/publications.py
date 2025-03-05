@@ -107,7 +107,6 @@ async def get_publication_by_workspace_id(
     """Get a specific publication by workspace ID"""
     if not auth_user.email:
         raise HTTPException(status_code=400, detail="User email not available")
-
     with get_session() as session:
         company = crud_company.get_company_by_email(
             email=auth_user.email, session=session

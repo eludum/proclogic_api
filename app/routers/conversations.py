@@ -72,14 +72,14 @@ async def websocket_conversation(
     try:
         # Wait for initial connection message with conversation params
         data = await websocket.receive_text()
-        request_data = json.loads(data)
-
-        # Validate initial message type
-        if request_data.get("type") != WSMessageType.CONNECT:
+        
+        try:
+            request_data = json.loads(data)
+        except json.JSONDecodeError:
             await websocket.send_json(
                 {
                     "type": WSMessageType.ERROR,
-                    "data": {"detail": "First message must be a connection request"},
+                    "data": {"detail": "Invalid JSON format in connection request"},
                 }
             )
             await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
@@ -219,10 +219,11 @@ class ConversationHandler:
         # Process messages
         await self.process_messages()
 
-    async def setup_conversation(self):
-        """Set up the conversation by creating or retrieving the assistant and thread"""
-        # First, check if we have a thread ID in Redis
-        if not self.thread_id:
+async def setup_conversation(self):
+    """Set up the conversation by creating or retrieving the assistant and thread"""
+    # First, check if we have a thread ID in Redis
+    if not self.thread_id:
+        try:
             existing_thread_id = get_thread_id(
                 self.redis, self.vat_number, self.publication_workspace_id
             )
@@ -245,44 +246,9 @@ class ConversationHandler:
                 refresh_thread_ttl(
                     self.redis, self.vat_number, self.publication_workspace_id
                 )
-
-        # Create or retrieve assistant
-        if self.thread_id:
-            # Thread exists, check if we need to set up files
-            self.assistant_id = await self.setup_assistant()
-        else:
-            # New conversation
-            await self.websocket.send_json(
-                {
-                    "type": WSMessageType.RESPONSE_CHUNK,
-                    "data": {"content": "Setting up conversation...", "done": False},
-                }
-            )
-
-            # Set up assistant and vector store
-            self.assistant_id = await self.setup_assistant()
-
-            # Create new thread
-            thread = self.client.beta.threads.create()
-            self.thread_id = thread.id
-
-            # Store thread ID in Redis
-            store_thread_id(
-                self.redis,
-                self.vat_number,
-                self.publication_workspace_id,
-                self.thread_id,
-            )
-
-            await self.websocket.send_json(
-                {
-                    "type": WSMessageType.RESPONSE_CHUNK,
-                    "data": {
-                        "content": "Setup complete, ready for messages.",
-                        "done": False,
-                    },
-                }
-            )
+        except Exception as e:
+            logging.warning(f"Error retrieving thread ID: {str(e)}")
+            # Continue without the thread ID - we'll create a new one
 
     async def setup_assistant(self) -> str:
         """Set up the assistant with vector store for file search"""

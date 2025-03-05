@@ -388,4 +388,7 @@ async def get_publication_workspace_forum(
         headers=headers,
     )
 
+    if r.status_code != 200:
+        return {}
+
     return r.json()

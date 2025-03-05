@@ -38,53 +38,24 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
             cache_key = f"{key_prefix}:{entity_id}"
 
             # Get appropriate Redis client based on data type
-            if is_document_func:
-                # Use binary client for document data
+            if is_document_func or "forum" in key_prefix:
+                # Use binary client for document data and forum data
                 redis_client = get_binary_redis_client()
             else:
-                # Use text client for forum, agent, etc.
+                # Use text client for other data types
                 redis_client = get_redis_client()
 
             # Try to get from cache
-            if is_document_func:
-                # Handle binary file data
-                try:
-                    raw_data = redis_client.get(cache_key)
-                    if raw_data:
-                        serialized_data = pickle.loads(raw_data)
-
-                        # Reconstruct BytesIO objects
-                        reconstructed_files = {}
-                        for file_name, file_data in serialized_data.items():
-                            try:
-                                bytes_io = io.BytesIO(file_data["content"])
-                                bytes_io.name = file_data["name"]
-                                reconstructed_files[file_name] = bytes_io
-                            except (KeyError, TypeError) as e:
-                                logging.warning(
-                                    f"Error reconstructing file {file_name}: {str(e)}"
-                                )
-                                continue
-
-                        if reconstructed_files:
-                            return reconstructed_files
-                except Exception as e:
-                    logging.warning(
-                        f"Document cache retrieval failed for {cache_key}: {str(e)}"
-                    )
-            else:
-                # Handle forum and all other data types
-                try:
-                    raw_data = redis_client.get(cache_key)
-                    if raw_data:
-                        # For text client, raw_data is already a string that needs encoding
-                        return pickle.loads(
-                            raw_data.encode("utf-8")
-                            if isinstance(raw_data, str)
-                            else raw_data
-                        )
-                except Exception as e:
-                    logging.warning(f"Cache retrieval failed for {cache_key}: {str(e)}")
+            try:
+                raw_data = redis_client.get(cache_key)
+                if raw_data:
+                    try:
+                        # Always use pickle.loads directly on raw_data for binary data
+                        return pickle.loads(raw_data)
+                    except Exception as e:
+                        logging.warning(f"Error unpickling data from cache: {str(e)}")
+            except Exception as e:
+                logging.warning(f"Cache retrieval failed for {cache_key}: {str(e)}")
 
             # Cache miss or error - call the original function
             result = await func(*args, **kwargs)
@@ -158,8 +129,13 @@ def get_thread_id(
     """Get thread ID from Redis if it exists"""
     thread_key = f"thread:{vat_number}:{publication_workspace_id}"
     thread_id = redis.get(thread_key)
-    return thread_id.decode() if thread_id else None
-
+    
+    # Check if thread_id is bytes or string and handle accordingly
+    if thread_id:
+        if isinstance(thread_id, bytes):
+            return thread_id.decode('utf-8')
+        return thread_id
+    return None
 
 def store_thread_id(
     redis: Redis, vat_number: str, publication_workspace_id: str, thread_id: str
