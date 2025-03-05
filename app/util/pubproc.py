@@ -95,9 +95,7 @@ async def process_publication(
             client=client, pub=pub, filesmap=filesmap, session=session
         )
     elif pub.vault_submission_deadline is None:
-        await process_award_publication(
-            client=client, pub=pub, filesmap=filesmap, session=session
-        )
+        await process_award_publication(client=client, pub=pub, session=session)
 
 
 async def update_existing_publication(
