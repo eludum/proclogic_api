@@ -1,21 +1,24 @@
 import httpx
+
 from app.config.settings import Settings
 from app.models.company_models import Company
 from app.models.publication_models import Publication
 from app.schemas.company_schemas import CompanySchema, SectorSchema
 from app.schemas.publication_out_schemas import PublicationOut
 from app.schemas.publication_schemas import CompanyPublicationMatchSchema
-from app.util.nuts_codes import get_nuts_code_as_str
-from app.util.cpv_codes import get_cpv_sector_and_description
-from app.util.pubproc import get_publication_workspace_documents, get_publication_workspace_forum
-
 from app.util.converter import get_descr_as_str, get_org_name_as_str
-
+from app.util.cpv_codes import get_cpv_sector_and_description
+from app.util.nuts_codes import get_nuts_code_as_str
+from app.util.pubproc import (
+    get_publication_workspace_documents,
+    get_publication_workspace_forum,
+)
 
 settings = Settings()
 
+
 async def convert_publications_to_out_schema_list_free(
-    publication: Publication
+    publication: Publication,
 ) -> PublicationOut:
 
     pub_out = PublicationOut(
@@ -29,30 +32,31 @@ async def convert_publications_to_out_schema_list_free(
         organisation=get_org_name_as_str(publication.organisation.organisation_names),
         cpv_code=publication.cpv_main_code_code,
         cpv_additional_codes=[
-            cpv_code.code for cpv_code in publication.cpv_additional_codes],
+            cpv_code.code for cpv_code in publication.cpv_additional_codes
+        ],
         region=[
             get_nuts_code_as_str(nuts_code) for nuts_code in publication.nuts_codes
         ],
-        sector=get_cpv_sector_and_description(publication.cpv_main_code.code, language="nl"),
+        sector=get_cpv_sector_and_description(
+            publication.cpv_main_code.code, language="nl"
+        ),
     )
 
     return pub_out
 
+
 async def convert_publications_to_out_schema_list_paid(
     company: Company, publication: Publication
 ) -> PublicationOut:
-    
-    # Get recommendation status directly from the match table instead of using the property
+
     is_recommended = False
     is_saved = False
-    
-    # Check company_matches directly
     for match in publication.company_matches:
         if match.company_vat_number == company.vat_number:
             is_recommended = match.is_recommended
             is_saved = match.is_saved
             break
-    
+
     pub_out = PublicationOut(
         title=get_descr_as_str(publication.dossier.titles),
         workspace_id=publication.publication_workspace_id,
@@ -66,25 +70,31 @@ async def convert_publications_to_out_schema_list_paid(
         organisation=get_org_name_as_str(publication.organisation.organisation_names),
         cpv_code=publication.cpv_main_code_code,
         cpv_additional_codes=[
-            cpv_code.code for cpv_code in publication.cpv_additional_codes],
+            cpv_code.code for cpv_code in publication.cpv_additional_codes
+        ],
         accreditations=publication.dossier.accreditations,
         region=[
             get_nuts_code_as_str(nuts_code) for nuts_code in publication.nuts_codes
         ],
-        sector=get_cpv_sector_and_description(publication.cpv_main_code.code, language="nl"),
+        sector=get_cpv_sector_and_description(
+            publication.cpv_main_code.code, language="nl"
+        ),
     )
 
     return pub_out
 
+
 async def convert_publication_to_out_schema_details_free(
-    publication: Publication
+    publication: Publication,
 ) -> PublicationOut:
-    
-    # TODO: add publication docs and value (get from workspace niffo) and isactive check date, lots, in your sector
 
     async with httpx.AsyncClient() as client:
-        documents = await get_publication_workspace_documents(client, publication.publication_workspace_id)
-        forum = await get_publication_workspace_forum(client, publication.publication_workspace_id)
+        documents = await get_publication_workspace_documents(
+            client, publication.publication_workspace_id
+        )
+        forum = await get_publication_workspace_forum(
+            client, publication.publication_workspace_id
+        )
 
     pub_out = PublicationOut(
         title=get_descr_as_str(publication.dossier.titles),
@@ -97,14 +107,17 @@ async def convert_publication_to_out_schema_details_free(
         organisation=get_org_name_as_str(publication.organisation.organisation_names),
         cpv_code=publication.cpv_main_code_code,
         cpv_additional_codes=[
-            cpv_code.code for cpv_code in publication.cpv_additional_codes],
+            cpv_code.code for cpv_code in publication.cpv_additional_codes
+        ],
         accreditations=publication.dossier.accreditations,
         region=[
             get_nuts_code_as_str(nuts_code) for nuts_code in publication.nuts_codes
         ],
-        sector=get_cpv_sector_and_description(publication.cpv_main_code.code, language="nl"),
-        documents=documents, # TODO: limit these two
-        forum=forum
+        sector=get_cpv_sector_and_description(
+            publication.cpv_main_code.code, language="nl"
+        ),
+        documents=documents,  # TODO: limit these two
+        forum=forum,
     )
 
     return pub_out
@@ -113,9 +126,9 @@ async def convert_publication_to_out_schema_details_free(
 async def convert_publication_to_out_schema_details_paid(
     publication: Publication, company: Company
 ) -> PublicationOut:
-    
-    # TODO: add publication docs and value (get from workspace niffo) and isactive check date, lots, in your sector
 
+    is_recommended = False
+    is_saved = False
     for match in publication.company_matches:
         if match.company_vat_number == company.vat_number:
             is_recommended = match.is_recommended
@@ -123,8 +136,10 @@ async def convert_publication_to_out_schema_details_paid(
             break
 
     async with httpx.AsyncClient() as client:
-        documents = await get_publication_workspace_documents(client, publication.publication_workspace_id)
-        forum = await get_publication_workspace_forum(client, publication.publication_workspace_id)
+        documents = await get_publication_workspace_documents(
+            client, publication.publication_workspace_id
+        )
+        forum = None
 
     pub_out = PublicationOut(
         title=get_descr_as_str(publication.dossier.titles),
@@ -139,17 +154,22 @@ async def convert_publication_to_out_schema_details_paid(
         organisation=get_org_name_as_str(publication.organisation.organisation_names),
         cpv_code=publication.cpv_main_code_code,
         cpv_additional_codes=[
-            cpv_code.code for cpv_code in publication.cpv_additional_codes],
+            cpv_code.code for cpv_code in publication.cpv_additional_codes
+        ],
         accreditations=publication.dossier.accreditations,
         is_recommended=is_recommended,
         is_saved=is_saved,
         region=[
             get_nuts_code_as_str(nuts_code) for nuts_code in publication.nuts_codes
         ],
-        sector=get_cpv_sector_and_description(publication.cpv_main_code.code, language="nl"),
-        estimated_value=publication.estimated_value,
+        sector=get_cpv_sector_and_description(
+            publication.cpv_main_code.code, language="nl"
+        ),
+        estimated_value=(
+            publication.estimated_value if publication.estimated_value else 0
+        ),
         documents=documents,
-        forum=forum
+        forum=forum,
     )
 
     return pub_out
@@ -157,16 +177,14 @@ async def convert_publication_to_out_schema_details_paid(
 
 async def convert_company_to_schema(company: Company) -> CompanySchema:
     """Convert a SQLAlchemy Company model instance to a Pydantic CompanySchema."""
+
     return CompanySchema(
         vat_number=company.vat_number,
         subscription=company.subscription,
         name=company.name,
         emails=company.emails,
         interested_sectors=[
-            SectorSchema(
-                sector=sector.sector,
-                cpv_codes=sector.cpv_codes
-            )
+            SectorSchema(sector=sector.sector, cpv_codes=sector.cpv_codes)
             for sector in company.interested_sectors
         ],
         accreditations=company.accreditations,
@@ -181,7 +199,7 @@ async def convert_company_to_schema(company: Company) -> CompanySchema:
                 is_recommended=match.is_recommended,
                 is_saved=match.is_saved,
                 is_viewed=match.is_viewed,
-                match_percentage=match.match_percentage
+                match_percentage=match.match_percentage,
             )
             for match in company.publication_matches
         ],

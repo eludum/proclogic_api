@@ -393,25 +393,41 @@ def get_or_create_publication(
 def get_publication_by_workspace_id(
     publication_workspace_id: str, session: Session
 ) -> Optional[Publication]:
-    """Retrieve Publication by its workspace ID with all related data."""
-    return (
-        session.query(Publication)
-        .filter(Publication.publication_workspace_id == publication_workspace_id)
-        .options(
-            joinedload(Publication.cpv_main_code),
-            joinedload(Publication.dossier).joinedload(Dossier.descriptions),
-            joinedload(Publication.dossier).joinedload(Dossier.titles),
-            joinedload(Publication.dossier).joinedload(Dossier.enterprise_categories),
-            joinedload(Publication.organisation).joinedload(
-                Organisation.organisation_names
-            ),
-            joinedload(Publication.cpv_additional_codes),
-            joinedload(Publication.lots).joinedload(Lot.descriptions),
-            joinedload(Publication.lots).joinedload(Lot.titles),
-            joinedload(Publication.company_matches),
+    """Retrieve Publication by its workspace ID with all related data, safely closing the session."""
+    try:
+        publication = (
+            session.query(Publication)
+            .filter(Publication.publication_workspace_id == publication_workspace_id)
+            .options(
+                joinedload(Publication.cpv_main_code),
+                joinedload(Publication.dossier).joinedload(Dossier.descriptions),
+                joinedload(Publication.dossier).joinedload(Dossier.titles),
+                joinedload(Publication.dossier).joinedload(Dossier.enterprise_categories),
+                joinedload(Publication.organisation).joinedload(
+                    Organisation.organisation_names
+                ),
+                joinedload(Publication.cpv_additional_codes),
+                joinedload(Publication.lots).joinedload(Lot.descriptions),
+                joinedload(Publication.lots).joinedload(Lot.titles),
+                joinedload(Publication.company_matches),
+            )
+            .first()
         )
-        .first()
-    )
+        
+        # Force loading of all relationships before closing session
+        if publication:
+            # Access relationships to load them
+            _ = publication.company_matches
+            _ = publication.cpv_additional_codes
+            _ = publication.lots
+            
+        return publication
+    except Exception as e:
+        logging.error("Error retrieving publication: %s", e)
+        return None
+    finally:
+        session.close()
+
 
 
 def publication_exists(publication_workspace_id: str, session: Session) -> bool:

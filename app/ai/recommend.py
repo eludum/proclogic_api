@@ -30,7 +30,7 @@ def get_recommendation(
         messages=[
             {
                 "role": "system",
-                "content": "You are a public procurement ranking system designed to determine whether a procurement opportunity is a good fit for a specific company. Your response must be a JSON with keys: match (True/False, True if match_percentage > 25%) and match_percentage (float between 0 and 100).",
+                "content": "You are a public procurement ranking system designed to determine whether a procurement opportunity is a good fit for a specific company. Your response must be a JSON with keys: match (True/False) and match_percentage (float between 0 and 100).",
             },
             {
                 "role": "user",
@@ -46,7 +46,7 @@ def get_recommendation(
                 ),
             },
         ],
-        response_format={ "type": "json_object" }
+        response_format={"type": "json_object"},
     )
     match_result = json.loads(completion.choices[0].message.content)
     match = match_result["match"]
@@ -70,7 +70,7 @@ def summarize_publication_award(xml: str, client: OpenAI = None) -> dict:
                 "content": f"The XML of the publication is: {xml}",
             },
         ],
-        response_format={ "type": "json_object" }
+        response_format={"type": "json_object"},
     )
     return json.loads(completion.choices[0].message.content)
 
@@ -124,6 +124,7 @@ def summarize_publication_with_files(
                     tuple(settings.openai_vector_store_accepted_formats)
                 )
             }
+
             vector_store = client.beta.vector_stores.create(
                 name=f"publication_workspace_{publication.publication_workspace_id}"
             )
@@ -140,15 +141,14 @@ def summarize_publication_with_files(
             assistant = client.beta.assistants.update(
                 assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
                 tool_resources={"file_search": {"vector_store_ids": [vector_store.id]}},
-                response_format={ "type": "json_object" }
-
+                response_format={"type": "json_object"},
             )
 
         else:
             assistant = client.beta.assistants.update(
                 assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
                 tool_resources={"file_search": {"vector_store_ids": []}},
-                response_format={ "type": "json_object" }
+                response_format={"type": "json_object"},
             )
 
         thread = client.beta.threads.create(
@@ -179,11 +179,11 @@ def summarize_publication_with_files(
         else:
             # If not in code block format, try to parse the entire text
             json_content = response_text
-                    
+
         message_content = json.loads(json_content)
         summary = message_content.get("summary", "Geen samenvatting beschikbaar.")
         estimated_value = message_content.get("estimated_value", 0)
-        
+
         citations = [
             f"[{i}] {client.files.retrieve(ann['file_citation']['file_id']).filename}"
             for i, ann in enumerate(messages[0].content[0].text.annotations)
@@ -194,4 +194,3 @@ def summarize_publication_with_files(
     except Exception as e:
         logging.error(f"Failed to summarize files: {e}")
         return None, None, None
-

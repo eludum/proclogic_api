@@ -1,19 +1,18 @@
-from typing import List, Optional
 from datetime import date
-from fastapi import APIRouter, HTTPException, Depends, Query, Path
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.security import HTTPBearer
 
-from app.config.settings import Settings
-from app.schemas.publication_out_schemas import PublicationOut
-from app.config.postgres import get_session
 import app.crud.company as crud_company
 import app.crud.publication as crud_publication
-from app.crud.mapper import (
-    convert_publications_to_out_schema_list_paid,
-    convert_publication_to_out_schema_details_paid,
-    convert_publications_to_out_schema_list_free,
-    convert_publication_to_out_schema_details_free,
-)
+from app.config.postgres import get_session
+from app.config.settings import Settings
+from app.crud.mapper import (convert_publication_to_out_schema_details_free,
+                             convert_publication_to_out_schema_details_paid,
+                             convert_publications_to_out_schema_list_free,
+                             convert_publications_to_out_schema_list_paid)
+from app.schemas.publication_out_schemas import PublicationOut
 from app.util.clerk import AuthUser, get_auth_user
 
 settings = Settings()

@@ -14,12 +14,9 @@ from sqlalchemy.orm import Session
 
 import app.crud.company as crud_company
 import app.crud.publication as crud_publication
-from app.ai.recommend import (
-    get_recommendation,
-    summarize_publication_award,
-    summarize_publication_with_files,
-    summarize_publication_without_files,
-)
+from app.ai.recommend import (get_recommendation, summarize_publication_award,
+                              summarize_publication_with_files,
+                              summarize_publication_without_files)
 from app.config.postgres import get_session
 from app.config.settings import Settings
 from app.schemas.company_schemas import CompanyPublicationMatchSchema
@@ -181,7 +178,7 @@ async def enrich_publication_with_ai(
                 publication=pub, xml=xml_content, filesmap=filesmap
             )
             pub.ai_summary_with_documents = summary + citations
-            pub.estimated_value = float(estimated_value)
+            pub.estimated_value = int(estimated_value)
         except Exception as e:
             logging.error(f"Error in summarize_publication_with_files: {e}")
             pub.ai_summary_with_documents = "Error processing documents."

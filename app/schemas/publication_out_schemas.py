@@ -27,7 +27,7 @@ class PublicationOut(BaseModel):
 
     # Additional information
     accreditations: Optional[dict] = None
-    estimated_value: str = None
+    estimated_value: int = 0
     documents: Optional[dict] = None
 
     # User-specific information
