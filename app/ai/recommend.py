@@ -18,7 +18,6 @@ def get_recommendation(
     client: OpenAI = None,
 ) -> dict:
     client = client or get_openai_client()
-    print("do i even get here")
     publication_info = PublicationInfo()
     publication_info.convert_publication_to_str(publication)
 
