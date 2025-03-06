@@ -315,18 +315,28 @@ class ConversationHandler:
                     # Upload files to vector store - ensure we have proper file objects
                     file_objects = []
                     for file_name, file_data in filtered_filesmap.items():
-                        # Make sure each file is a proper file-like object
-                        if not hasattr(file_data, 'read') or not hasattr(file_data, 'seek'):
-                            # If this is a dict from cache, reconstruct the file-like object
+                        try:
+                            # Always create a new BytesIO object regardless of input type
+                            byte_io = None
+                            
                             if isinstance(file_data, dict) and 'content' in file_data:
+                                # Handle dictionary from cache
                                 byte_io = BytesIO(file_data['content'])
                                 byte_io.name = file_data.get('name', file_name)
+                            elif hasattr(file_data, 'read') and hasattr(file_data, 'seek'):
+                                # Create a new BytesIO from any file-like object
+                                file_data.seek(0)
+                                content = file_data.read()
+                                byte_io = BytesIO(content)
+                                byte_io.name = getattr(file_data, 'name', file_name)
+                            
+                            if byte_io:
                                 file_objects.append(byte_io)
-                        else:
-                            # Reset the file pointer to the beginning
-                            file_data.seek(0)
-                            file_objects.append(file_data)
-                    
+                            else:
+                                logging.warning(f"Skipping invalid file: {file_name}")
+                                
+                        except Exception as e:
+                            logging.error(f"Error processing file {file_name}: {str(e)}")
                     # Only proceed if we have valid file objects
                     if file_objects:
                         file_batch = (

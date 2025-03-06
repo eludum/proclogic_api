@@ -71,7 +71,7 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
                                 # Save current position
                                 current_pos = file_obj.tell()
                                 # Read all content
-                                file_obj.seek(0)
+                                file_obj.seek(0, io.SEEK_SET)
                                 content = file_obj.read()
                                 # Restore position
                                 file_obj.seek(current_pos)
