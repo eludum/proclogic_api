@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import time
 import uuid
 from io import BytesIO
 from typing import List, Optional, Tuple
@@ -11,13 +10,11 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
-    Query,
     WebSocket,
     WebSocketDisconnect,
 )
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from openai import OpenAI
-from sqlalchemy.orm import Session
 
 import app.crud.company as crud_company
 import app.crud.conversation as crud_conversation
@@ -489,27 +486,12 @@ async def websocket_conversation(
 
         # Track if a run is in progress to prevent concurrent requests
         is_processing = False
+        run_lock = asyncio.Lock()
 
         # Start listening for messages
         while True:
             try:
-                # Check if we're already processing a message
-                if is_processing:
-                    await websocket.send_json(
-                        {
-                            "type": "error",
-                            "data": {
-                                "detail": "Still processing your previous message. Please wait."
-                            },
-                        }
-                    )
-                    # Try to receive the next message, but with a shorter timeout
-                    raw_message = await asyncio.wait_for(
-                        websocket.receive_text(), timeout=5.0
-                    )
-                    continue
-
-                # Normal message flow
+                # Normal message flow - we don't block receiving messages, but we'll notify the user if we're already processing
                 raw_message = await asyncio.wait_for(
                     websocket.receive_text(), timeout=300.0
                 )  # 5-minute timeout
@@ -550,198 +532,215 @@ async def websocket_conversation(
                     )
                     continue
 
-                # Mark as processing
-                is_processing = True
-
-                # Start stream response
-                await websocket.send_json(
-                    {
-                        "type": "stream_start",
-                        "data": {"conversation_id": conversation_id},
-                    }
-                )
-                logging.info(f"Connection {connection_id}: Stream started for message")
-
-                # Process in new session since WebSocket connection is long-lived
-                with get_session() as session:
-                    # Add user message to database
-                    crud_conversation.add_message(
-                        conversation_id=conversation_id,
-                        role="user",
-                        content=user_message,
-                        session=session,
-                    )
-                    logging.info(
-                        f"Connection {connection_id}: Saved user message to database"
-                    )
-
-                    # Get fresh data
-                    company_refresh = crud_company.get_company_by_email(
-                        email=auth_user.email, session=session
-                    )
-                    publication_refresh = (
-                        crud_publication.get_publication_by_workspace_id(
-                            publication_workspace_id=publication_workspace_id,
-                            session=session,
-                        )
-                    )
-                    conversation_refresh = crud_conversation.get_conversation_by_id(
-                        conversation_id=conversation_id, session=session
-                    )
-                    logging.info(
-                        f"Connection {connection_id}: Refreshed database objects"
-                    )
-
-                # Process with AI and stream response - with timeout protection
-                response_chunks = []
-                citations = []
-                ai_processing_started = False
-
-                try:
-                    # Stream the AI response with a timeout wrapper
-                    async def stream_with_timeout():
-                        nonlocal ai_processing_started
-                        async for chunk, citation in stream_ai_response(
-                            conversation=conversation_refresh,
-                            user_message=user_message,
-                            company=company_refresh,
-                            publication=publication_refresh,
-                            client=client,
-                        ):
-                            ai_processing_started = True
-                            yield chunk, citation
-
-                    # Use a timeout for the entire streaming process
-                    streaming_task = asyncio.create_task(
-                        stream_with_timeout().__aiter__().__anext__()
-                    )
-
-                    while True:
-                        try:
-                            # 60-second timeout for each chunk
-                            chunk, citation = await asyncio.wait_for(
-                                streaming_task, timeout=60.0
-                            )
-                            response_chunks.append(chunk)
-                            if citation:
-                                citations.extend(citation)
-
-                            # Send chunk to client
-                            await websocket.send_json(
-                                {"type": "stream_chunk", "data": {"content": chunk}}
-                            )
-                            logging.debug(
-                                f"Connection {connection_id}: Sent chunk of size {len(chunk)}"
-                            )
-
-                            # Start next chunk
-                            streaming_task = asyncio.create_task(
-                                stream_with_timeout().__aiter__().__anext__()
-                            )
-
-                            # Small delay to prevent flooding
-                            await asyncio.sleep(0.01)
-                        except StopAsyncIteration:
-                            # All chunks have been processed
-                            logging.info(
-                                f"Connection {connection_id}: AI stream completed normally"
-                            )
-                            break
-                        except asyncio.TimeoutError:
-                            # Chunk timeout - stop processing but handle what we've got
-                            logging.warning(
-                                f"Connection {connection_id}: Timeout waiting for AI response chunk"
-                            )
-                            if not ai_processing_started:
-                                # If we haven't received anything yet, this is a fatal error
-                                await websocket.send_json(
-                                    {
-                                        "type": "error",
-                                        "data": {
-                                            "detail": "AI processing timed out without producing any response"
-                                        },
-                                    }
-                                )
-                                # Don't save an empty message
-                                break
-                            else:
-                                # We got partial results - warn but continue with what we have
-                                await websocket.send_json(
-                                    {
-                                        "type": "stream_chunk",
-                                        "data": {
-                                            "content": " [Response truncated due to processing timeout]"
-                                        },
-                                    }
-                                )
-                                response_chunks.append(
-                                    " [Response truncated due to processing timeout]"
-                                )
-                                break
-
-                    # Combine all chunks
-                    full_response = "".join(response_chunks)
-                    citations_text = "\n".join(citations) if citations else None
-
-                    if full_response:  # Only save if we have something to save
-                        # Save the full response in database
-                        with get_session() as session:
-                            crud_conversation.add_message(
-                                conversation_id=conversation_id,
-                                role="assistant",
-                                content=full_response,
-                                citations=citations_text,
-                                session=session,
-                            )
-                            logging.info(
-                                f"Connection {connection_id}: Saved AI response to database"
-                            )
-
-                        # Send complete message
-                        await websocket.send_json(
-                            {
-                                "type": "stream_end",
-                                "data": {
-                                    "content": full_response,
-                                    "citations": citations,
-                                },
-                            }
-                        )
-                        logging.info(
-                            f"Connection {connection_id}: Sent stream_end with response of size {len(full_response)}"
-                        )
-
-                except Exception as ai_error:
-                    logging.error(
-                        f"Connection {connection_id}: Error in AI processing: {str(ai_error)}"
-                    )
-                    logging.exception(ai_error)  # Log the full exception with traceback
+                # Check if already processing with lock
+                if is_processing:
                     await websocket.send_json(
                         {
-                            "type": "error",
+                            "type": "info",
                             "data": {
-                                "detail": f"Error processing response: {str(ai_error)}"
+                                "detail": "Verwerking van je vorige bericht is nog bezig. Het nieuwe bericht wordt in de wachtrij geplaatst."
                             },
                         }
                     )
 
-                    # Try to save an error message if we have a connection ID
-                    if conversation_id:
-                        try:
+                # Wait for lock to be released if processing
+                async with run_lock:
+                    # Set processing flag
+                    is_processing = True
+
+                    # Start stream response
+                    await websocket.send_json(
+                        {
+                            "type": "stream_start",
+                            "data": {"conversation_id": conversation_id},
+                        }
+                    )
+                    logging.info(
+                        f"Connection {connection_id}: Stream started for message"
+                    )
+
+                    # Process in new session since WebSocket connection is long-lived
+                    with get_session() as session:
+                        # Add user message to database
+                        crud_conversation.add_message(
+                            conversation_id=conversation_id,
+                            role="user",
+                            content=user_message,
+                            session=session,
+                        )
+                        logging.info(
+                            f"Connection {connection_id}: Saved user message to database"
+                        )
+
+                        # Get fresh data
+                        company_refresh = crud_company.get_company_by_email(
+                            email=auth_user.email, session=session
+                        )
+                        publication_refresh = (
+                            crud_publication.get_publication_by_workspace_id(
+                                publication_workspace_id=publication_workspace_id,
+                                session=session,
+                            )
+                        )
+                        conversation_refresh = crud_conversation.get_conversation_by_id(
+                            conversation_id=conversation_id, session=session
+                        )
+                        logging.info(
+                            f"Connection {connection_id}: Refreshed database objects"
+                        )
+
+                    # Process with AI and stream response - with timeout protection
+                    response_chunks = []
+                    citations = []
+                    ai_processing_started = False
+
+                    try:
+                        # Stream the AI response with a timeout wrapper
+                        async def stream_with_timeout():
+                            nonlocal ai_processing_started
+                            async for chunk, citation in stream_ai_response(
+                                conversation=conversation_refresh,
+                                user_message=user_message,
+                                company=company_refresh,
+                                publication=publication_refresh,
+                                client=client,
+                            ):
+                                ai_processing_started = True
+                                yield chunk, citation
+
+                        # Use a timeout for the entire streaming process
+                        streaming_task = asyncio.create_task(
+                            stream_with_timeout().__aiter__().__anext__()
+                        )
+
+                        while True:
+                            try:
+                                # 60-second timeout for each chunk
+                                chunk, citation = await asyncio.wait_for(
+                                    streaming_task, timeout=60.0
+                                )
+                                response_chunks.append(chunk)
+                                if citation:
+                                    citations.extend(citation)
+
+                                # Send chunk to client
+                                await websocket.send_json(
+                                    {"type": "stream_chunk", "data": {"content": chunk}}
+                                )
+                                logging.debug(
+                                    f"Connection {connection_id}: Sent chunk of size {len(chunk)}"
+                                )
+
+                                # Start next chunk
+                                streaming_task = asyncio.create_task(
+                                    stream_with_timeout().__aiter__().__anext__()
+                                )
+
+                                # Small delay to prevent flooding
+                                await asyncio.sleep(0.01)
+                            except StopAsyncIteration:
+                                # All chunks have been processed
+                                logging.info(
+                                    f"Connection {connection_id}: AI stream completed normally"
+                                )
+                                break
+                            except asyncio.TimeoutError:
+                                # Chunk timeout - stop processing but handle what we've got
+                                logging.warning(
+                                    f"Connection {connection_id}: Timeout waiting for AI response chunk"
+                                )
+                                if not ai_processing_started:
+                                    # If we haven't received anything yet, this is a fatal error
+                                    await websocket.send_json(
+                                        {
+                                            "type": "error",
+                                            "data": {
+                                                "detail": "AI processing timed out without producing any response"
+                                            },
+                                        }
+                                    )
+                                    # Don't save an empty message
+                                    break
+                                else:
+                                    # We got partial results - warn but continue with what we have
+                                    await websocket.send_json(
+                                        {
+                                            "type": "stream_chunk",
+                                            "data": {
+                                                "content": " [Response truncated due to processing timeout]"
+                                            },
+                                        }
+                                    )
+                                    response_chunks.append(
+                                        " [Response truncated due to processing timeout]"
+                                    )
+                                    break
+
+                        # Combine all chunks
+                        full_response = "".join(response_chunks)
+                        citations_text = "\n".join(citations) if citations else None
+
+                        if full_response:  # Only save if we have something to save
+                            # Save the full response in database
                             with get_session() as session:
                                 crud_conversation.add_message(
                                     conversation_id=conversation_id,
                                     role="assistant",
-                                    content="Sorry, an error occurred while processing your request. Please try again.",
+                                    content=full_response,
+                                    citations=citations_text,
                                     session=session,
                                 )
-                        except Exception as save_error:
-                            logging.error(
-                                f"Connection {connection_id}: Failed to save error message: {str(save_error)}"
+                                logging.info(
+                                    f"Connection {connection_id}: Saved AI response to database"
+                                )
+
+                            # Send complete message
+                            await websocket.send_json(
+                                {
+                                    "type": "stream_end",
+                                    "data": {
+                                        "content": full_response,
+                                        "citations": citations,
+                                    },
+                                }
+                            )
+                            logging.info(
+                                f"Connection {connection_id}: Sent stream_end with response of size {len(full_response)}"
                             )
 
-                # Mark as no longer processing
-                is_processing = False
+                    except Exception as ai_error:
+                        logging.error(
+                            f"Connection {connection_id}: Error in AI processing: {str(ai_error)}"
+                        )
+                        logging.exception(
+                            ai_error
+                        )  # Log the full exception with traceback
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "data": {
+                                    "detail": f"Error processing response: {str(ai_error)}"
+                                },
+                            }
+                        )
+
+                        # Try to save an error message if we have a connection ID
+                        if conversation_id:
+                            try:
+                                with get_session() as session:
+                                    crud_conversation.add_message(
+                                        conversation_id=conversation_id,
+                                        role="assistant",
+                                        content="Sorry, an error occurred while processing your request. Please try again.",
+                                        session=session,
+                                    )
+                            except Exception as save_error:
+                                logging.error(
+                                    f"Connection {connection_id}: Failed to save error message: {str(save_error)}"
+                                )
+
+                    # Mark as no longer processing - always runs even if there were errors
+                    is_processing = False
 
             except asyncio.TimeoutError:
                 # Client hasn't sent a message for a long time
@@ -918,7 +917,51 @@ async def stream_ai_response(
                 session=session,
             )
 
-    # Add message to thread ONLY ONCE before creating the run
+    # Check for any existing runs and wait for them to complete
+    try:
+        runs = client.beta.threads.runs.list(thread_id=thread_id)
+        active_runs = [
+            r
+            for r in runs.data
+            if r.status in ["queued", "in_progress", "requires_action"]
+        ]
+
+        if active_runs:
+            logging.info(
+                f"Stream AI: Found {len(active_runs)} active runs, waiting for completion"
+            )
+            active_run = active_runs[0]
+
+            # Poll until run completes or fails
+            max_wait_attempts = 30
+            wait_attempts = 0
+            while wait_attempts < max_wait_attempts:
+                run_status = client.beta.threads.runs.retrieve(
+                    thread_id=thread_id, run_id=active_run.id
+                )
+                status = run_status.status
+                logging.info(f"Stream AI: Existing run status: {status}")
+
+                if status in ["completed", "failed", "cancelled", "expired"]:
+                    logging.info(
+                        f"Stream AI: Existing run completed with status: {status}"
+                    )
+                    break
+
+                await asyncio.sleep(2)
+                wait_attempts += 1
+
+            if wait_attempts >= max_wait_attempts:
+                logging.error(
+                    f"Stream AI: Timeout waiting for run {active_run.id} to complete"
+                )
+                yield "Sorry, er is een probleem met het verwerken van je bericht. Probeer het later nog eens.", []
+                return
+    except Exception as e:
+        logging.error(f"Stream AI: Error checking for existing runs: {e}")
+        # Continue anyway as this is a non-critical error
+
+    # Add message to thread
     logging.info(f"Stream AI: Adding message to thread {thread_id}")
     client.beta.threads.messages.create(
         thread_id=thread_id, role="user", content=user_message
@@ -935,108 +978,105 @@ async def stream_ai_response(
     # Citations to be collected
     text_citations = []
 
-    try:
-        # First yield an initial placeholder to start the stream
-        yield "Denken...", []
+    # First yield an initial placeholder to start the stream
+    yield "Denken...", []
 
-        # Poll until the run is completed
-        completed = False
-        error_count = 0
-        max_errors = 5
+    # Poll until the run is completed
+    completed = False
+    error_count = 0
+    max_errors = 5
 
-        while not completed and error_count < max_errors:
-            try:
-                await asyncio.sleep(1)  # Poll every second
+    while not completed and error_count < max_errors:
+        try:
+            await asyncio.sleep(1)  # Poll every second
 
-                # Check run status
-                run_status = client.beta.threads.runs.retrieve(
-                    thread_id=thread_id, run_id=run_id
+            # Check run status
+            run_status = client.beta.threads.runs.retrieve(
+                thread_id=thread_id, run_id=run_id
+            )
+
+            status = run_status.status
+            logging.info(f"Stream AI: Run status: {status}")
+
+            if status == "completed":
+                completed = True
+
+                # Get the response messages after run is complete
+                messages = list(
+                    client.beta.threads.messages.list(
+                        thread_id=thread_id, order="desc", limit=1
+                    )
                 )
 
-                status = run_status.status
-                logging.info(f"Stream AI: Run status: {status}")
+                if messages and messages[0].content and messages[0].content[0].text:
+                    message_content = messages[0].content[0].text
+                    response_text = message_content.value
 
-                if status == "completed":
-                    completed = True
+                    # Process citations
+                    annotations = message_content.annotations
+                    for index, annotation in enumerate(annotations):
+                        if file_citation := getattr(annotation, "file_citation", None):
+                            try:
+                                cited_file = client.files.retrieve(
+                                    file_citation.file_id
+                                )
+                                text_citations.append(
+                                    f"[{index}] {cited_file.filename}"
+                                )
+                            except Exception as e:
+                                logging.error(f"Error retrieving citation: {e}")
+                                text_citations.append(
+                                    f"[{index}] Reference to document"
+                                )
 
-                    # Get the response messages after run is complete
-                    messages = list(
-                        client.beta.threads.messages.list(
-                            thread_id=thread_id, order="desc", limit=1
-                        )
+                    # Yield the complete response
+                    logging.info(
+                        f"Stream AI: Yielding complete response of length {len(response_text)}"
                     )
+                    yield response_text, text_citations
+                else:
+                    logging.error(
+                        "Stream AI: No message content found after completion"
+                    )
+                    yield "Sorry, ik kon geen antwoord genereren.", []
 
-                    if messages and messages[0].content and messages[0].content[0].text:
-                        message_content = messages[0].content[0].text
-                        response_text = message_content.value
+            elif status == "failed":
+                error_message = "Er is een fout opgetreden"
+                if hasattr(run_status, "last_error") and run_status.last_error:
+                    error_message = run_status.last_error.message
+                logging.error(f"Stream AI: Run failed: {error_message}")
+                yield f"Sorry, er is een fout opgetreden: {error_message}", []
+                break
 
-                        # Process citations
-                        annotations = message_content.annotations
-                        for index, annotation in enumerate(annotations):
-                            if file_citation := getattr(
-                                annotation, "file_citation", None
-                            ):
-                                try:
-                                    cited_file = client.files.retrieve(
-                                        file_citation.file_id
-                                    )
-                                    text_citations.append(
-                                        f"[{index}] {cited_file.filename}"
-                                    )
-                                except Exception as e:
-                                    logging.error(f"Error retrieving citation: {e}")
-                                    text_citations.append(
-                                        f"[{index}] Reference to document"
-                                    )
+            elif status == "cancelled":
+                logging.info("Stream AI: Run was cancelled")
+                yield "De operatie is geannuleerd.", []
+                break
 
-                        # Yield the complete response
-                        logging.info(
-                            f"Stream AI: Yielding complete response of length {len(response_text)}"
-                        )
-                        yield response_text, text_citations
-                    else:
-                        logging.error(
-                            "Stream AI: No message content found after completion"
-                        )
-                        yield "Sorry, I couldn't generate a response.", []
+            elif status == "expired":
+                logging.info("Stream AI: Run expired")
+                yield "De operatie is verlopen.", []
+                break
 
-                elif status == "failed":
-                    error_message = "An error occurred"
-                    if hasattr(run_status, "last_error") and run_status.last_error:
-                        error_message = run_status.last_error.message
-                    logging.error(f"Stream AI: Run failed: {error_message}")
-                    yield f"Sorry, an error occurred: {error_message}", []
-                    break
+            elif status == "requires_action":
+                # Handle action requirements if needed
+                logging.info("Stream AI: Run requires action - not supported yet")
+                yield "Deze operatie vereist aanvullende acties die momenteel niet worden ondersteund.", []
+                break
 
-                elif status == "cancelled":
-                    logging.info("Stream AI: Run was cancelled")
-                    yield "The operation was cancelled.", []
-                    break
+            # Continue polling for queued or in_progress status
 
-                elif status == "expired":
-                    logging.info("Stream AI: Run expired")
-                    yield "The operation timed out.", []
-                    break
+        except Exception as poll_error:
+            error_count += 1
+            logging.error(f"Stream AI: Error polling run status: {poll_error}")
+            await asyncio.sleep(2)  # Wait a bit longer after an error
 
-                elif status == "requires_action":
-                    # Handle action requirements if needed
-                    logging.info("Stream AI: Run requires action - not supported yet")
-                    yield "This operation requires additional actions that aren't currently supported.", []
-                    break
+            if error_count >= max_errors:
+                yield "Sorry, er was een probleem bij het verwerken van je verzoek na meerdere pogingen.", []
 
-                # Check for queued or in_progress status and continue polling
-
-            except Exception as poll_error:
-                error_count += 1
-                logging.error(f"Stream AI: Error polling run status: {poll_error}")
-                await asyncio.sleep(2)  # Wait a bit longer after an error
-
-                if error_count >= max_errors:
-                    yield "Sorry, there was a problem processing your request after multiple attempts.", []
-
-    except Exception as e:
-        logging.error(f"Stream AI: Error in streaming: {e}")
-        yield f"Sorry, an unexpected error occurred: {str(e)}", []
+    # If we get here without yielding a response, provide a fallback
+    if not completed:
+        yield "Sorry, ik kon geen antwoord genereren. Probeer het later nog eens.", []
 
 
 async def setup_assistant(
