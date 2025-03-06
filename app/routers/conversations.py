@@ -281,10 +281,6 @@ async def websocket_conversation(
     logging.info("WebSocket connection attempt received")
     connection_id = str(uuid.uuid4())[:8]  # Generate only once
 
-    # Thread-level lock to ensure only one processing task runs at a time
-    run_lock = asyncio.Lock()
-    is_processing = False
-
     try:
         await websocket.accept()
         logging.info(f"Connection {connection_id}: Connection accepted")
@@ -414,6 +410,7 @@ async def websocket_conversation(
 
         # Keep track of conversation state
         conversation_id = conversation.id
+        is_processing = False
 
         # Message processing loop
         while True:
@@ -460,7 +457,7 @@ async def websocket_conversation(
                     )
                     continue
 
-                # Process message with lock
+                # Process message
                 try:
                     is_processing = True
                     await websocket.send_json(
@@ -496,11 +493,9 @@ async def websocket_conversation(
                     # Process with AI
                     response_chunks = []
                     citations = []
-                    ai_processing_started = False
 
-                    # Streaming handler
-                    async def stream_with_timeout():
-                        nonlocal ai_processing_started
+                    # Stream the response
+                    try:
                         async for chunk, citation in stream_ai_response(
                             conversation=conversation_refresh,
                             user_message=user_message,
@@ -508,88 +503,93 @@ async def websocket_conversation(
                             publication=publication_refresh,
                             client=client,
                         ):
-                            ai_processing_started = True
-                            yield chunk, citation
+                            if chunk:
+                                response_chunks.append(chunk)
+                                if citation:
+                                    citations.extend(citation)
 
-                    # Stream response chunks
-                    streaming_task = asyncio.create_task(
-                        stream_with_timeout().__aiter__().__anext__()
-                    )
-
-                    while True:
-                        try:
-                            # Get next chunk with timeout
-                            chunk, citation = await asyncio.wait_for(
-                                streaming_task, timeout=60.0
-                            )
-                            response_chunks.append(chunk)
-                            if citation:
-                                citations.extend(citation)
-
-                            # Send chunk to client
-                            await websocket.send_json(
-                                {"type": "stream_chunk", "data": {"content": chunk}}
-                            )
-
-                            # Get next chunk
-                            streaming_task = asyncio.create_task(
-                                stream_with_timeout().__aiter__().__anext__()
-                            )
-
-                        except StopAsyncIteration:
-                            # All chunks received
-                            break
-                        except asyncio.TimeoutError:
-                            # Chunk timeout
-                            if not ai_processing_started:
-                                await websocket.send_json(
-                                    {
-                                        "type": "error",
-                                        "data": {
-                                            "detail": "AI processing timed out without producing any response"
-                                        },
-                                    }
-                                )
-                                break
-                            else:
-                                await websocket.send_json(
-                                    {
-                                        "type": "stream_chunk",
-                                        "data": {
-                                            "content": " [Response truncated due to processing timeout]"
-                                        },
-                                    }
-                                )
-                                response_chunks.append(
-                                    " [Response truncated due to processing timeout]"
-                                )
-                                break
+                                # Send chunk to client - with exception handling
+                                try:
+                                    await websocket.send_json(
+                                        {
+                                            "type": "stream_chunk",
+                                            "data": {"content": chunk},
+                                        }
+                                    )
+                                except WebSocketDisconnect:
+                                    logging.info(
+                                        f"Connection {connection_id}: Client disconnected during streaming"
+                                    )
+                                    raise  # Re-raise to exit the streaming loop
+                                except Exception as send_error:
+                                    logging.error(
+                                        f"Connection {connection_id}: Error sending chunk: {send_error}"
+                                    )
+                                    # Continue processing but stop sending
+                                    break
+                    except WebSocketDisconnect:
+                        # Client disconnected - still save the content we generated so far
+                        logging.info(
+                            f"Connection {connection_id}: Client disconnected during streaming, saving partial response"
+                        )
+                        # Don't try to send more data but continue to save what we have
+                        break
 
                     # Process full response
                     full_response = "".join(response_chunks)
                     citations_text = "\n".join(citations) if citations else None
 
                     if full_response:
-                        # Save to database
-                        with get_session() as session:
-                            crud_conversation.add_message(
-                                conversation_id=conversation_id,
-                                role="assistant",
-                                content=full_response,
-                                citations=citations_text,
-                                session=session,
+                        # Save to database - do this regardless of client connection state
+                        try:
+                            with get_session() as session:
+                                crud_conversation.add_message(
+                                    conversation_id=conversation_id,
+                                    role="assistant",
+                                    content=full_response,
+                                    citations=citations_text,
+                                    session=session,
+                                )
+                            logging.info(
+                                f"Connection {connection_id}: Saved response to database"
+                            )
+                        except Exception as db_error:
+                            logging.error(
+                                f"Connection {connection_id}: Failed to save response: {db_error}"
                             )
 
-                        # Send completion to client
-                        await websocket.send_json(
-                            {
-                                "type": "stream_end",
-                                "data": {
-                                    "content": full_response,
-                                    "citations": citations,
-                                },
-                            }
-                        )
+                        # Only try to send the completion if the client is still connected
+                        try:
+                            await websocket.send_json(
+                                {
+                                    "type": "stream_end",
+                                    "data": {
+                                        "content": full_response,
+                                        "citations": citations,
+                                    },
+                                }
+                            )
+                        except WebSocketDisconnect:
+                            logging.info(
+                                f"Connection {connection_id}: Client disconnected before stream_end"
+                            )
+                            break  # Exit the message processing
+                        except Exception as send_error:
+                            logging.error(
+                                f"Connection {connection_id}: Error sending stream_end: {send_error}"
+                            )
+                    else:
+                        try:
+                            await websocket.send_json(
+                                {
+                                    "type": "error",
+                                    "data": {"detail": "No response generated"},
+                                }
+                            )
+                        except (WebSocketDisconnect, Exception) as ws_error:
+                            logging.error(
+                                f"Connection {connection_id}: Error sending error message: {ws_error}"
+                            )
 
                 except Exception as ai_error:
                     logging.error(
@@ -618,7 +618,6 @@ async def websocket_conversation(
                         pass
 
                 finally:
-                    # Add this line to ensure processing state is reset even on errors
                     is_processing = False
 
             except asyncio.TimeoutError:

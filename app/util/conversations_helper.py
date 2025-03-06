@@ -238,32 +238,41 @@ async def stream_ai_response(
                     )
                 )
 
-                if messages and messages[0].content and messages[0].content[0].text:
-                    message_content = messages[0].content[0].text
-                    response_text = message_content.value
+                if messages and hasattr(messages[0], "content") and messages[0].content:
+                    # FIX: Properly access message content and define variables before using them
+                    message_obj = messages[0].content[0]
+                    if hasattr(message_obj, "text") and message_obj.text:
+                        message_content = message_obj.text
+                        response_text = message_content.value
 
-                    # Process citations
-                    annotations = message_content.annotations
-                    for index, annotation in enumerate(annotations):
-                        if file_citation := getattr(annotation, "file_citation", None):
-                            try:
-                                cited_file = client.files.retrieve(
-                                    file_citation.file_id
-                                )
-                                text_citations.append(
-                                    f"[{index}] {cited_file.filename}"
-                                )
-                            except Exception as e:
-                                logging.error(f"Error retrieving citation: {e}")
-                                text_citations.append(
-                                    f"[{index}] Reference to document"
-                                )
+                        # Process citations
+                        annotations = message_content.annotations
+                        for index, annotation in enumerate(annotations):
+                            if hasattr(annotation, "file_citation"):
+                                file_citation = annotation.file_citation
+                                try:
+                                    cited_file = client.files.retrieve(
+                                        file_citation.file_id
+                                    )
+                                    text_citations.append(
+                                        f"[{index}] {cited_file.filename}"
+                                    )
+                                except Exception as e:
+                                    logging.error(f"Error retrieving citation: {e}")
+                                    text_citations.append(
+                                        f"[{index}] Reference to document"
+                                    )
 
-                    # Yield the complete response
-                    logging.info(
-                        f"Stream AI: Yielding complete response of length {len(response_text)}"
-                    )
-                    yield response_text, text_citations
+                        # Yield the complete response
+                        logging.info(
+                            f"Stream AI: Yielding complete response of length {len(response_text)}"
+                        )
+                        yield response_text, text_citations
+                    else:
+                        logging.error(
+                            "Stream AI: Message object does not contain text content"
+                        )
+                        yield "Sorry, ik kon geen antwoord genereren.", []
                 else:
                     logging.error(
                         "Stream AI: No message content found after completion"

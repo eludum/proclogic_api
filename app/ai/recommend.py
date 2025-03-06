@@ -1,3 +1,4 @@
+from io import BytesIO
 import logging
 import json
 
@@ -117,7 +118,7 @@ def summarize_publication_with_files(
     try:
         if filesmap:
             # Filter files with the right extensions
-            filesmap = {
+            filtered_filesmap = {
                 file_name: file_data
                 for file_name, file_data in filesmap.items()
                 if file_name.lower().endswith(
@@ -125,25 +126,49 @@ def summarize_publication_with_files(
                 )
             }
 
-            vector_store = client.beta.vector_stores.create(
-                name=f"publication_workspace_{publication.publication_workspace_id}"
-            )
+            # Make sure we're passing file objects, not dictionaries
+            file_objects = []
+            for file_name, file_data in filtered_filesmap.items():
+                # If it's already an IO object, use it directly
+                if hasattr(file_data, "read") and hasattr(file_data, "seek"):
+                    file_data.seek(0)  # Reset file position
+                    file_objects.append(file_data)
+                # If it's a dictionary with 'content', create a new BytesIO object
+                elif isinstance(file_data, dict) and "content" in file_data:
+                    content = file_data["content"]
+                    if isinstance(content, bytes):
+                        file_obj = BytesIO(content)
+                        file_obj.name = file_data.get("name", file_name)
+                        file_objects.append(file_obj)
 
-            file_batch = client.beta.vector_stores.file_batches.upload_and_poll(
-                vector_store_id=vector_store.id,
-                files=list(filesmap.values()),
-            )
+            if file_objects:
+                vector_store = client.beta.vector_stores.create(
+                    name=f"publication_workspace_{publication.publication_workspace_id}"
+                )
 
-            if file_batch.status != "completed":
-                logging.error("File upload failed.")
-                return None, None, None
+                file_batch = client.beta.vector_stores.file_batches.upload_and_poll(
+                    vector_store_id=vector_store.id,
+                    files=file_objects,  # Pass the list of file objects
+                )
 
-            assistant = client.beta.assistants.update(
-                assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
-                tool_resources={"file_search": {"vector_store_ids": [vector_store.id]}},
-                response_format={"type": "json_object"},
-            )
+                if file_batch.status != "completed":
+                    logging.error("File upload failed.")
+                    return None, None, None
 
+                assistant = client.beta.assistants.update(
+                    assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
+                    tool_resources={
+                        "file_search": {"vector_store_ids": [vector_store.id]}
+                    },
+                    response_format={"type": "json_object"},
+                )
+            else:
+                # No valid files after filtering
+                assistant = client.beta.assistants.update(
+                    assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
+                    tool_resources={"file_search": {"vector_store_ids": []}},
+                    response_format={"type": "json_object"},
+                )
         else:
             assistant = client.beta.assistants.update(
                 assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
