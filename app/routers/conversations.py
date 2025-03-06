@@ -618,7 +618,7 @@ async def websocket_conversation(
                         pass
 
                 finally:
-                    # Always reset processing state
+                    # Add this line to ensure processing state is reset even on errors
                     is_processing = False
 
             except asyncio.TimeoutError:
