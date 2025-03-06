@@ -60,6 +60,7 @@ class ConversationResponse(BaseModel):
 def get_redis() -> Redis:
     return get_redis_client()
 
+
 @conversations_router.websocket("/ws/conversation")
 async def websocket_conversation(
     websocket: WebSocket,
@@ -93,17 +94,25 @@ async def websocket_conversation(
             if not publication_workspace_id or not auth_token:
                 error_msg = "Missing required parameters: publication_workspace_id and token are required"
                 logging.error(error_msg)
-                await websocket.send_json({"type": "error", "data": {"detail": error_msg}})
+                await websocket.send_json({"type": WSMessageType.ERROR, "data": {"detail": error_msg}})
                 return
-                
-            # Create credentials object for auth
-            credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=auth_token)
-            auth_user = await get_auth_user(credentials)
             
-            if not auth_user or not auth_user.email:
-                error_msg = "Invalid authentication token or email not available"
-                logging.error(error_msg)
-                await websocket.send_json({"type": "error", "data": {"detail": error_msg}})
+            # Create credentials object for auth
+            try:
+                credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=auth_token)
+                auth_user = await get_auth_user(credentials)
+                
+                if not auth_user or not auth_user.email:
+                    error_msg = "Invalid authentication token or email not available"
+                    logging.error(error_msg)
+                    await websocket.send_json({"type": WSMessageType.ERROR, "data": {"detail": error_msg}})
+                    return
+            except Exception as auth_error:
+                logging.error(f"Authentication error: {str(auth_error)}")
+                await websocket.send_json({
+                    "type": WSMessageType.ERROR, 
+                    "data": {"detail": f"Authentication failed: {str(auth_error)}"}
+                })
                 return
                 
             # Get company
@@ -112,7 +121,7 @@ async def websocket_conversation(
                 if not company:
                     error_msg = "Company not found for authenticated user"
                     logging.error(error_msg)
-                    await websocket.send_json({"type": "error", "data": {"detail": error_msg}})
+                    await websocket.send_json({"type": WSMessageType.ERROR, "data": {"detail": error_msg}})
                     return
                     
                 vat_number = company.vat_number
@@ -120,7 +129,7 @@ async def websocket_conversation(
                 
             # Send a confirmation that connection is set up
             await websocket.send_json({
-                "type": "response_chunk",
+                "type": WSMessageType.RESPONSE_CHUNK,
                 "data": {
                     "content": "Connected successfully. Ready to chat.",
                     "done": False,
@@ -143,13 +152,13 @@ async def websocket_conversation(
         except json.JSONDecodeError as e:
             logging.error(f"JSON decode error: {e}, raw data: {data[:50]}...")
             await websocket.send_json({
-                "type": "error", 
+                "type": WSMessageType.ERROR, 
                 "data": {"detail": f"Invalid JSON format: {str(e)}"}
             })
         except Exception as e:
             logging.error(f"Setup error: {str(e)}")
             await websocket.send_json({
-                "type": "error",
+                "type": WSMessageType.ERROR,
                 "data": {"detail": f"Connection setup error: {str(e)}"}
             })
             
@@ -157,6 +166,14 @@ async def websocket_conversation(
         logging.info("WebSocket client disconnected")
     except Exception as e:
         logging.error(f"Unhandled WebSocket error: {str(e)}")
+        try:
+            await websocket.send_json({
+                "type": WSMessageType.ERROR,
+                "data": {"detail": f"Server error: {str(e)}"}
+            })
+        except:
+            pass
+
 
 class ConversationHandler:
     """Handles the conversation flow and state for a WebSocket connection"""
@@ -261,87 +278,102 @@ class ConversationHandler:
             # Create a new assistant for this company
             assistant = self.client.beta.assistants.create(
                 name=f"Company Assistant {company_name}",
-                instructions=f"You are an assistant for {company_name}. Help with procurement files analysis.",
+                instructions=f"You are an assistant for {company_name}. Help with procurement files analysis. Answer in Dutch.",
                 model="gpt-4o-mini",
                 tools=[{"type": "file_search"}],
             )
             assistant_id = assistant.id
 
         # Fetch documents for this publication
-        async with httpx.AsyncClient() as http_client:
-            filesmap = await get_publication_workspace_documents(
-                http_client, self.publication_workspace_id
-            )
+        try:
+            async with httpx.AsyncClient() as http_client:
+                filesmap = await get_publication_workspace_documents(
+                    http_client, self.publication_workspace_id
+                )
+        except Exception as e:
+            logging.error(f"Error fetching documents: {str(e)}")
+            filesmap = {}
 
         if filesmap:
             # Create a vector store for these files
-            vector_store = self.client.beta.vector_stores.create(
-                name=f"publication_{self.publication_workspace_id}"
-            )
-            self.vector_store_id = vector_store.id
-
-            # Filter files with accepted extensions
-            filtered_filesmap = {
-                file_name: file_data
-                for file_name, file_data in filesmap.items()
-                if file_name.lower().endswith(
-                    tuple(settings.openai_vector_store_accepted_formats)
+            try:
+                vector_store = self.client.beta.vector_stores.create(
+                    name=f"publication_{self.publication_workspace_id}"
                 )
-            }
+                self.vector_store_id = vector_store.id
 
-            if filtered_filesmap:
-                # Upload files to vector store - ensure we have proper file objects
-                file_objects = []
-                for file_name, file_data in filtered_filesmap.items():
-                    # Make sure each file is a proper file-like object
-                    if not hasattr(file_data, 'read') or not hasattr(file_data, 'seek'):
-                        # If this is a dict from cache, reconstruct the file-like object
-                        if isinstance(file_data, dict) and 'content' in file_data:
-                            byte_io = BytesIO(file_data['content'])
-                            byte_io.name = file_data.get('name', file_name)
-                            file_objects.append(byte_io)
-                    else:
-                        # Reset the file pointer to the beginning
-                        file_data.seek(0)
-                        file_objects.append(file_data)
-                
-                # Only proceed if we have valid file objects
-                if file_objects:
-                    file_batch = (
-                        self.client.beta.vector_stores.file_batches.upload_and_poll(
-                            vector_store_id=vector_store.id,
-                            files=file_objects,
-                        )
+                # Filter files with accepted extensions
+                filtered_filesmap = {
+                    file_name: file_data
+                    for file_name, file_data in filesmap.items()
+                    if file_name.lower().endswith(
+                        tuple(settings.openai_vector_store_accepted_formats)
                     )
+                }
 
-                    if file_batch.status != "completed":
-                        logging.error(f"Failed to upload files: {file_batch.status}")
-                        await self.websocket.send_json(
-                            {
-                                "type": WSMessageType.ERROR,
-                                "data": {"detail": "Failed to process files"},
-                            }
-                        )
-                        raise HTTPException(
-                            status_code=500, detail="Failed to process files"
-                        )
+                if filtered_filesmap:
+                    # Upload files to vector store - ensure we have proper file objects
+                    file_objects = []
+                    for file_name, file_data in filtered_filesmap.items():
+                        # Make sure each file is a proper file-like object
+                        if not hasattr(file_data, 'read') or not hasattr(file_data, 'seek'):
+                            # If this is a dict from cache, reconstruct the file-like object
+                            if isinstance(file_data, dict) and 'content' in file_data:
+                                byte_io = BytesIO(file_data['content'])
+                                byte_io.name = file_data.get('name', file_name)
+                                file_objects.append(byte_io)
+                        else:
+                            # Reset the file pointer to the beginning
+                            file_data.seek(0)
+                            file_objects.append(file_data)
                     
-                    # Update assistant with vector store
-                    self.client.beta.assistants.update(
-                        assistant_id=assistant_id,
-                        tool_resources={
-                            "file_search": {"vector_store_ids": [vector_store.id]}
-                        },
-                    )
+                    # Only proceed if we have valid file objects
+                    if file_objects:
+                        file_batch = (
+                            self.client.beta.vector_stores.file_batches.upload_and_poll(
+                                vector_store_id=vector_store.id,
+                                files=file_objects,
+                            )
+                        )
+
+                        if file_batch.status != "completed":
+                            logging.error(f"Failed to upload files: {file_batch.status}")
+                            # Continue without files rather than raising an exception
+                            await self.websocket.send_json(
+                                {
+                                    "type": WSMessageType.RESPONSE_CHUNK,
+                                    "data": {"content": "Document processing incomplete, but we can continue.", "done": False},
+                                }
+                            )
+                        else:
+                            # Update assistant with vector store
+                            self.client.beta.assistants.update(
+                                assistant_id=assistant_id,
+                                tool_resources={
+                                    "file_search": {"vector_store_ids": [vector_store.id]}
+                                },
+                            )
+                    else:
+                        # No valid file objects
+                        self.client.beta.assistants.update(
+                            assistant_id=assistant_id,
+                            tool_resources={"file_search": {"vector_store_ids": []}},
+                        )
                 else:
-                    # No valid file objects
+                    # Update assistant with empty vector store
                     self.client.beta.assistants.update(
                         assistant_id=assistant_id,
                         tool_resources={"file_search": {"vector_store_ids": []}},
                     )
-
-                # This is now handled inside the file upload block
-            else:
+            except Exception as e:
+                logging.error(f"Error setting up vector store: {str(e)}")
+                # Continue without files rather than raising an exception
+                await self.websocket.send_json(
+                    {
+                        "type": WSMessageType.RESPONSE_CHUNK,
+                        "data": {"content": "Document processing failed, but we can continue.", "done": False},
+                    }
+                )
                 # Update assistant with empty vector store
                 self.client.beta.assistants.update(
                     assistant_id=assistant_id,
@@ -423,85 +455,132 @@ class ConversationHandler:
     async def process_run(self, run_id: str):
         """Process a run and stream the results"""
         citations = []
+        last_check_time = asyncio.get_event_loop().time()
+        last_status = None
 
         while True:
             # Get the run status
-            run_status = self.client.beta.threads.runs.retrieve(
-                thread_id=self.thread_id, run_id=run_id
-            )
-
-            if run_status.status == "completed":
-                # Get the assistant's response messages
-                messages = list(
-                    self.client.beta.threads.messages.list(
-                        thread_id=self.thread_id,
-                        order="desc",  # Get most recent first
-                        limit=1,  # Only get the last message
-                    )
+            try:
+                run_status = self.client.beta.threads.runs.retrieve(
+                    thread_id=self.thread_id, run_id=run_id
                 )
-
-                # Process the response message and citations
-                message_content = messages[0].content[0].text
-                annotations = message_content.annotations
-
-                # Process citations and annotations
-                response_with_citations = message_content.value
-                for index, annotation in enumerate(annotations):
-                    response_with_citations = response_with_citations.replace(
-                        annotation.text, f"[{index}]"
-                    )
-                    if file_citation := getattr(annotation, "file_citation", None):
-                        cited_file = self.client.files.retrieve(file_citation.file_id)
-                        citations.append(f"[{index}] {cited_file.filename}")
-
-                # Send the final message with all citations properly formatted
+                
+                # Only send update if status changed or it's been more than 3 seconds
+                current_time = asyncio.get_event_loop().time()
+                if run_status.status != last_status or (current_time - last_check_time) > 3:
+                    last_status = run_status.status
+                    last_check_time = current_time
+                    
+                    # Send periodic updates for in-progress states
+                    if run_status.status in ["queued", "in_progress"]:
+                        await self.websocket.send_json(
+                            {
+                                "type": WSMessageType.RESPONSE_CHUNK,
+                                "data": {"content": "ProcLogic AI is aan het denken...", "done": False},
+                            }
+                        )
+            except Exception as e:
+                logging.error(f"Error retrieving run status: {e}")
                 await self.websocket.send_json(
                     {
-                        "type": WSMessageType.RESPONSE_COMPLETE,
-                        "data": {
-                            "thread_id": self.thread_id,
-                            "content": response_with_citations,
-                            "done": True,
-                        },
+                        "type": WSMessageType.ERROR,
+                        "data": {"detail": f"Error retrieving status: {str(e)}"},
                     }
                 )
+                return
 
-                # Send citation information
-                if citations:
+            if run_status.status == "completed":
+                try:
+                    # Get the assistant's response messages
+                    messages = list(
+                        self.client.beta.threads.messages.list(
+                            thread_id=self.thread_id,
+                            order="desc",  # Get most recent first
+                            limit=1,  # Only get the last message
+                        )
+                    )
+
+                    if not messages:
+                        await self.websocket.send_json(
+                            {
+                                "type": WSMessageType.ERROR,
+                                "data": {"detail": "No response generated"},
+                            }
+                        )
+                        break
+
+                    # Process the response message and citations
+                    message_content = messages[0].content[0].text
+                    annotations = message_content.annotations
+
+                    # Process citations and annotations
+                    response_with_citations = message_content.value
+                    for index, annotation in enumerate(annotations):
+                        response_with_citations = response_with_citations.replace(
+                            annotation.text, f"[{index}]"
+                        )
+                        if file_citation := getattr(annotation, "file_citation", None):
+                            try:
+                                cited_file = self.client.files.retrieve(file_citation.file_id)
+                                citations.append(f"[{index}] {cited_file.filename}")
+                            except Exception as e:
+                                logging.error(f"Error retrieving citation: {e}")
+                                citations.append(f"[{index}] Reference to document")
+
+                    # Send the final message with all citations properly formatted
                     await self.websocket.send_json(
                         {
-                            "type": WSMessageType.CITATIONS,
-                            "data": {"citations": citations},
+                            "type": WSMessageType.RESPONSE_COMPLETE,
+                            "data": {
+                                "thread_id": self.thread_id,
+                                "content": response_with_citations,
+                                "done": True,
+                            },
                         }
                     )
 
-                break
+                    # Send citation information
+                    if citations:
+                        await self.websocket.send_json(
+                            {
+                                "type": WSMessageType.CITATIONS,
+                                "data": {"citations": citations},
+                            }
+                        )
+                    
+                    break
+                except Exception as e:
+                    logging.error(f"Error processing completed run: {e}")
+                    await self.websocket.send_json(
+                        {
+                            "type": WSMessageType.ERROR,
+                            "data": {"detail": f"Error processing response: {str(e)}"},
+                        }
+                    )
+                    break
 
             elif run_status.status == "failed":
                 await self.websocket.send_json(
                     {
                         "type": WSMessageType.ERROR,
-                        "data": {"detail": f"Run failed: {run_status.last_error}"},
+                        "data": {"detail": f"Run failed: {run_status.last_error or 'Unknown error'}"},
                     }
                 )
                 break
 
-            elif run_status.status in ["queued", "in_progress", "requires_action"]:
-                # Send periodic updates
+            elif run_status.status == "requires_action":
+                # Handle tool calls if needed - for future implementation
+                logging.info("Run requires action - currently not supported")
                 await self.websocket.send_json(
                     {
-                        "type": WSMessageType.RESPONSE_CHUNK,
-                        "data": {"content": "Thinking...", "done": False},
+                        "type": WSMessageType.ERROR,
+                        "data": {"detail": "This type of interaction is not supported yet"},
                     }
                 )
+                break
 
-                # If requires_action, handle tool calls
-                if run_status.status == "requires_action":
-                    # Handle tool calls if needed
-                    pass
-
-                # Small delay before checking again
-                await asyncio.sleep(1)
+            # Small delay before checking again
+            await asyncio.sleep(1)
 
 
 @conversations_router.delete(
@@ -532,9 +611,9 @@ async def end_conversation(
     # Get thread_id from Redis
     thread_id = get_thread_id(redis, vat_number, publication_workspace_id)
     if not thread_id:
-        raise HTTPException(status_code=404, detail="No active conversation found")
+        return {"message": "No active conversation found"}
 
-    # Clean up vector store if needed
+    # Clean up Redis
     try:
         # Delete the thread from Redis
         redis.delete(f"thread:{vat_number}:{publication_workspace_id}")
