@@ -255,7 +255,7 @@ async def get_publication_conversation(
         if not company:
             raise HTTPException(status_code=404, detail="Company not found")
 
-        # Get all conversations for the publication and company
+        # Get conversation for the publication and company
         conversation = (
             session.query(Conversation)
             .filter(
@@ -269,6 +269,14 @@ async def get_publication_conversation(
         if not conversation:
             return None
 
+        # Explicitly load the messages to avoid detached instance error
+        messages = crud_conversation.get_conversation_messages(
+            conversation_id=conversation.id, session=session
+        )
+        
+        # Manually add messages to avoid detached instance error
+        conversation.messages = messages
+        
         return conversation
 
 
