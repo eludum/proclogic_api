@@ -487,9 +487,29 @@ async def websocket_conversation(
         # Keep track of connection state
         conversation_id = conversation.id
 
+        # Track if a run is in progress to prevent concurrent requests
+        is_processing = False
+
         # Start listening for messages
         while True:
             try:
+                # Check if we're already processing a message
+                if is_processing:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "data": {
+                                "detail": "Still processing your previous message. Please wait."
+                            },
+                        }
+                    )
+                    # Try to receive the next message, but with a shorter timeout
+                    raw_message = await asyncio.wait_for(
+                        websocket.receive_text(), timeout=5.0
+                    )
+                    continue
+
+                # Normal message flow
                 raw_message = await asyncio.wait_for(
                     websocket.receive_text(), timeout=300.0
                 )  # 5-minute timeout
@@ -529,6 +549,9 @@ async def websocket_conversation(
                         }
                     )
                     continue
+
+                # Mark as processing
+                is_processing = True
 
                 # Start stream response
                 await websocket.send_json(
@@ -717,6 +740,9 @@ async def websocket_conversation(
                                 f"Connection {connection_id}: Failed to save error message: {str(save_error)}"
                             )
 
+                # Mark as no longer processing
+                is_processing = False
+
             except asyncio.TimeoutError:
                 # Client hasn't sent a message for a long time
                 logging.info(
@@ -747,6 +773,8 @@ async def websocket_conversation(
                 await websocket.send_json(
                     {"type": "error", "data": {"detail": f"Error: {str(e)}"}}
                 )
+                # Reset processing state if something went wrong
+                is_processing = False
 
     except WebSocketDisconnect:
         logging.info(f"WebSocket client disconnected during setup")
@@ -913,76 +941,98 @@ async def stream_ai_response(
 
         # Poll until the run is completed
         completed = False
-        while not completed:
-            await asyncio.sleep(1)  # Poll every second
+        error_count = 0
+        max_errors = 5
 
-            # Check run status
-            run_status = client.beta.threads.runs.retrieve(
-                thread_id=thread_id, run_id=run_id
-            )
+        while not completed and error_count < max_errors:
+            try:
+                await asyncio.sleep(1)  # Poll every second
 
-            status = run_status.status
-            logging.info(f"Stream AI: Run status: {status}")
-
-            if status == "completed":
-                completed = True
-
-                # Get the response messages after run is complete
-                messages = list(
-                    client.beta.threads.messages.list(
-                        thread_id=thread_id, order="desc", limit=1
-                    )
+                # Check run status
+                run_status = client.beta.threads.runs.retrieve(
+                    thread_id=thread_id, run_id=run_id
                 )
 
-                if messages and messages[0].content and messages[0].content[0].text:
-                    message_content = messages[0].content[0].text
-                    response_text = message_content.value
+                status = run_status.status
+                logging.info(f"Stream AI: Run status: {status}")
 
-                    # Process citations
-                    annotations = message_content.annotations
-                    for index, annotation in enumerate(annotations):
-                        if file_citation := getattr(annotation, "file_citation", None):
-                            try:
-                                cited_file = client.files.retrieve(
-                                    file_citation.file_id
-                                )
-                                text_citations.append(
-                                    f"[{index}] {cited_file.filename}"
-                                )
-                            except Exception as e:
-                                logging.error(f"Error retrieving citation: {e}")
-                                text_citations.append(
-                                    f"[{index}] Reference to document"
-                                )
+                if status == "completed":
+                    completed = True
 
-                    # Yield the complete response
-                    logging.info(
-                        f"Stream AI: Yielding complete response of length {len(response_text)}"
+                    # Get the response messages after run is complete
+                    messages = list(
+                        client.beta.threads.messages.list(
+                            thread_id=thread_id, order="desc", limit=1
+                        )
                     )
-                    yield response_text, text_citations
-                else:
-                    logging.error(
-                        "Stream AI: No message content found after completion"
-                    )
-                    yield "Sorry, I couldn't generate a response.", []
 
-            elif status == "failed":
-                error_message = "An error occurred"
-                if hasattr(run_status, "last_error") and run_status.last_error:
-                    error_message = run_status.last_error.message
-                logging.error(f"Stream AI: Run failed: {error_message}")
-                yield f"Sorry, an error occurred: {error_message}", []
-                break
+                    if messages and messages[0].content and messages[0].content[0].text:
+                        message_content = messages[0].content[0].text
+                        response_text = message_content.value
 
-            elif status == "cancelled":
-                logging.info("Stream AI: Run was cancelled")
-                yield "The operation was cancelled.", []
-                break
+                        # Process citations
+                        annotations = message_content.annotations
+                        for index, annotation in enumerate(annotations):
+                            if file_citation := getattr(
+                                annotation, "file_citation", None
+                            ):
+                                try:
+                                    cited_file = client.files.retrieve(
+                                        file_citation.file_id
+                                    )
+                                    text_citations.append(
+                                        f"[{index}] {cited_file.filename}"
+                                    )
+                                except Exception as e:
+                                    logging.error(f"Error retrieving citation: {e}")
+                                    text_citations.append(
+                                        f"[{index}] Reference to document"
+                                    )
 
-            elif status == "expired":
-                logging.info("Stream AI: Run expired")
-                yield "The operation timed out.", []
-                break
+                        # Yield the complete response
+                        logging.info(
+                            f"Stream AI: Yielding complete response of length {len(response_text)}"
+                        )
+                        yield response_text, text_citations
+                    else:
+                        logging.error(
+                            "Stream AI: No message content found after completion"
+                        )
+                        yield "Sorry, I couldn't generate a response.", []
+
+                elif status == "failed":
+                    error_message = "An error occurred"
+                    if hasattr(run_status, "last_error") and run_status.last_error:
+                        error_message = run_status.last_error.message
+                    logging.error(f"Stream AI: Run failed: {error_message}")
+                    yield f"Sorry, an error occurred: {error_message}", []
+                    break
+
+                elif status == "cancelled":
+                    logging.info("Stream AI: Run was cancelled")
+                    yield "The operation was cancelled.", []
+                    break
+
+                elif status == "expired":
+                    logging.info("Stream AI: Run expired")
+                    yield "The operation timed out.", []
+                    break
+
+                elif status == "requires_action":
+                    # Handle action requirements if needed
+                    logging.info("Stream AI: Run requires action - not supported yet")
+                    yield "This operation requires additional actions that aren't currently supported.", []
+                    break
+
+                # Check for queued or in_progress status and continue polling
+
+            except Exception as poll_error:
+                error_count += 1
+                logging.error(f"Stream AI: Error polling run status: {poll_error}")
+                await asyncio.sleep(2)  # Wait a bit longer after an error
+
+                if error_count >= max_errors:
+                    yield "Sorry, there was a problem processing your request after multiple attempts.", []
 
     except Exception as e:
         logging.error(f"Stream AI: Error in streaming: {e}")
