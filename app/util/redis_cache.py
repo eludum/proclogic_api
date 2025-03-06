@@ -1,10 +1,9 @@
 import pickle
 from functools import wraps
-from typing import Callable, Optional
+from typing import Callable
 import logging
 import io
 
-from redis.client import Redis
 from app.config.redis_manager import get_redis_client, get_binary_redis_client
 
 # Cache TTL in seconds
@@ -120,34 +119,3 @@ def invalidate_publication_cache(publication_workspace_id: str):
     if keys_to_delete:
         binary_redis.delete(*keys_to_delete)
         text_redis.delete(*keys_to_delete)
-
-
-# Functions for conversation thread management
-def get_thread_id(
-    redis: Redis, vat_number: str, publication_workspace_id: str
-) -> Optional[str]:
-    """Get thread ID from Redis if it exists"""
-    thread_key = f"thread:{vat_number}:{publication_workspace_id}"
-    thread_id = redis.get(thread_key)
-    
-    # Check if thread_id is bytes or string and handle accordingly
-    if thread_id:
-        if isinstance(thread_id, bytes):
-            return thread_id.decode('utf-8')
-        return thread_id
-    return None
-
-def store_thread_id(
-    redis: Redis, vat_number: str, publication_workspace_id: str, thread_id: str
-) -> None:
-    """Store thread ID in Redis with TTL"""
-    thread_key = f"thread:{vat_number}:{publication_workspace_id}"
-    redis.set(thread_key, thread_id, ex=CONVERSATION_TTL)
-
-
-def refresh_thread_ttl(
-    redis: Redis, vat_number: str, publication_workspace_id: str
-) -> None:
-    """Refresh TTL for thread ID in Redis"""
-    thread_key = f"thread:{vat_number}:{publication_workspace_id}"
-    redis.expire(thread_key, CONVERSATION_TTL)
