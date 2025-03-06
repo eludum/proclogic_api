@@ -289,3 +289,5 @@ Index("idx_match_company", CompanyPublicationMatch.company_vat_number)
 Index("idx_match_publication", CompanyPublicationMatch.publication_workspace_id)
 Index("idx_match_percentage", CompanyPublicationMatch.match_percentage)
 Index("idx_match_recommended", CompanyPublicationMatch.is_recommended)
+
+from app.models.conversation_models import Conversation

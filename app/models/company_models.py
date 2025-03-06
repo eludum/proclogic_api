@@ -72,3 +72,5 @@ class Company(Base):
         return [
             match.publication for match in self.publication_matches if match.is_saved
         ]
+
+from app.models.conversation_models import Conversation

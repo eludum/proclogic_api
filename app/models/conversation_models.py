@@ -33,7 +33,6 @@ class Conversation(Base):
     thread_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    # Relationships
     company = relationship("Company", back_populates="conversations")
     publication = relationship("Publication", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
