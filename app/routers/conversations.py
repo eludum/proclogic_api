@@ -1,14 +1,17 @@
 import asyncio
 import json
 import logging
+import time
+import uuid
 from io import BytesIO
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import httpx
 from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Query,
     WebSocket,
     WebSocketDisconnect,
 )
@@ -30,7 +33,6 @@ from app.schemas.conversation_schemas import (
     ChatResponse,
     ConversationSchema,
     ConversationSummary,
-    MessageSchema,
 )
 from app.util.clerk import AuthUser, get_auth_user
 from app.util.converter import truncate_text
@@ -284,13 +286,43 @@ async def websocket_conversation(
     websocket: WebSocket,
     client: OpenAI = Depends(get_openai_client),
 ):
-    await websocket.accept()
-    logging.info("WebSocket connection accepted")
+    """Enhanced WebSocket endpoint with improved error handling and logging."""
+    logging.info("WebSocket connection attempt received")
 
     try:
-        # Get initial connection data
-        data = await websocket.receive_text()
-        request_data = json.loads(data)
+        await websocket.accept()
+        logging.info("WebSocket connection accepted")
+
+        # Connection tracking
+        connection_id = str(uuid.uuid4())[:8]
+        logging.info(f"Connection {connection_id}: New connection established")
+
+        # Get initial connection data with timeout
+        try:
+            data = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
+            logging.info(f"Connection {connection_id}: Initial data received")
+            request_data = json.loads(data)
+            logging.debug(f"Connection {connection_id}: Request data: {request_data}")
+        except asyncio.TimeoutError:
+            logging.error(
+                f"Connection {connection_id}: Timeout waiting for initial data"
+            )
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "data": {"detail": "Timeout waiting for connection data"},
+                }
+            )
+            return
+        except json.JSONDecodeError:
+            logging.error(f"Connection {connection_id}: Invalid JSON in initial data")
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "data": {"detail": "Invalid JSON format in connection data"},
+                }
+            )
+            return
 
         # Extract connection parameters
         publication_workspace_id = request_data.get("publication_workspace_id")
@@ -298,26 +330,50 @@ async def websocket_conversation(
         auth_token = request_data.get("token")
 
         if not publication_workspace_id or not auth_token:
+            logging.error(f"Connection {connection_id}: Missing required parameters")
             await websocket.send_json(
                 {"type": "error", "data": {"detail": "Missing required parameters"}}
             )
             return
 
-        # Authenticate user
+        # Log connection parameters (without the full token for security)
+        logging.info(
+            f"Connection {connection_id}: Parameters received - "
+            f"publication_id: {publication_workspace_id}, "
+            f"conversation_id: {conversation_id}"
+        )
+
+        # Authenticate user with timeout
         try:
             credentials = HTTPAuthorizationCredentials(
                 scheme="Bearer", credentials=auth_token
             )
-            auth_user = await get_auth_user(credentials)
+            auth_user = await asyncio.wait_for(get_auth_user(credentials), timeout=5.0)
 
             if not auth_user or not auth_user.email:
+                logging.error(f"Connection {connection_id}: Invalid authentication")
                 await websocket.send_json(
                     {"type": "error", "data": {"detail": "Invalid authentication"}}
                 )
                 return
 
+            logging.info(
+                f"Connection {connection_id}: User authenticated successfully: {auth_user.email}"
+            )
+
+        except asyncio.TimeoutError:
+            logging.error(f"Connection {connection_id}: Authentication timed out")
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "data": {"detail": "Authentication request timed out"},
+                }
+            )
+            return
         except Exception as auth_error:
-            logging.error(f"Authentication error: {str(auth_error)}")
+            logging.error(
+                f"Connection {connection_id}: Authentication error: {str(auth_error)}"
+            )
             await websocket.send_json(
                 {
                     "type": "error",
@@ -326,96 +382,177 @@ async def websocket_conversation(
             )
             return
 
-        # Get company and publication
-        with get_session() as session:
-            company = crud_company.get_company_by_email(
-                email=auth_user.email, session=session
-            )
-            if not company:
-                await websocket.send_json(
-                    {"type": "error", "data": {"detail": "Company not found"}}
+        # Get company and publication with timeout and session management
+        try:
+            with get_session() as session:
+                # Get company
+                company = crud_company.get_company_by_email(
+                    email=auth_user.email, session=session
                 )
-                return
-
-            publication = crud_publication.get_publication_by_workspace_id(
-                publication_workspace_id=publication_workspace_id, session=session
-            )
-            if not publication:
-                await websocket.send_json(
-                    {"type": "error", "data": {"detail": "Publication not found"}}
-                )
-                return
-
-            # Get or create conversation
-            conversation = None
-            if conversation_id:
-                conversation = crud_conversation.get_conversation_by_id(
-                    conversation_id=conversation_id, session=session
-                )
-
-                # Verify ownership
-                if (
-                    conversation
-                    and conversation.company_vat_number != company.vat_number
-                ):
+                if not company:
+                    logging.error(
+                        f"Connection {connection_id}: Company not found for email {auth_user.email}"
+                    )
                     await websocket.send_json(
-                        {
-                            "type": "error",
-                            "data": {"detail": "Unauthorized access to conversation"},
-                        }
+                        {"type": "error", "data": {"detail": "Company not found"}}
                     )
                     return
-
-            if not conversation:
-                conversation = crud_conversation.get_or_create_conversation(
-                    company_vat_number=company.vat_number,
-                    publication_workspace_id=publication_workspace_id,
-                    session=session,
+                logging.info(
+                    f"Connection {connection_id}: Found company: {company.name}"
                 )
 
-            # Send conversation ID to client
+                # Get publication
+                publication = crud_publication.get_publication_by_workspace_id(
+                    publication_workspace_id=publication_workspace_id, session=session
+                )
+                if not publication:
+                    logging.error(
+                        f"Connection {connection_id}: Publication not found: {publication_workspace_id}"
+                    )
+                    await websocket.send_json(
+                        {"type": "error", "data": {"detail": "Publication not found"}}
+                    )
+                    return
+                logging.info(
+                    f"Connection {connection_id}: Found publication: {publication_workspace_id}"
+                )
+
+                # Get or create conversation
+                conversation = None
+                if conversation_id:
+                    conversation = crud_conversation.get_conversation_by_id(
+                        conversation_id=conversation_id, session=session
+                    )
+
+                    # Verify ownership
+                    if (
+                        conversation
+                        and conversation.company_vat_number != company.vat_number
+                    ):
+                        logging.error(
+                            f"Connection {connection_id}: Unauthorized access to conversation"
+                        )
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "data": {
+                                    "detail": "Unauthorized access to conversation"
+                                },
+                            }
+                        )
+                        return
+
+                if not conversation:
+                    conversation = crud_conversation.get_or_create_conversation(
+                        company_vat_number=company.vat_number,
+                        publication_workspace_id=publication_workspace_id,
+                        session=session,
+                    )
+                    logging.info(
+                        f"Connection {connection_id}: Created new conversation: {conversation.id}"
+                    )
+                else:
+                    logging.info(
+                        f"Connection {connection_id}: Using existing conversation: {conversation.id}"
+                    )
+
+                # Send confirmation to client
+                pub_title = get_publication_title(publication)
+                await websocket.send_json(
+                    {
+                        "type": "connected",
+                        "data": {
+                            "conversation_id": conversation.id,
+                            "company_name": company.name,
+                            "publication_title": pub_title,
+                        },
+                    }
+                )
+                logging.info(
+                    f"Connection {connection_id}: Sent connection confirmation"
+                )
+
+        except Exception as db_error:
+            logging.error(
+                f"Connection {connection_id}: Database error: {str(db_error)}"
+            )
             await websocket.send_json(
                 {
-                    "type": "connected",
-                    "data": {
-                        "conversation_id": conversation.id,
-                        "company_name": company.name,
-                        "publication_title": get_publication_title(publication),
-                    },
+                    "type": "error",
+                    "data": {"detail": f"Database error: {str(db_error)}"},
                 }
             )
+            return
+
+        # Keep track of connection state
+        conversation_id = conversation.id
 
         # Start listening for messages
         while True:
             try:
-                message_data = json.loads(await websocket.receive_text())
+                raw_message = await asyncio.wait_for(
+                    websocket.receive_text(), timeout=300.0
+                )  # 5-minute timeout
+                logging.info(f"Connection {connection_id}: Received message")
 
-                if message_data.get("type") != "message":
+                try:
+                    message_data = json.loads(raw_message)
+                    logging.debug(
+                        f"Connection {connection_id}: Parsed message: {message_data}"
+                    )
+                except json.JSONDecodeError as json_err:
+                    logging.error(
+                        f"Connection {connection_id}: JSON decode error: {json_err}"
+                    )
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "data": {
+                                "detail": "Invalid message format, expecting JSON"
+                            },
+                        }
+                    )
                     continue
 
-                user_message = message_data.get("content", "")
-                if not user_message:
+                # Extract user message
+                user_message = ""
+                if message_data.get("content"):
+                    user_message = message_data.get("content")
+                else:
+                    logging.warning(
+                        f"Connection {connection_id}: Missing content in message"
+                    )
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "data": {"detail": "Message missing content field"},
+                        }
+                    )
                     continue
 
                 # Start stream response
                 await websocket.send_json(
                     {
                         "type": "stream_start",
-                        "data": {"conversation_id": conversation.id},
+                        "data": {"conversation_id": conversation_id},
                     }
                 )
+                logging.info(f"Connection {connection_id}: Stream started for message")
 
                 # Process in new session since WebSocket connection is long-lived
                 with get_session() as session:
                     # Add user message to database
                     crud_conversation.add_message(
-                        conversation_id=conversation.id,
+                        conversation_id=conversation_id,
                         role="user",
                         content=user_message,
                         session=session,
                     )
+                    logging.info(
+                        f"Connection {connection_id}: Saved user message to database"
+                    )
 
-                    # Get fresh company and publication data
+                    # Get fresh data
                     company_refresh = crud_company.get_company_by_email(
                         email=auth_user.email, session=session
                     )
@@ -426,75 +563,202 @@ async def websocket_conversation(
                         )
                     )
                     conversation_refresh = crud_conversation.get_conversation_by_id(
-                        conversation_id=conversation.id, session=session
+                        conversation_id=conversation_id, session=session
+                    )
+                    logging.info(
+                        f"Connection {connection_id}: Refreshed database objects"
                     )
 
-                # Process with AI and stream response
+                # Process with AI and stream response - with timeout protection
                 response_chunks = []
                 citations = []
+                ai_processing_started = False
 
-                # Stream the AI response
-                async for chunk, citation in stream_ai_response(
-                    conversation=conversation_refresh,
-                    user_message=user_message,
-                    company=company_refresh,
-                    publication=publication_refresh,
-                    client=client,
-                ):
-                    response_chunks.append(chunk)
-                    if citation:
-                        citations.extend(citation)
+                try:
+                    # Stream the AI response with a timeout wrapper
+                    async def stream_with_timeout():
+                        nonlocal ai_processing_started
+                        async for chunk, citation in stream_ai_response(
+                            conversation=conversation_refresh,
+                            user_message=user_message,
+                            company=company_refresh,
+                            publication=publication_refresh,
+                            client=client,
+                        ):
+                            ai_processing_started = True
+                            yield chunk, citation
 
-                    # Send chunk to client
+                    # Use a timeout for the entire streaming process
+                    streaming_task = asyncio.create_task(
+                        stream_with_timeout().__aiter__().__anext__()
+                    )
+
+                    while True:
+                        try:
+                            # 60-second timeout for each chunk
+                            chunk, citation = await asyncio.wait_for(
+                                streaming_task, timeout=60.0
+                            )
+                            response_chunks.append(chunk)
+                            if citation:
+                                citations.extend(citation)
+
+                            # Send chunk to client
+                            await websocket.send_json(
+                                {"type": "stream_chunk", "data": {"content": chunk}}
+                            )
+                            logging.debug(
+                                f"Connection {connection_id}: Sent chunk of size {len(chunk)}"
+                            )
+
+                            # Start next chunk
+                            streaming_task = asyncio.create_task(
+                                stream_with_timeout().__aiter__().__anext__()
+                            )
+
+                            # Small delay to prevent flooding
+                            await asyncio.sleep(0.01)
+                        except StopAsyncIteration:
+                            # All chunks have been processed
+                            logging.info(
+                                f"Connection {connection_id}: AI stream completed normally"
+                            )
+                            break
+                        except asyncio.TimeoutError:
+                            # Chunk timeout - stop processing but handle what we've got
+                            logging.warning(
+                                f"Connection {connection_id}: Timeout waiting for AI response chunk"
+                            )
+                            if not ai_processing_started:
+                                # If we haven't received anything yet, this is a fatal error
+                                await websocket.send_json(
+                                    {
+                                        "type": "error",
+                                        "data": {
+                                            "detail": "AI processing timed out without producing any response"
+                                        },
+                                    }
+                                )
+                                # Don't save an empty message
+                                break
+                            else:
+                                # We got partial results - warn but continue with what we have
+                                await websocket.send_json(
+                                    {
+                                        "type": "stream_chunk",
+                                        "data": {
+                                            "content": " [Response truncated due to processing timeout]"
+                                        },
+                                    }
+                                )
+                                response_chunks.append(
+                                    " [Response truncated due to processing timeout]"
+                                )
+                                break
+
+                    # Combine all chunks
+                    full_response = "".join(response_chunks)
+                    citations_text = "\n".join(citations) if citations else None
+
+                    if full_response:  # Only save if we have something to save
+                        # Save the full response in database
+                        with get_session() as session:
+                            crud_conversation.add_message(
+                                conversation_id=conversation_id,
+                                role="assistant",
+                                content=full_response,
+                                citations=citations_text,
+                                session=session,
+                            )
+                            logging.info(
+                                f"Connection {connection_id}: Saved AI response to database"
+                            )
+
+                        # Send complete message
+                        await websocket.send_json(
+                            {
+                                "type": "stream_end",
+                                "data": {
+                                    "content": full_response,
+                                    "citations": citations,
+                                },
+                            }
+                        )
+                        logging.info(
+                            f"Connection {connection_id}: Sent stream_end with response of size {len(full_response)}"
+                        )
+
+                except Exception as ai_error:
+                    logging.error(
+                        f"Connection {connection_id}: Error in AI processing: {str(ai_error)}"
+                    )
+                    logging.exception(ai_error)  # Log the full exception with traceback
                     await websocket.send_json(
-                        {"type": "stream_chunk", "data": {"content": chunk}}
+                        {
+                            "type": "error",
+                            "data": {
+                                "detail": f"Error processing response: {str(ai_error)}"
+                            },
+                        }
                     )
 
-                    # Small delay to prevent flooding
-                    await asyncio.sleep(0.01)
+                    # Try to save an error message if we have a connection ID
+                    if conversation_id:
+                        try:
+                            with get_session() as session:
+                                crud_conversation.add_message(
+                                    conversation_id=conversation_id,
+                                    role="assistant",
+                                    content="Sorry, an error occurred while processing your request. Please try again.",
+                                    session=session,
+                                )
+                        except Exception as save_error:
+                            logging.error(
+                                f"Connection {connection_id}: Failed to save error message: {str(save_error)}"
+                            )
 
-                # Combine all chunks
-                full_response = "".join(response_chunks)
-                citations_text = "\n".join(citations) if citations else None
-
-                # Save the full response in database
-                with get_session() as session:
-                    crud_conversation.add_message(
-                        conversation_id=conversation.id,
-                        role="assistant",
-                        content=full_response,
-                        citations=citations_text,
-                        session=session,
-                    )
-
-                # Send complete message
+            except asyncio.TimeoutError:
+                # Client hasn't sent a message for a long time
+                logging.info(
+                    f"Connection {connection_id}: Session timed out waiting for client message"
+                )
                 await websocket.send_json(
                     {
-                        "type": "stream_end",
-                        "data": {"content": full_response, "citations": citations},
+                        "type": "timeout",
+                        "data": {"detail": "Session timed out due to inactivity"},
                     }
                 )
+                break
+            except WebSocketDisconnect:
+                logging.info(f"Connection {connection_id}: Client disconnected")
+                break
             except json.JSONDecodeError as e:
-                logging.error(f"Error decoding message: {e}")
+                logging.error(
+                    f"Connection {connection_id}: Error decoding message: {e}"
+                )
                 await websocket.send_json(
                     {"type": "error", "data": {"detail": "Invalid message format"}}
                 )
             except Exception as e:
-                logging.error(f"Error processing message: {e}")
+                logging.error(
+                    f"Connection {connection_id}: Error processing message: {e}"
+                )
+                logging.exception(e)  # Log the full exception with traceback
                 await websocket.send_json(
                     {"type": "error", "data": {"detail": f"Error: {str(e)}"}}
                 )
 
     except WebSocketDisconnect:
-        logging.info("WebSocket client disconnected")
+        logging.info(f"WebSocket client disconnected during setup")
     except Exception as e:
-        logging.error(f"WebSocket error: {str(e)}")
+        logging.error(f"WebSocket error during setup: {str(e)}")
+        logging.exception(e)
         try:
             await websocket.send_json(
                 {"type": "error", "data": {"detail": f"Error: {str(e)}"}}
             )
         except:
-            pass
+            pass  # We can't do anything if sending the error itself fails
 
 
 async def process_ai_message(
@@ -588,6 +852,8 @@ async def stream_ai_response(
     client: OpenAI,
 ):
     """Stream a response from OpenAI using native streaming."""
+    logging.info(f"Stream AI: Starting with message: '{user_message[:30]}...'")
+
     # Get or create OpenAI thread and assistant
     thread_id = conversation.thread_id
     assistant_id = conversation.assistant_id
@@ -596,6 +862,7 @@ async def stream_ai_response(
         # Create a new thread
         thread = client.beta.threads.create()
         thread_id = thread.id
+        logging.info(f"Stream AI: Created new thread {thread_id}")
 
         # Update conversation with thread ID
         with get_session() as session:
@@ -608,9 +875,11 @@ async def stream_ai_response(
 
     # Set up assistant if needed
     if not assistant_id:
+        logging.info(f"Stream AI: Setting up new assistant for company {company.name}")
         assistant_id = await setup_assistant(
             client=client, company=company, publication=publication
         )
+        logging.info(f"Stream AI: Created/found assistant {assistant_id}")
 
         # Update conversation with assistant ID
         with get_session() as session:
@@ -621,36 +890,44 @@ async def stream_ai_response(
                 session=session,
             )
 
-    # Add message to thread
+    # Add message to thread ONLY ONCE before creating the run
+    logging.info(f"Stream AI: Adding message to thread {thread_id}")
     client.beta.threads.messages.create(
         thread_id=thread_id, role="user", content=user_message
     )
 
-    # Create a run with streaming
+    # Create a run
+    logging.info(f"Stream AI: Creating run with assistant {assistant_id}")
     run = client.beta.threads.runs.create(
-        thread_id=thread_id, assistant_id=assistant_id, stream=True  # Enable streaming
+        thread_id=thread_id, assistant_id=assistant_id
     )
+    run_id = run.id
+    logging.info(f"Stream AI: Run created with ID {run_id}")
 
-    # Variable to collect all text for citations processing
-    collected_text = ""
+    # Citations to be collected
     text_citations = []
 
-    # Stream the response as it's generated
     try:
-        async for chunk in run:
-            if (
-                chunk.event == "thread.message.delta"
-                and hasattr(chunk.data, "delta")
-                and hasattr(chunk.data.delta, "content")
-            ):
-                delta_content = chunk.data.delta.content
-                if delta_content and len(delta_content) > 0:
-                    content_part = delta_content[0].text.value
-                    collected_text += content_part
-                    yield content_part, []
+        # First yield an initial placeholder to start the stream
+        yield "Denken...", []
 
-            elif chunk.event == "thread.run.completed":
-                # Get all messages to process citations
+        # Poll until the run is completed
+        completed = False
+        while not completed:
+            await asyncio.sleep(1)  # Poll every second
+
+            # Check run status
+            run_status = client.beta.threads.runs.retrieve(
+                thread_id=thread_id, run_id=run_id
+            )
+
+            status = run_status.status
+            logging.info(f"Stream AI: Run status: {status}")
+
+            if status == "completed":
+                completed = True
+
+                # Get the response messages after run is complete
                 messages = list(
                     client.beta.threads.messages.list(
                         thread_id=thread_id, order="desc", limit=1
@@ -659,9 +936,10 @@ async def stream_ai_response(
 
                 if messages and messages[0].content and messages[0].content[0].text:
                     message_content = messages[0].content[0].text
-                    annotations = message_content.annotations
+                    response_text = message_content.value
 
                     # Process citations
+                    annotations = message_content.annotations
                     for index, annotation in enumerate(annotations):
                         if file_citation := getattr(annotation, "file_citation", None):
                             try:
@@ -677,13 +955,38 @@ async def stream_ai_response(
                                     f"[{index}] Reference to document"
                                 )
 
-                # Yield final part with citations
-                if text_citations:
-                    yield "", text_citations
+                    # Yield the complete response
+                    logging.info(
+                        f"Stream AI: Yielding complete response of length {len(response_text)}"
+                    )
+                    yield response_text, text_citations
+                else:
+                    logging.error(
+                        "Stream AI: No message content found after completion"
+                    )
+                    yield "Sorry, I couldn't generate a response.", []
+
+            elif status == "failed":
+                error_message = "An error occurred"
+                if hasattr(run_status, "last_error") and run_status.last_error:
+                    error_message = run_status.last_error.message
+                logging.error(f"Stream AI: Run failed: {error_message}")
+                yield f"Sorry, an error occurred: {error_message}", []
+                break
+
+            elif status == "cancelled":
+                logging.info("Stream AI: Run was cancelled")
+                yield "The operation was cancelled.", []
+                break
+
+            elif status == "expired":
+                logging.info("Stream AI: Run expired")
+                yield "The operation timed out.", []
+                break
 
     except Exception as e:
-        logging.error(f"Error in streaming: {e}")
-        yield f"Sorry, an error occurred: {str(e)}", []
+        logging.error(f"Stream AI: Error in streaming: {e}")
+        yield f"Sorry, an unexpected error occurred: {str(e)}", []
 
 
 async def setup_assistant(
@@ -693,27 +996,33 @@ async def setup_assistant(
 ) -> str:
     """Set up an assistant for the conversation with simplified error handling."""
     try:
-        # First, try to find if we already have an assistant for this publication
-        assistants = client.beta.assistants.list(order="desc", limit=50)
+        # First, try to find if we already have an assistant for this company
+        assistants = client.beta.assistants.list(order="desc", limit=100)
 
-        assistant_name = f"Publication Assistant {publication.publication_workspace_id}"
+        # Use the correct naming convention as requested
+        assistant_name = f"Company Assistant {company.name}"
+
+        logging.info(f"Looking for existing assistant: {assistant_name}")
 
         # Look for existing assistant
         for assistant in assistants.data:
             if assistant.name == assistant_name:
+                logging.info(f"Found existing assistant with ID: {assistant.id}")
                 return assistant.id
 
         # Create a new assistant
+        logging.info(f"Creating new assistant: {assistant_name}")
         assistant = client.beta.assistants.create(
             name=assistant_name,
             instructions=f"""You are an assistant helping the company {company.name} with public procurement document analysis.
-            The publication is about: {get_publication_title(publication)}
+            The current publication is about: {get_publication_title(publication)}
             Always respond in Dutch unless specifically asked to use another language.
             Be concise but complete in your answers. Focus on helping understand requirements, deadlines, and other important information.
             """,
             model="gpt-4o-mini",
             tools=[{"type": "file_search"}],
         )
+        logging.info(f"Created new assistant with ID: {assistant.id}")
 
         # Set up vector store with publication documents
         vector_store_id = None
@@ -730,6 +1039,7 @@ async def setup_assistant(
                         name=f"publication_{publication.publication_workspace_id}"
                     )
                     vector_store_id = vector_store.id
+                    logging.info(f"Created vector store with ID: {vector_store_id}")
 
                     # Prepare files for upload (only accepted formats)
                     file_objects = []
@@ -753,6 +1063,9 @@ async def setup_assistant(
 
                     # Upload files if we have any valid ones
                     if file_objects:
+                        logging.info(
+                            f"Uploading {len(file_objects)} files to vector store"
+                        )
                         file_batch = (
                             client.beta.vector_stores.file_batches.upload_and_poll(
                                 vector_store_id=vector_store.id, files=file_objects
@@ -761,6 +1074,7 @@ async def setup_assistant(
 
                         if file_batch.status == "completed":
                             # Update assistant with vector store
+                            logging.info(f"Updating assistant with vector store")
                             client.beta.assistants.update(
                                 assistant_id=assistant.id,
                                 tool_resources={

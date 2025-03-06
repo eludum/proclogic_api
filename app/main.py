@@ -19,8 +19,11 @@ from app.util.pubproc import fetch_pubproc_data
 
 settings = Settings()
 
-logging.basicConfig(handlers=[logging.StreamHandler()])
-
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
