@@ -4,7 +4,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.company_models import Company, Sector
-from app.models.publication_models import CompanyPublicationMatch
+from app.models.publication_models import CompanyPublicationMatch, Publication
 from app.schemas.company_schemas import CompanySchema, SectorSchema
 
 
@@ -242,7 +242,11 @@ def get_company_saved_publications(company_vat_number: str, session: Session):
                 CompanyPublicationMatch.company_vat_number == company_vat_number,
                 CompanyPublicationMatch.is_saved == True,
             )
-            .options(joinedload(CompanyPublicationMatch.publication))
+            .options(
+                joinedload(CompanyPublicationMatch.publication)
+                .joinedload(Publication.company_matches)
+                .joinedload(Publication.dossier)
+            )
             .all()
         )
         return [match.publication for match in matches]
