@@ -29,13 +29,14 @@ class LotInfo(BaseModel):
     title: str
     description: str
 
+
 class PublicationInfo(BaseModel):
     dossier_desc_str: str = ""
     dossier_title_str: str = ""
     lots: list[LotInfo] = []
     lot_str: str = ""
     additional_cpv_codes_str: str = ""
-    
+
     def convert_publication_to_str(self, publication: PublicationSchema):
         self.dossier_title_str = get_descr_as_str(publication.dossier.titles)
         self.dossier_desc_str = get_descr_as_str(publication.dossier.descriptions)
@@ -48,9 +49,14 @@ class PublicationInfo(BaseModel):
             for i, lot in enumerate(publication.lots)
         ]
 
-        self.lot_str = "\n".join(f"{lot.title} - {lot.description}" for lot in self.lots)
+        self.lot_str = "\n".join(
+            f"{lot.title} - {lot.description}" for lot in self.lots
+        )
 
-        self.additional_cpv_codes_str = ", ".join(cpv.code for cpv in publication.cpv_additional_codes)
+        self.additional_cpv_codes_str = ", ".join(
+            cpv.code for cpv in publication.cpv_additional_codes
+        )
+
 
 def get_descr_as_str(
     descriptions: List[DescriptionSchema],
@@ -103,3 +109,11 @@ def extract_keywords(text: str) -> List[str]:
         words = re.findall(r"\b\w+\b", text.lower())
         return list(set(words))
 
+
+def truncate_text(text: str, max_length: int = 1000) -> str:
+    """Truncate text to the specified max length."""
+    if not text:
+        return ""
+    if len(text) <= max_length:
+        return text
+    return text[: max_length - 3] + "..."

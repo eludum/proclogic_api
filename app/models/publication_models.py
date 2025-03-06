@@ -261,6 +261,9 @@ class Publication(Base):
     company_matches: Mapped[List["CompanyPublicationMatch"]] = relationship(
         back_populates="publication"
     )
+    conversations: Mapped[List["Conversation"]] = relationship(
+        back_populates="company"
+    )
 
     # Helper properties
     @property

@@ -1,10 +1,10 @@
-from io import BytesIO
+import asyncio
 import json
 import logging
-from typing import List, Optional
+from io import BytesIO
+from typing import Dict, List, Optional, Tuple
 
 import httpx
-import asyncio
 from fastapi import (
     APIRouter,
     Depends,
@@ -14,623 +14,778 @@ from fastapi import (
 )
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from openai import OpenAI
-from pydantic import BaseModel
-from redis.client import Redis
+from sqlalchemy.orm import Session
 
 import app.crud.company as crud_company
+import app.crud.conversation as crud_conversation
+import app.crud.publication as crud_publication
 from app.ai.openai import get_openai_client
 from app.config.postgres import get_session
-from app.config.redis_manager import get_redis_client
 from app.config.settings import Settings
 from app.models.company_models import Company
+from app.models.publication_models import Publication
+from app.models.conversation_models import Conversation
+from app.schemas.conversation_schemas import (
+    ChatRequest,
+    ChatResponse,
+    ConversationSchema,
+    ConversationSummary,
+    MessageSchema,
+)
 from app.util.clerk import AuthUser, get_auth_user
+from app.util.converter import truncate_text
 from app.util.pubproc import get_publication_workspace_documents
-from app.util.redis_cache import get_thread_id, store_thread_id, refresh_thread_ttl
 
 conversations_router = APIRouter()
 
-settings = Settings()
 security = HTTPBearer()
+settings = Settings()
 
 
-# WebSocket message types
-class WSMessageType:
-    CONNECT = "connect"
-    ERROR = "error"
-    MESSAGE = "message"
-    RESPONSE_CHUNK = "response_chunk"
-    RESPONSE_COMPLETE = "response_complete"
-    CITATIONS = "citations"
+@conversations_router.get("/conversations/", response_model=List[ConversationSummary])
+async def get_user_conversations(
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """Get all conversations for the authenticated user."""
+    if not auth_user.email:
+        raise HTTPException(status_code=400, detail="User email not available")
+
+    with get_session() as session:
+        company = crud_company.get_company_by_email(
+            email=auth_user.email, session=session
+        )
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Get all conversations for this company
+        conversations = crud_conversation.get_company_conversations(
+            company_vat_number=company.vat_number, session=session
+        )
+
+        # Create summary responses
+        result = []
+        for conv in conversations:
+            # Get the last message if any exist
+            last_message = None
+            message_count = 0
+
+            if conv.messages:
+                sorted_messages = sorted(
+                    conv.messages, key=lambda m: m.created_at, reverse=True
+                )
+                last_message = sorted_messages[0] if sorted_messages else None
+                message_count = len(conv.messages)
+
+            # Get publication title
+            publication_title = get_publication_title(conv.publication)
+
+            result.append(
+                ConversationSummary(
+                    id=conv.id,
+                    publication_workspace_id=conv.publication_workspace_id,
+                    publication_title=publication_title,
+                    updated_at=conv.updated_at,
+                    last_message_preview=(
+                        truncate_text(last_message.content, 100)
+                        if last_message
+                        else None
+                    ),
+                    message_count=message_count,
+                )
+            )
+
+        return result
 
 
-# Models for request/response
-class ConversationRequest(BaseModel):
-    publication_workspace_id: str
-    message: str
-    thread_id: Optional[str] = None
+@conversations_router.get(
+    "/conversations/{conversation_id}", response_model=ConversationSchema
+)
+async def get_conversation(
+    conversation_id: int,
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """Get a specific conversation by ID."""
+    if not auth_user.email:
+        raise HTTPException(status_code=400, detail="User email not available")
+
+    with get_session() as session:
+        company = crud_company.get_company_by_email(
+            email=auth_user.email, session=session
+        )
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        conversation = crud_conversation.get_conversation_by_id(
+            conversation_id=conversation_id, session=session
+        )
+
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
+        # Verify ownership
+        if conversation.company_vat_number != company.vat_number:
+            raise HTTPException(
+                status_code=403, detail="Unauthorized access to conversation"
+            )
+
+        return conversation
 
 
-class ConversationResponse(BaseModel):
-    thread_id: str
-    response: str
-    citations: List[str]
+@conversations_router.post("/conversations/chat", response_model=ChatResponse)
+async def chat_with_publication(
+    request: ChatRequest,
+    auth_user: AuthUser = Depends(get_auth_user),
+    client: OpenAI = Depends(get_openai_client),
+):
+    """Send a message to a publication and get a response."""
+    if not auth_user.email:
+        raise HTTPException(status_code=400, detail="User email not available")
+
+    with get_session() as session:
+        company = crud_company.get_company_by_email(
+            email=auth_user.email, session=session
+        )
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Verify publication exists
+        publication = crud_publication.get_publication_by_workspace_id(
+            publication_workspace_id=request.publication_workspace_id, session=session
+        )
+        if not publication:
+            raise HTTPException(status_code=404, detail="Publication not found")
+
+        # Get or create conversation
+        conversation = None
+        if request.conversation_id:
+            conversation = crud_conversation.get_conversation_by_id(
+                conversation_id=request.conversation_id, session=session
+            )
+
+            # Verify ownership
+            if conversation and conversation.company_vat_number != company.vat_number:
+                raise HTTPException(
+                    status_code=403, detail="Unauthorized access to conversation"
+                )
+
+        if not conversation:
+            conversation = crud_conversation.get_or_create_conversation(
+                company_vat_number=company.vat_number,
+                publication_workspace_id=request.publication_workspace_id,
+                session=session,
+            )
+
+        # Add user message to conversation
+        user_message = crud_conversation.add_message(
+            conversation_id=conversation.id,
+            role="user",
+            content=request.message,
+            session=session,
+        )
+
+        # Process the message with OpenAI
+        response_content, citations = await process_ai_message(
+            conversation=conversation,
+            user_message=request.message,
+            company=company,
+            publication=publication,
+            client=client,
+        )
+
+        # Save the AI response
+        assistant_message = crud_conversation.add_message(
+            conversation_id=conversation.id,
+            role="assistant",
+            content=response_content,
+            citations=citations,
+            session=session,
+        )
+
+        return ChatResponse(conversation_id=conversation.id, message=assistant_message)
 
 
-# Helper function to get Redis client
-def get_redis() -> Redis:
-    return get_redis_client()
+@conversations_router.delete("/conversations/{conversation_id}", status_code=200)
+async def delete_conversation(
+    conversation_id: int,
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """Deactivate a conversation."""
+    if not auth_user.email:
+        raise HTTPException(status_code=400, detail="User email not available")
+
+    with get_session() as session:
+        company = crud_company.get_company_by_email(
+            email=auth_user.email, session=session
+        )
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        conversation = crud_conversation.get_conversation_by_id(
+            conversation_id=conversation_id, session=session
+        )
+
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
+        # Verify ownership
+        if conversation.company_vat_number != company.vat_number:
+            raise HTTPException(
+                status_code=403, detail="Unauthorized access to conversation"
+            )
+
+        success = crud_conversation.deactivate_conversation(
+            conversation_id=conversation_id, session=session
+        )
+
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to delete conversation")
+
+        return {"message": "Conversation successfully deleted"}
+
+
+@conversations_router.get(
+    "/publications/{publication_workspace_id}/conversation",
+    response_model=Optional[ConversationSchema],
+)
+async def get_publication_conversation(
+    publication_workspace_id: str,
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """Get the active conversation for a publication if it exists."""
+    if not auth_user.email:
+        raise HTTPException(status_code=400, detail="User email not available")
+
+    with get_session() as session:
+        company = crud_company.get_company_by_email(
+            email=auth_user.email, session=session
+        )
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Get all conversations for the publication and company
+        conversation = (
+            session.query(Conversation)
+            .filter(
+                Conversation.company_vat_number == company.vat_number,
+                Conversation.publication_workspace_id == publication_workspace_id,
+                Conversation.is_active == True,
+            )
+            .first()
+        )
+
+        if not conversation:
+            return None
+
+        return conversation
 
 
 @conversations_router.websocket("/ws/conversation")
 async def websocket_conversation(
     websocket: WebSocket,
     client: OpenAI = Depends(get_openai_client),
-    redis: Redis = Depends(get_redis),
 ):
     await websocket.accept()
     logging.info("WebSocket connection accepted")
 
     try:
-        # Wait for initial connection message
+        # Get initial connection data
         data = await websocket.receive_text()
-        logging.info(f"Received initial data: {data[:100]}...")
-        
-        try:
-            request_data = json.loads(data)
-            
-            # Extract connection parameters, be flexible about structure
-            params = request_data.get("data", {})
-            if not params and isinstance(request_data, dict):
-                # Try to use the top level if data is missing
-                params = request_data
-                
-            publication_workspace_id = params.get("publication_workspace_id")
-            thread_id = params.get("thread_id")
-            auth_token = params.get("token")
-            
-            logging.info(f"Extracted params: ws_id={publication_workspace_id}, thread={thread_id}, token={auth_token is not None}")
-            
-            # Validate minimum requirements
-            if not publication_workspace_id or not auth_token:
-                error_msg = "Missing required parameters: publication_workspace_id and token are required"
-                logging.error(error_msg)
-                await websocket.send_json({"type": WSMessageType.ERROR, "data": {"detail": error_msg}})
-                return
-            
-            # Create credentials object for auth
-            try:
-                credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=auth_token)
-                auth_user = await get_auth_user(credentials)
-                
-                if not auth_user or not auth_user.email:
-                    error_msg = "Invalid authentication token or email not available"
-                    logging.error(error_msg)
-                    await websocket.send_json({"type": WSMessageType.ERROR, "data": {"detail": error_msg}})
-                    return
-            except Exception as auth_error:
-                logging.error(f"Authentication error: {str(auth_error)}")
-                await websocket.send_json({
-                    "type": WSMessageType.ERROR, 
-                    "data": {"detail": f"Authentication failed: {str(auth_error)}"}
-                })
-                return
-                
-            # Get company
-            with get_session() as session:
-                company = crud_company.get_company_by_email(email=auth_user.email, session=session)
-                if not company:
-                    error_msg = "Company not found for authenticated user"
-                    logging.error(error_msg)
-                    await websocket.send_json({"type": WSMessageType.ERROR, "data": {"detail": error_msg}})
-                    return
-                    
-                vat_number = company.vat_number
-                logging.info(f"Authentication successful: company VAT={vat_number}")
-                
-            # Send a confirmation that connection is set up
-            await websocket.send_json({
-                "type": WSMessageType.RESPONSE_CHUNK,
-                "data": {
-                    "content": "Connected successfully. Ready to chat.",
-                    "done": False,
-                }
-            })
-            
-            # Process conversation
-            conversation_handler = ConversationHandler(
-                websocket=websocket,
-                company=company,
-                vat_number=vat_number,
-                publication_workspace_id=publication_workspace_id,
-                thread_id=thread_id,
-                client=client,
-                redis=redis,
+        request_data = json.loads(data)
+
+        # Extract connection parameters
+        publication_workspace_id = request_data.get("publication_workspace_id")
+        conversation_id = request_data.get("conversation_id")
+        auth_token = request_data.get("token")
+
+        if not publication_workspace_id or not auth_token:
+            await websocket.send_json(
+                {"type": "error", "data": {"detail": "Missing required parameters"}}
             )
-            
-            await conversation_handler.process()
-            
-        except json.JSONDecodeError as e:
-            logging.error(f"JSON decode error: {e}, raw data: {data[:50]}...")
-            await websocket.send_json({
-                "type": WSMessageType.ERROR, 
-                "data": {"detail": f"Invalid JSON format: {str(e)}"}
-            })
-        except Exception as e:
-            logging.error(f"Setup error: {str(e)}")
-            await websocket.send_json({
-                "type": WSMessageType.ERROR,
-                "data": {"detail": f"Connection setup error: {str(e)}"}
-            })
-            
+            return
+
+        # Authenticate user
+        try:
+            credentials = HTTPAuthorizationCredentials(
+                scheme="Bearer", credentials=auth_token
+            )
+            auth_user = await get_auth_user(credentials)
+
+            if not auth_user or not auth_user.email:
+                await websocket.send_json(
+                    {"type": "error", "data": {"detail": "Invalid authentication"}}
+                )
+                return
+
+        except Exception as auth_error:
+            logging.error(f"Authentication error: {str(auth_error)}")
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "data": {"detail": f"Authentication failed: {str(auth_error)}"},
+                }
+            )
+            return
+
+        # Get company and publication
+        with get_session() as session:
+            company = crud_company.get_company_by_email(
+                email=auth_user.email, session=session
+            )
+            if not company:
+                await websocket.send_json(
+                    {"type": "error", "data": {"detail": "Company not found"}}
+                )
+                return
+
+            publication = crud_publication.get_publication_by_workspace_id(
+                publication_workspace_id=publication_workspace_id, session=session
+            )
+            if not publication:
+                await websocket.send_json(
+                    {"type": "error", "data": {"detail": "Publication not found"}}
+                )
+                return
+
+            # Get or create conversation
+            conversation = None
+            if conversation_id:
+                conversation = crud_conversation.get_conversation_by_id(
+                    conversation_id=conversation_id, session=session
+                )
+
+                # Verify ownership
+                if (
+                    conversation
+                    and conversation.company_vat_number != company.vat_number
+                ):
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "data": {"detail": "Unauthorized access to conversation"},
+                        }
+                    )
+                    return
+
+            if not conversation:
+                conversation = crud_conversation.get_or_create_conversation(
+                    company_vat_number=company.vat_number,
+                    publication_workspace_id=publication_workspace_id,
+                    session=session,
+                )
+
+            # Send conversation ID to client
+            await websocket.send_json(
+                {
+                    "type": "connected",
+                    "data": {
+                        "conversation_id": conversation.id,
+                        "company_name": company.name,
+                        "publication_title": get_publication_title(publication),
+                    },
+                }
+            )
+
+        # Start listening for messages
+        while True:
+            try:
+                message_data = json.loads(await websocket.receive_text())
+
+                if message_data.get("type") != "message":
+                    continue
+
+                user_message = message_data.get("content", "")
+                if not user_message:
+                    continue
+
+                # Start stream response
+                await websocket.send_json(
+                    {
+                        "type": "stream_start",
+                        "data": {"conversation_id": conversation.id},
+                    }
+                )
+
+                # Process in new session since WebSocket connection is long-lived
+                with get_session() as session:
+                    # Add user message to database
+                    crud_conversation.add_message(
+                        conversation_id=conversation.id,
+                        role="user",
+                        content=user_message,
+                        session=session,
+                    )
+
+                    # Get fresh company and publication data
+                    company_refresh = crud_company.get_company_by_email(
+                        email=auth_user.email, session=session
+                    )
+                    publication_refresh = (
+                        crud_publication.get_publication_by_workspace_id(
+                            publication_workspace_id=publication_workspace_id,
+                            session=session,
+                        )
+                    )
+                    conversation_refresh = crud_conversation.get_conversation_by_id(
+                        conversation_id=conversation.id, session=session
+                    )
+
+                # Process with AI and stream response
+                response_chunks = []
+                citations = []
+
+                # Stream the AI response
+                async for chunk, citation in stream_ai_response(
+                    conversation=conversation_refresh,
+                    user_message=user_message,
+                    company=company_refresh,
+                    publication=publication_refresh,
+                    client=client,
+                ):
+                    response_chunks.append(chunk)
+                    if citation:
+                        citations.extend(citation)
+
+                    # Send chunk to client
+                    await websocket.send_json(
+                        {"type": "stream_chunk", "data": {"content": chunk}}
+                    )
+
+                    # Small delay to prevent flooding
+                    await asyncio.sleep(0.01)
+
+                # Combine all chunks
+                full_response = "".join(response_chunks)
+                citations_text = "\n".join(citations) if citations else None
+
+                # Save the full response in database
+                with get_session() as session:
+                    crud_conversation.add_message(
+                        conversation_id=conversation.id,
+                        role="assistant",
+                        content=full_response,
+                        citations=citations_text,
+                        session=session,
+                    )
+
+                # Send complete message
+                await websocket.send_json(
+                    {
+                        "type": "stream_end",
+                        "data": {"content": full_response, "citations": citations},
+                    }
+                )
+            except json.JSONDecodeError as e:
+                logging.error(f"Error decoding message: {e}")
+                await websocket.send_json(
+                    {"type": "error", "data": {"detail": "Invalid message format"}}
+                )
+            except Exception as e:
+                logging.error(f"Error processing message: {e}")
+                await websocket.send_json(
+                    {"type": "error", "data": {"detail": f"Error: {str(e)}"}}
+                )
+
     except WebSocketDisconnect:
         logging.info("WebSocket client disconnected")
     except Exception as e:
-        logging.error(f"Unhandled WebSocket error: {str(e)}")
+        logging.error(f"WebSocket error: {str(e)}")
         try:
-            await websocket.send_json({
-                "type": WSMessageType.ERROR,
-                "data": {"detail": f"Server error: {str(e)}"}
-            })
+            await websocket.send_json(
+                {"type": "error", "data": {"detail": f"Error: {str(e)}"}}
+            )
         except:
             pass
 
 
-class ConversationHandler:
-    """Handles the conversation flow and state for a WebSocket connection"""
+async def process_ai_message(
+    conversation: Conversation,
+    user_message: str,
+    company: Company,
+    publication: Publication,
+    client: OpenAI,
+) -> Tuple[str, Optional[str]]:
+    """Process a message with OpenAI and return response and citations."""
+    # Get or create OpenAI thread
+    thread_id = conversation.thread_id
+    assistant_id = conversation.assistant_id
 
-    def __init__(
-        self,
-        websocket: WebSocket,
-        company: Company,
-        vat_number: str,
-        publication_workspace_id: str,
-        thread_id: Optional[str],
-        client: OpenAI,
-        redis: Redis,
-    ):
-        self.websocket = websocket
-        self.company = company
-        self.vat_number = vat_number
-        self.publication_workspace_id = publication_workspace_id
-        self.thread_id = thread_id
-        self.client = client
-        self.redis = redis
-        self.assistant_id = None
-        self.vector_store_id = None
+    if not thread_id:
+        # Create a new thread
+        thread = client.beta.threads.create()
+        thread_id = thread.id
 
-    async def process(self):
-        """Main processing method for the conversation handler"""
-        # Set up the conversation
-        await self.setup_conversation()
-
-        # Process messages
-        await self.process_messages()
-
-    async def setup_conversation(self):
-        """Set up the conversation by creating or retrieving the assistant and thread"""
-        # First, check if we have a thread ID in Redis
-        if not self.thread_id:
-            try:
-                existing_thread_id = get_thread_id(
-                    self.redis, self.vat_number, self.publication_workspace_id
-                )
-                if existing_thread_id:
-                    self.thread_id = existing_thread_id
-                    logging.info(f"Retrieved thread ID from Redis: {self.thread_id}")
-
-                    # Send status to client
-                    await self.websocket.send_json(
-                        {
-                            "type": WSMessageType.RESPONSE_CHUNK,
-                            "data": {
-                                "content": "Continuing previous conversation...",
-                                "done": False,
-                            },
-                        }
-                    )
-
-                    # Refresh TTL
-                    refresh_thread_ttl(
-                        self.redis, self.vat_number, self.publication_workspace_id
-                    )
-            except Exception as e:
-                logging.warning(f"Error retrieving thread ID: {str(e)}")
-                # Continue without the thread ID - we'll create a new one
-
-        # Set up the assistant
-        try:
-            self.assistant_id = await self.setup_assistant()
-            
-            # Create a new thread if we don't have one
-            if not self.thread_id:
-                thread = self.client.beta.threads.create()
-                self.thread_id = thread.id
-                
-                # Store the thread ID in Redis
-                store_thread_id(
-                    self.redis, self.vat_number, self.publication_workspace_id, self.thread_id
-                )
-                logging.info(f"Created new thread ID: {self.thread_id}")
-        except Exception as e:
-            logging.error(f"Error setting up conversation: {str(e)}")
-            await self.websocket.send_json(
-                {"type": WSMessageType.ERROR, "data": {"detail": f"Error setting up conversation: {str(e)}"}}
+        # Update conversation with thread ID
+        with get_session() as session:
+            crud_conversation.update_conversation_ai_info(
+                conversation_id=conversation.id,
+                assistant_id=assistant_id,
+                thread_id=thread_id,
+                session=session,
             )
-            raise
 
-    async def setup_assistant(self) -> str:
-        """Set up the assistant with vector store for file search"""
-        # Check if company already has an assistant
-        company_name = self.company.name
-        assistants = self.client.beta.assistants.list(
-            order="desc",
-            limit=100,
+    # Set up assistant if needed
+    if not assistant_id:
+        assistant_id = await setup_assistant(
+            client=client, company=company, publication=publication
         )
 
-        # Look for an existing assistant for this company
-        assistant_id = None
-        for assistant in assistants.data:
-            if assistant.name == f"Company Assistant {company_name}":
-                assistant_id = assistant.id
-                break
-
-        if not assistant_id:
-            # Create a new assistant for this company
-            assistant = self.client.beta.assistants.create(
-                name=f"Company Assistant {company_name}",
-                instructions=f"You are an assistant for {company_name}. Help with procurement files analysis. Answer in Dutch.",
-                model="gpt-4o-mini",
-                tools=[{"type": "file_search"}],
+        # Update conversation with assistant ID
+        with get_session() as session:
+            crud_conversation.update_conversation_ai_info(
+                conversation_id=conversation.id,
+                assistant_id=assistant_id,
+                thread_id=thread_id,
+                session=session,
             )
-            assistant_id = assistant.id
 
-        # Fetch documents for this publication
+    # Add message to thread
+    client.beta.threads.messages.create(
+        thread_id=thread_id, role="user", content=user_message
+    )
+
+    # Create a run
+    run = client.beta.threads.runs.create_and_poll(
+        thread_id=thread_id, assistant_id=assistant_id
+    )
+
+    if run.status != "completed":
+        return "Sorry, I had trouble processing your request. Please try again.", None
+
+    # Get the response
+    messages = list(
+        client.beta.threads.messages.list(thread_id=thread_id, order="desc", limit=1)
+    )
+
+    if not messages:
+        return "No response was generated. Please try again.", None
+
+    # Process response and citations
+    message_content = messages[0].content[0].text
+    annotations = message_content.annotations
+
+    response_text = message_content.value
+    citations = []
+
+    # Process citations
+    for index, annotation in enumerate(annotations):
+        response_text = response_text.replace(annotation.text, f"[{index}]")
+        if file_citation := getattr(annotation, "file_citation", None):
+            try:
+                cited_file = client.files.retrieve(file_citation.file_id)
+                citations.append(f"[{index}] {cited_file.filename}")
+            except Exception as e:
+                logging.error(f"Error retrieving citation: {e}")
+                citations.append(f"[{index}] Reference to document")
+
+    return response_text, "\n".join(citations) if citations else None
+
+
+async def stream_ai_response(
+    conversation: Conversation,
+    user_message: str,
+    company: Company,
+    publication: Publication,
+    client: OpenAI,
+):
+    """Stream a response from OpenAI."""
+    # Get or create OpenAI thread
+    thread_id = conversation.thread_id
+    assistant_id = conversation.assistant_id
+
+    if not thread_id:
+        # Create a new thread
+        thread = client.beta.threads.create()
+        thread_id = thread.id
+
+        # Update conversation with thread ID
+        with get_session() as session:
+            crud_conversation.update_conversation_ai_info(
+                conversation_id=conversation.id,
+                assistant_id=assistant_id,
+                thread_id=thread_id,
+                session=session,
+            )
+
+    # Set up assistant if needed
+    if not assistant_id:
+        assistant_id = await setup_assistant(
+            client=client, company=company, publication=publication
+        )
+
+        # Update conversation with assistant ID
+        with get_session() as session:
+            crud_conversation.update_conversation_ai_info(
+                conversation_id=conversation.id,
+                assistant_id=assistant_id,
+                thread_id=thread_id,
+                session=session,
+            )
+
+    # Add message to thread
+    client.beta.threads.messages.create(
+        thread_id=thread_id, role="user", content=user_message
+    )
+
+    # Create a run with streaming
+    run = client.beta.threads.runs.create(
+        thread_id=thread_id, assistant_id=assistant_id
+    )
+
+    # Get run status and start streaming when available
+    while True:
+        run_status = client.beta.threads.runs.retrieve(
+            thread_id=thread_id, run_id=run.id
+        )
+
+        if run_status.status == "completed":
+            # Get messages
+            messages = list(
+                client.beta.threads.messages.list(
+                    thread_id=thread_id, order="desc", limit=1
+                )
+            )
+
+            if not messages:
+                yield "No response was generated.", []
+                return
+
+            # Process response and citations
+            message_content = messages[0].content[0].text
+            annotations = message_content.annotations
+
+            response_text = message_content.value
+            citations = []
+
+            # Process citations
+            for index, annotation in enumerate(annotations):
+                response_text = response_text.replace(annotation.text, f"[{index}]")
+                if file_citation := getattr(annotation, "file_citation", None):
+                    try:
+                        cited_file = client.files.retrieve(file_citation.file_id)
+                        citations.append(f"[{index}] {cited_file.filename}")
+                    except Exception as e:
+                        logging.error(f"Error retrieving citation: {e}")
+                        citations.append(f"[{index}] Reference to document")
+
+            # For simulating streaming in non-streaming context, break into chunks
+            for i in range(0, len(response_text), 10):
+                chunk = response_text[i : i + 10]
+                yield chunk, [] if i < len(response_text) - 10 else citations
+                await asyncio.sleep(0.01)
+            return
+
+        elif run_status.status == "failed":
+            yield "Sorry, I had trouble processing your request.", []
+            return
+
+        # Add some delay to avoid hammering the API
+        await asyncio.sleep(0.5)
+
+
+async def setup_assistant(
+    client: OpenAI,
+    company: Company,
+    publication: Publication,
+) -> str:
+    """Set up an assistant for the conversation."""
+    try:
+        # First, try to find if we already have an assistant for this publication
+        assistants = client.beta.assistants.list(
+            order="desc",
+            limit=50,
+        )
+
+        assistant_name = f"Publication Assistant {publication.publication_workspace_id}"
+
+        # Look for existing assistant
+        for assistant in assistants.data:
+            if assistant.name == assistant_name:
+                return assistant.id
+
+        # Create a new assistant
+        assistant = client.beta.assistants.create(
+            name=assistant_name,
+            instructions=f"""You are an assistant helping the company {company.name} with public procurement document analysis.
+            The publication is about: {get_publication_title(publication)}
+            Always respond in Dutch unless specifically asked to use another language.
+            Be concise but complete in your answers. Focus on helping understand requirements, deadlines, and other important information.
+            """,
+            model="gpt-4o-mini",
+            tools=[{"type": "file_search"}],
+        )
+
+        # Try to get documents and set up vector store
         try:
             async with httpx.AsyncClient() as http_client:
                 filesmap = await get_publication_workspace_documents(
-                    http_client, self.publication_workspace_id
+                    http_client, publication.publication_workspace_id
                 )
-        except Exception as e:
-            logging.error(f"Error fetching documents: {str(e)}")
-            filesmap = {}
 
-        if filesmap:
-            # Create a vector store for these files
-            try:
-                vector_store = self.client.beta.vector_stores.create(
-                    name=f"publication_{self.publication_workspace_id}"
-                )
-                self.vector_store_id = vector_store.id
-
-                # Filter files with accepted extensions
-                filtered_filesmap = {
-                    file_name: file_data
-                    for file_name, file_data in filesmap.items()
-                    if file_name.lower().endswith(
-                        tuple(settings.openai_vector_store_accepted_formats)
+                if filesmap:
+                    # Create vector store
+                    vector_store = client.beta.vector_stores.create(
+                        name=f"publication_{publication.publication_workspace_id}"
                     )
-                }
 
-                if filtered_filesmap:
-                    # Upload files to vector store - ensure we have proper file objects
-                    file_objects = []
-                    for file_name, file_data in filtered_filesmap.items():
-                        try:
-                            # Always create a new BytesIO object regardless of input type
-                            byte_io = None
-                            
-                            if isinstance(file_data, dict) and 'content' in file_data:
-                                # Handle dictionary from cache
-                                byte_io = BytesIO(file_data['content'])
-                                byte_io.name = file_data.get('name', file_name)
-                            elif hasattr(file_data, 'read') and hasattr(file_data, 'seek'):
-                                # Create a new BytesIO from any file-like object
-                                file_data.seek(0)
-                                content = file_data.read()
-                                byte_io = BytesIO(content)
-                                byte_io.name = getattr(file_data, 'name', file_name)
-                            
-                            if byte_io:
-                                file_objects.append(byte_io)
-                            else:
-                                logging.warning(f"Skipping invalid file: {file_name}")
-                                
-                        except Exception as e:
-                            logging.error(f"Error processing file {file_name}: {str(e)}")
-                    # Only proceed if we have valid file objects
-                    if file_objects:
-                        file_batch = (
-                            self.client.beta.vector_stores.file_batches.upload_and_poll(
-                                vector_store_id=vector_store.id,
-                                files=file_objects,
-                            )
+                    # Filter files with acceptable extensions
+                    filtered_files = {
+                        filename: file_data
+                        for filename, file_data in filesmap.items()
+                        if filename.lower().endswith(
+                            tuple(settings.openai_vector_store_accepted_formats)
                         )
-
-                        if file_batch.status != "completed":
-                            logging.error(f"Failed to upload files: {file_batch.status}")
-                            # Continue without files rather than raising an exception
-                            await self.websocket.send_json(
-                                {
-                                    "type": WSMessageType.RESPONSE_CHUNK,
-                                    "data": {"content": "Document processing incomplete, but we can continue.", "done": False},
-                                }
-                            )
-                        else:
-                            # Update assistant with vector store
-                            self.client.beta.assistants.update(
-                                assistant_id=assistant_id,
-                                tool_resources={
-                                    "file_search": {"vector_store_ids": [vector_store.id]}
-                                },
-                            )
-                    else:
-                        # No valid file objects
-                        self.client.beta.assistants.update(
-                            assistant_id=assistant_id,
-                            tool_resources={"file_search": {"vector_store_ids": []}},
-                        )
-                else:
-                    # Update assistant with empty vector store
-                    self.client.beta.assistants.update(
-                        assistant_id=assistant_id,
-                        tool_resources={"file_search": {"vector_store_ids": []}},
-                    )
-            except Exception as e:
-                logging.error(f"Error setting up vector store: {str(e)}")
-                # Continue without files rather than raising an exception
-                await self.websocket.send_json(
-                    {
-                        "type": WSMessageType.RESPONSE_CHUNK,
-                        "data": {"content": "Document processing failed, but we can continue.", "done": False},
                     }
-                )
-                # Update assistant with empty vector store
-                self.client.beta.assistants.update(
-                    assistant_id=assistant_id,
-                    tool_resources={"file_search": {"vector_store_ids": []}},
-                )
-        else:
-            # Update assistant with empty vector store
-            self.client.beta.assistants.update(
-                assistant_id=assistant_id,
-                tool_resources={"file_search": {"vector_store_ids": []}},
-            )
 
-        return assistant_id
-
-    async def process_messages(self):
-        """Process messages from the client and send responses"""
-        while True:
-            try:
-                # Wait for message from client
-                data = await self.websocket.receive_text()
-                message_data = json.loads(data)
-
-                # Check message type
-                if message_data.get("type") != WSMessageType.MESSAGE:
-                    await self.websocket.send_json(
-                        {
-                            "type": WSMessageType.ERROR,
-                            "data": {"detail": "Expected message type"},
-                        }
-                    )
-                    continue
-
-                # Extract the user message
-                user_message = message_data.get("data", {}).get("content", "")
-                if not user_message:
-                    await self.websocket.send_json(
-                        {
-                            "type": WSMessageType.ERROR,
-                            "data": {"detail": "Message cannot be empty"},
-                        }
-                    )
-                    continue
-
-                # Add the message to the thread
-                self.client.beta.threads.messages.create(
-                    thread_id=self.thread_id, role="user", content=user_message
-                )
-
-                # Create a run
-                run = self.client.beta.threads.runs.create(
-                    thread_id=self.thread_id,
-                    assistant_id=self.assistant_id,
-                )
-
-                # Process the run
-                await self.process_run(run.id)
-
-                # Refresh the thread TTL
-                refresh_thread_ttl(
-                    self.redis, self.vat_number, self.publication_workspace_id
-                )
-
-            except WebSocketDisconnect:
-                logging.info(f"WebSocket client disconnected")
-                break
-            except json.JSONDecodeError:
-                await self.websocket.send_json(
-                    {
-                        "type": WSMessageType.ERROR,
-                        "data": {"detail": "Invalid JSON format"},
-                    }
-                )
-            except Exception as e:
-                logging.error(f"Error processing message: {e}")
-                await self.websocket.send_json(
-                    {"type": WSMessageType.ERROR, "data": {"detail": str(e)}}
-                )
-
-    async def process_run(self, run_id: str):
-        """Process a run and stream the results"""
-        citations = []
-        last_check_time = asyncio.get_event_loop().time()
-        last_status = None
-
-        while True:
-            # Get the run status
-            try:
-                run_status = self.client.beta.threads.runs.retrieve(
-                    thread_id=self.thread_id, run_id=run_id
-                )
-                
-                # Only send update if status changed or it's been more than 3 seconds
-                current_time = asyncio.get_event_loop().time()
-                if run_status.status != last_status or (current_time - last_check_time) > 3:
-                    last_status = run_status.status
-                    last_check_time = current_time
-                    
-                    # Send periodic updates for in-progress states
-                    if run_status.status in ["queued", "in_progress"]:
-                        await self.websocket.send_json(
-                            {
-                                "type": WSMessageType.RESPONSE_CHUNK,
-                                "data": {"content": "ProcLogic AI is aan het denken...", "done": False},
-                            }
-                        )
-            except Exception as e:
-                logging.error(f"Error retrieving run status: {e}")
-                await self.websocket.send_json(
-                    {
-                        "type": WSMessageType.ERROR,
-                        "data": {"detail": f"Error retrieving status: {str(e)}"},
-                    }
-                )
-                return
-
-            if run_status.status == "completed":
-                try:
-                    # Get the assistant's response messages
-                    messages = list(
-                        self.client.beta.threads.messages.list(
-                            thread_id=self.thread_id,
-                            order="desc",  # Get most recent first
-                            limit=1,  # Only get the last message
-                        )
-                    )
-
-                    if not messages:
-                        await self.websocket.send_json(
-                            {
-                                "type": WSMessageType.ERROR,
-                                "data": {"detail": "No response generated"},
-                            }
-                        )
-                        break
-
-                    # Process the response message and citations
-                    message_content = messages[0].content[0].text
-                    annotations = message_content.annotations
-
-                    # Process citations and annotations
-                    response_with_citations = message_content.value
-                    for index, annotation in enumerate(annotations):
-                        response_with_citations = response_with_citations.replace(
-                            annotation.text, f"[{index}]"
-                        )
-                        if file_citation := getattr(annotation, "file_citation", None):
+                    if filtered_files:
+                        # Prepare files for upload
+                        file_objects = []
+                        for filename, file_data in filtered_files.items():
                             try:
-                                cited_file = self.client.files.retrieve(file_citation.file_id)
-                                citations.append(f"[{index}] {cited_file.filename}")
+                                if hasattr(file_data, "read") and hasattr(
+                                    file_data, "seek"
+                                ):
+                                    file_data.seek(0)
+                                    content = file_data.read()
+                                    byte_io = BytesIO(content)
+                                    byte_io.name = getattr(file_data, "name", filename)
+                                    file_objects.append(byte_io)
                             except Exception as e:
-                                logging.error(f"Error retrieving citation: {e}")
-                                citations.append(f"[{index}] Reference to document")
+                                logging.error(f"Error processing file {filename}: {e}")
 
-                    # Send the final message with all citations properly formatted
-                    await self.websocket.send_json(
-                        {
-                            "type": WSMessageType.RESPONSE_COMPLETE,
-                            "data": {
-                                "thread_id": self.thread_id,
-                                "content": response_with_citations,
-                                "done": True,
-                            },
-                        }
-                    )
+                        if file_objects:
+                            # Upload files to vector store
+                            file_batch = (
+                                client.beta.vector_stores.file_batches.upload_and_poll(
+                                    vector_store_id=vector_store.id, files=file_objects
+                                )
+                            )
 
-                    # Send citation information
-                    if citations:
-                        await self.websocket.send_json(
-                            {
-                                "type": WSMessageType.CITATIONS,
-                                "data": {"citations": citations},
-                            }
-                        )
-                    
-                    break
-                except Exception as e:
-                    logging.error(f"Error processing completed run: {e}")
-                    await self.websocket.send_json(
-                        {
-                            "type": WSMessageType.ERROR,
-                            "data": {"detail": f"Error processing response: {str(e)}"},
-                        }
-                    )
-                    break
+                            if file_batch.status == "completed":
+                                # Update assistant with vector store
+                                client.beta.assistants.update(
+                                    assistant_id=assistant.id,
+                                    tool_resources={
+                                        "file_search": {
+                                            "vector_store_ids": [vector_store.id]
+                                        }
+                                    },
+                                )
+        except Exception as e:
+            logging.error(f"Error setting up vector store: {e}")
 
-            elif run_status.status == "failed":
-                await self.websocket.send_json(
-                    {
-                        "type": WSMessageType.ERROR,
-                        "data": {"detail": f"Run failed: {run_status.last_error or 'Unknown error'}"},
-                    }
-                )
-                break
+        return assistant.id
 
-            elif run_status.status == "requires_action":
-                # Handle tool calls if needed - for future implementation
-                logging.info("Run requires action - currently not supported")
-                await self.websocket.send_json(
-                    {
-                        "type": WSMessageType.ERROR,
-                        "data": {"detail": "This type of interaction is not supported yet"},
-                    }
-                )
-                break
-
-            # Small delay before checking again
-            await asyncio.sleep(1)
-
-
-@conversations_router.delete(
-    "/conversation/{publication_workspace_id}", status_code=200
-)
-async def end_conversation(
-    publication_workspace_id: str,
-    auth_user: AuthUser = Depends(get_auth_user),
-    client: OpenAI = Depends(get_openai_client),
-    redis: Redis = Depends(get_redis),
-):
-    """End a conversation and clean up resources for a specific publication and company"""
-    # Get the user's company
-    with get_session() as session:
-        if not auth_user.email:
-            raise HTTPException(status_code=400, detail="User email not available")
-
-        company = crud_company.get_company_by_email(
-            email=auth_user.email, session=session
-        )
-        if not company:
-            raise HTTPException(
-                status_code=404, detail="Company not found for authenticated user"
-            )
-
-        vat_number = company.vat_number
-
-    # Get thread_id from Redis
-    thread_id = get_thread_id(redis, vat_number, publication_workspace_id)
-    if not thread_id:
-        return {"message": "No active conversation found"}
-
-    # Clean up Redis
-    try:
-        # Delete the thread from Redis
-        redis.delete(f"thread:{vat_number}:{publication_workspace_id}")
-
-        return {"message": "Conversation ended and resources cleaned up"}
     except Exception as e:
-        logging.error(f"Error cleaning up conversation: {e}")
+        logging.error(f"Error setting up assistant: {e}")
         raise HTTPException(
-            status_code=500, detail=f"Error cleaning up conversation: {str(e)}"
+            status_code=500, detail=f"Failed to set up AI assistant: {str(e)}"
         )
+
+
+def get_publication_title(publication: Publication) -> str:
+    """Extract publication title from publication object."""
+    if publication and publication.dossier and publication.dossier.titles:
+        for title in publication.dossier.titles:
+            if title.language in settings.prefered_languages_descriptions:
+                return title.text
+    return "Untitled Publication"
