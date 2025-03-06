@@ -14,9 +14,12 @@ from sqlalchemy.orm import Session
 
 import app.crud.company as crud_company
 import app.crud.publication as crud_publication
-from app.ai.recommend import (get_recommendation, summarize_publication_award,
-                              summarize_publication_with_files,
-                              summarize_publication_without_files)
+from app.ai.recommend import (
+    get_recommendation,
+    summarize_publication_award,
+    summarize_publication_with_files,
+    summarize_publication_without_files,
+)
 from app.config.postgres import get_session
 from app.config.settings import Settings
 from app.schemas.company_schemas import CompanyPublicationMatchSchema
@@ -43,10 +46,12 @@ async def fetch_pubproc_data() -> None:
             try:
                 async with httpx.AsyncClient() as client:
                     await retrieve_publications(client=client)
-                await asyncio.sleep(600)  # 10 minutes in seconds
             except Exception as e:
                 logging.error("error in fetching data: %s", e)
-        await asyncio.sleep(60)
+            finally:
+                await asyncio.sleep(60)
+        else:
+            await asyncio.sleep(60)
 
 
 async def retrieve_publications(client: httpx.AsyncClient) -> None:
@@ -227,7 +232,7 @@ async def generate_company_recommendations(
     if match_schemas:
         # Add matches to publication schema before saving
         pub.company_matches = match_schemas
-        
+
         crud_publication.get_or_create_publication(
             publication_schema=pub, session=session
         )
@@ -236,7 +241,7 @@ async def generate_company_recommendations(
 async def get_notice_xml(
     client: httpx.AsyncClient, publication_workspace_id: str
 ) -> str:
-    # TODO: add versions to publications
+    # TODO: add versions to publications, also key "versions" errors sometimes
     pub_workspace_r = await get_publication_workspace_data(
         client=client, publication_workspace_id=publication_workspace_id
     )
