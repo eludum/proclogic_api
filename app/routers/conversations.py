@@ -587,8 +587,8 @@ async def stream_ai_response(
     publication: Publication,
     client: OpenAI,
 ):
-    """Stream a response from OpenAI."""
-    # Get or create OpenAI thread
+    """Stream a response from OpenAI using native streaming."""
+    # Get or create OpenAI thread and assistant
     thread_id = conversation.thread_id
     assistant_id = conversation.assistant_id
 
@@ -628,58 +628,62 @@ async def stream_ai_response(
 
     # Create a run with streaming
     run = client.beta.threads.runs.create(
-        thread_id=thread_id, assistant_id=assistant_id
+        thread_id=thread_id, assistant_id=assistant_id, stream=True  # Enable streaming
     )
 
-    # Get run status and start streaming when available
-    while True:
-        run_status = client.beta.threads.runs.retrieve(
-            thread_id=thread_id, run_id=run.id
-        )
+    # Variable to collect all text for citations processing
+    collected_text = ""
+    text_citations = []
 
-        if run_status.status == "completed":
-            # Get messages
-            messages = list(
-                client.beta.threads.messages.list(
-                    thread_id=thread_id, order="desc", limit=1
+    # Stream the response as it's generated
+    try:
+        async for chunk in run:
+            if (
+                chunk.event == "thread.message.delta"
+                and hasattr(chunk.data, "delta")
+                and hasattr(chunk.data.delta, "content")
+            ):
+                delta_content = chunk.data.delta.content
+                if delta_content and len(delta_content) > 0:
+                    content_part = delta_content[0].text.value
+                    collected_text += content_part
+                    yield content_part, []
+
+            elif chunk.event == "thread.run.completed":
+                # Get all messages to process citations
+                messages = list(
+                    client.beta.threads.messages.list(
+                        thread_id=thread_id, order="desc", limit=1
+                    )
                 )
-            )
 
-            if not messages:
-                yield "No response was generated.", []
-                return
+                if messages and messages[0].content and messages[0].content[0].text:
+                    message_content = messages[0].content[0].text
+                    annotations = message_content.annotations
 
-            # Process response and citations
-            message_content = messages[0].content[0].text
-            annotations = message_content.annotations
+                    # Process citations
+                    for index, annotation in enumerate(annotations):
+                        if file_citation := getattr(annotation, "file_citation", None):
+                            try:
+                                cited_file = client.files.retrieve(
+                                    file_citation.file_id
+                                )
+                                text_citations.append(
+                                    f"[{index}] {cited_file.filename}"
+                                )
+                            except Exception as e:
+                                logging.error(f"Error retrieving citation: {e}")
+                                text_citations.append(
+                                    f"[{index}] Reference to document"
+                                )
 
-            response_text = message_content.value
-            citations = []
+                # Yield final part with citations
+                if text_citations:
+                    yield "", text_citations
 
-            # Process citations
-            for index, annotation in enumerate(annotations):
-                response_text = response_text.replace(annotation.text, f"[{index}]")
-                if file_citation := getattr(annotation, "file_citation", None):
-                    try:
-                        cited_file = client.files.retrieve(file_citation.file_id)
-                        citations.append(f"[{index}] {cited_file.filename}")
-                    except Exception as e:
-                        logging.error(f"Error retrieving citation: {e}")
-                        citations.append(f"[{index}] Reference to document")
-
-            # For simulating streaming in non-streaming context, break into chunks
-            for i in range(0, len(response_text), 10):
-                chunk = response_text[i : i + 10]
-                yield chunk, [] if i < len(response_text) - 10 else citations
-                await asyncio.sleep(0.01)
-            return
-
-        elif run_status.status == "failed":
-            yield "Sorry, I had trouble processing your request.", []
-            return
-
-        # Add some delay to avoid hammering the API
-        await asyncio.sleep(0.5)
+    except Exception as e:
+        logging.error(f"Error in streaming: {e}")
+        yield f"Sorry, an error occurred: {str(e)}", []
 
 
 async def setup_assistant(
@@ -687,13 +691,10 @@ async def setup_assistant(
     company: Company,
     publication: Publication,
 ) -> str:
-    """Set up an assistant for the conversation."""
+    """Set up an assistant for the conversation with simplified error handling."""
     try:
         # First, try to find if we already have an assistant for this publication
-        assistants = client.beta.assistants.list(
-            order="desc",
-            limit=50,
-        )
+        assistants = client.beta.assistants.list(order="desc", limit=50)
 
         assistant_name = f"Publication Assistant {publication.publication_workspace_id}"
 
@@ -714,7 +715,9 @@ async def setup_assistant(
             tools=[{"type": "file_search"}],
         )
 
-        # Try to get documents and set up vector store
+        # Set up vector store with publication documents
+        vector_store_id = None
+
         try:
             async with httpx.AsyncClient() as http_client:
                 filesmap = await get_publication_workspace_documents(
@@ -726,57 +729,60 @@ async def setup_assistant(
                     vector_store = client.beta.vector_stores.create(
                         name=f"publication_{publication.publication_workspace_id}"
                     )
+                    vector_store_id = vector_store.id
 
-                    # Filter files with acceptable extensions
-                    filtered_files = {
-                        filename: file_data
-                        for filename, file_data in filesmap.items()
-                        if filename.lower().endswith(
+                    # Prepare files for upload (only accepted formats)
+                    file_objects = []
+                    for filename, file_data in filesmap.items():
+                        if not filename.lower().endswith(
                             tuple(settings.openai_vector_store_accepted_formats)
-                        )
-                    }
+                        ):
+                            continue
 
-                    if filtered_files:
-                        # Prepare files for upload
-                        file_objects = []
-                        for filename, file_data in filtered_files.items():
-                            try:
-                                if hasattr(file_data, "read") and hasattr(
-                                    file_data, "seek"
-                                ):
-                                    file_data.seek(0)
-                                    content = file_data.read()
-                                    byte_io = BytesIO(content)
-                                    byte_io.name = getattr(file_data, "name", filename)
-                                    file_objects.append(byte_io)
-                            except Exception as e:
-                                logging.error(f"Error processing file {filename}: {e}")
+                        try:
+                            if hasattr(file_data, "read") and hasattr(
+                                file_data, "seek"
+                            ):
+                                file_data.seek(0)
+                                content = file_data.read()
+                                byte_io = BytesIO(content)
+                                byte_io.name = getattr(file_data, "name", filename)
+                                file_objects.append(byte_io)
+                        except Exception as e:
+                            logging.error(f"Error processing file {filename}: {e}")
 
-                        if file_objects:
-                            # Upload files to vector store
-                            file_batch = (
-                                client.beta.vector_stores.file_batches.upload_and_poll(
-                                    vector_store_id=vector_store.id, files=file_objects
-                                )
+                    # Upload files if we have any valid ones
+                    if file_objects:
+                        file_batch = (
+                            client.beta.vector_stores.file_batches.upload_and_poll(
+                                vector_store_id=vector_store.id, files=file_objects
                             )
+                        )
 
-                            if file_batch.status == "completed":
-                                # Update assistant with vector store
-                                client.beta.assistants.update(
-                                    assistant_id=assistant.id,
-                                    tool_resources={
-                                        "file_search": {
-                                            "vector_store_ids": [vector_store.id]
-                                        }
-                                    },
-                                )
+                        if file_batch.status == "completed":
+                            # Update assistant with vector store
+                            client.beta.assistants.update(
+                                assistant_id=assistant.id,
+                                tool_resources={
+                                    "file_search": {
+                                        "vector_store_ids": [vector_store.id]
+                                    }
+                                },
+                            )
         except Exception as e:
             logging.error(f"Error setting up vector store: {e}")
+            # Continue without vector store if there was an error
+            if vector_store_id:
+                # Still try to update the assistant with an empty vector store
+                client.beta.assistants.update(
+                    assistant_id=assistant.id,
+                    tool_resources={"file_search": {"vector_store_ids": []}},
+                )
 
         return assistant.id
 
     except Exception as e:
-        logging.error(f"Error setting up assistant: {e}")
+        logging.error(f"Error creating assistant: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to set up AI assistant: {str(e)}"
         )
