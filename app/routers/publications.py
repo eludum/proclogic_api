@@ -135,11 +135,11 @@ async def get_publication_by_workspace_id(
 
 
 @publications_router.get(
-    "/publications/search/{search_term}/",
+    "/publications/search/",
     response_model=List[PublicationOut],
 )
 async def search_publications_paid(
-    search_term: str,
+    search_term: Optional[str] = Query(None, description="Search term"),
     auth_user: AuthUser = Depends(get_auth_user),
     region: List[str] = Query(None, description="Filter by region codes"),
     sector: List[str] = Query(None, description="Filter by sector"),
@@ -226,11 +226,11 @@ async def search_publications_paid(
 
 
 @publications_router.get(
-    "/publications/free/search/{search_term}/",
+    "/publications/free/search/",
     response_model=List[PublicationOut],
 )
 async def search_publications_free(
-    search_term: str,
+    search_term: Optional[str] = Query(None, description="Search term"),
     region: List[str] = Query(None, description="Filter by region codes"),
     sector: List[str] = Query(None, description="Filter by sector"),
 ) -> List[PublicationOut]:

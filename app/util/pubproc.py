@@ -58,18 +58,19 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
     """
     Main function that retrieves and processes publications.
     """
-    with get_session() as session:
-        pubproc_r = await get_daily_pubproc_search_data(client=client)
-        pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
+    pass
+    # with get_session() as session:
+    #     pubproc_r = await get_daily_pubproc_search_data(client=client)
+    #     pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
 
-        # Process each publication
-        for pub in pubproc_data:
-            try:
-                await process_publication(client, pub, session)
-            except Exception as e:
-                logging.error(
-                    f"Error processing publication {pub.publication_workspace_id}: {e}"
-                )
+    #     # Process each publication
+    #     for pub in pubproc_data:
+    #         try:
+    #             await process_publication(client, pub, session)
+    #         except Exception as e:
+    #             logging.error(
+    #                 f"Error processing publication {pub.publication_workspace_id}: {e}"
+    #             )
 
 
 async def process_publication(

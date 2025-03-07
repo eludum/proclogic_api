@@ -1,0 +1,1 @@
+2025-03-06 22:51:03,032 - root - ERROR - Error processing publication 0d2c57c2-a9b6-4f2b-b43b-b07756e70e97: File is not a zip file

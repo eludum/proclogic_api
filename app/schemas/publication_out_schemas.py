@@ -34,6 +34,8 @@ class PublicationOut(BaseModel):
     publication_in_your_sector: Optional[bool] = None
     is_recommended: Optional[bool] = None
     is_saved: Optional[bool] = None
+    # TODO: implement is viewed on out
+    is_viewed: Optional[bool] = None
 
     # Location and sector information
     region: Optional[List[str]] = None

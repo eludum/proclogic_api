@@ -208,8 +208,8 @@ async def stream_ai_response(
     # Citations to be collected
     text_citations = []
 
-    # First yield an initial placeholder to start the stream
-    yield "Denken...", []
+    # # First yield an initial placeholder to start the stream
+    # yield "Denken...", []
 
     # Poll until the run is completed
     completed = False
