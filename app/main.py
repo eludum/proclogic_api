@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
-from clerk_backend_api.jwks_helpers import authenticate_request
 from fastapi_pagination import add_pagination
 
 from app.config.settings import Settings
@@ -14,6 +13,7 @@ from app.routers.email import email_router
 from app.routers.health import health_router
 from app.routers.publications import publications_router
 from app.routers.conversations import conversations_router
+from app.routers.analytics import analytics_router
 from app.util.alembic_runner import run_migration
 from app.util.pubproc import fetch_pubproc_data
 
@@ -44,6 +44,7 @@ proclogic.include_router(health_router)
 proclogic.include_router(publications_router)
 proclogic.include_router(conversations_router)
 proclogic.include_router(companies_router)
+proclogic.include_router(analytics_router)
 proclogic.include_router(email_router)
 
 
