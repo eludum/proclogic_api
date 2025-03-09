@@ -14,13 +14,14 @@ from app.crud.mapper import (convert_publication_to_out_schema_details_free,
                              convert_publications_to_out_schema_list_paid)
 from app.schemas.publication_out_schemas import PublicationOut
 from app.util.clerk import AuthUser, get_auth_user
+from fastapi_pagination import Page, add_pagination, paginate
 
 settings = Settings()
 publications_router = APIRouter()
 security = HTTPBearer()
 
 
-@publications_router.get("/publications/", response_model=List[PublicationOut])
+@publications_router.get("/publications/", response_model=Page[PublicationOut])
 async def get_publications(auth_user: AuthUser = Depends(get_auth_user)):
     """Get all publications for an authenticated user"""
     if not auth_user.email:
@@ -34,16 +35,16 @@ async def get_publications(auth_user: AuthUser = Depends(get_auth_user)):
 
         publications = crud_publication.get_all_publications(session=session)
 
-        return [
+        return paginate([
             await convert_publications_to_out_schema_list_paid(
                 publication=publication, company=company
             )
             for publication in publications
-        ]
+        ])
 
 
 @publications_router.get(
-    "/publications/recommended/", response_model=List[PublicationOut]
+    "/publications/recommended/", response_model=Page[PublicationOut]
 )
 async def get_recommended_publications(auth_user: AuthUser = Depends(get_auth_user)):
     """Get all publications recommended for the authenticated user's company"""
@@ -61,15 +62,15 @@ async def get_recommended_publications(auth_user: AuthUser = Depends(get_auth_us
             company_vat_number=company.vat_number, session=session
         )
 
-        return [
+        return paginate([
             await convert_publications_to_out_schema_list_paid(
                 publication=publication, company=company
             )
             for publication in publications
-        ]
+        ])
 
 
-@publications_router.get("/publications/saved/", response_model=List[PublicationOut])
+@publications_router.get("/publications/saved/", response_model=Page[PublicationOut])
 async def get_saved_publications(auth_user: AuthUser = Depends(get_auth_user)):
     """Get all publications saved by the authenticated user's company"""
     if not auth_user.email:
@@ -86,12 +87,12 @@ async def get_saved_publications(auth_user: AuthUser = Depends(get_auth_user)):
             company_vat_number=company.vat_number, session=session
         )
 
-        return [
+        return paginate([
             await convert_publications_to_out_schema_list_paid(
                 publication=publication, company=company
             )
             for publication in publications
-        ]
+        ])
 
 
 @publications_router.get(
@@ -136,7 +137,7 @@ async def get_publication_by_workspace_id(
 
 @publications_router.get(
     "/publications/search/",
-    response_model=List[PublicationOut],
+    response_model=Page[PublicationOut],
 )
 async def search_publications_paid(
     search_term: Optional[str] = Query(None, description="Search term"),
@@ -217,17 +218,17 @@ async def search_publications_paid(
                 pub for pub in publications if pub.publication_date.date() <= date_to
             ]
 
-        return [
+        return paginate([
             await convert_publications_to_out_schema_list_paid(
                 publication=publication, company=company
             )
             for publication in publications
-        ]
+        ])
 
 
 @publications_router.get(
     "/publications/free/search/",
-    response_model=List[PublicationOut],
+    response_model=Page[PublicationOut],
 )
 async def search_publications_free(
     search_term: Optional[str] = Query(None, description="Search term"),
@@ -261,10 +262,10 @@ async def search_publications_free(
                 if any(pub.cpv_main_code_code[:2] + "000000" == sec for sec in sector)
             ]
 
-        return [
+        return paginate([
             await convert_publications_to_out_schema_list_free(publication=publication)
             for publication in publications
-        ]
+        ])
 
 
 @publications_router.get(

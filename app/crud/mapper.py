@@ -14,6 +14,7 @@ from app.util.pubproc import (
     get_publication_workspace_forum,
 )
 
+
 settings = Settings()
 
 
@@ -51,10 +52,12 @@ async def convert_publications_to_out_schema_list_paid(
 
     is_recommended = False
     is_saved = False
+    is_viewed = False
     for match in publication.company_matches:
         if match.company_vat_number == company.vat_number:
             is_recommended = match.is_recommended
             is_saved = match.is_saved
+            is_viewed = match.is_viewed
             break
 
     pub_out = PublicationOut(
@@ -66,6 +69,7 @@ async def convert_publications_to_out_schema_list_paid(
         is_active=publication.is_active,
         is_recommended=is_recommended,
         is_saved=is_saved,
+        is_viewed=is_viewed,
         original_description=get_descr_as_str(publication.dossier.descriptions),
         organisation=get_org_name_as_str(publication.organisation.organisation_names),
         cpv_code=publication.cpv_main_code_code,
@@ -101,7 +105,7 @@ async def convert_publication_to_out_schema_details_free(
         for filename, file_data in documents.items():
             serializable_documents[filename] = {
                 "filename": filename,
-                "size": len(file_data.getvalue()) if hasattr(file_data, "getvalue") else 0,
+                # "content": file_data,
             }
 
 
@@ -125,7 +129,7 @@ async def convert_publication_to_out_schema_details_free(
         sector=get_cpv_sector_and_description(
             publication.cpv_main_code.code, language="nl"
         ),
-        documents=documents,  # TODO: limit these two
+        documents=serializable_documents,  # TODO: limit these two
         forum=forum,
     )
 
@@ -138,6 +142,7 @@ async def convert_publication_to_out_schema_details_paid(
 
     is_recommended = False
     is_saved = False
+    is_viewed = False
     for match in publication.company_matches:
         if match.company_vat_number == company.vat_number:
             is_recommended = match.is_recommended
@@ -156,7 +161,7 @@ async def convert_publication_to_out_schema_details_paid(
         for filename, file_data in documents.items():
             serializable_documents[filename] = {
                 "filename": filename,
-                "size": len(file_data.getvalue()) if hasattr(file_data, "getvalue") else 0,
+                # "content": file_data,
             }
 
     pub_out = PublicationOut(
@@ -177,6 +182,7 @@ async def convert_publication_to_out_schema_details_paid(
         accreditations=publication.dossier.accreditations,
         is_recommended=is_recommended,
         is_saved=is_saved,
+        is_viewed=is_viewed,
         region=[
             get_nuts_code_as_str(nuts_code) for nuts_code in publication.nuts_codes
         ],
@@ -189,6 +195,8 @@ async def convert_publication_to_out_schema_details_paid(
         documents=serializable_documents,
         forum=forum,
     )
+
+    print(serializable_documents)
 
     return pub_out
 

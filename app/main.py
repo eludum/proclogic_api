@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from clerk_backend_api.jwks_helpers import authenticate_request
+from fastapi_pagination import add_pagination
 
 from app.config.settings import Settings
 from app.routers.company import companies_router
@@ -20,7 +21,7 @@ from app.util.pubproc import fetch_pubproc_data
 settings = Settings()
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.INFO if settings.fastapi_debug else logging.ERROR,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler()]
 )
@@ -36,6 +37,8 @@ async def lifespan(app: FastAPI):
 proclogic = FastAPI(lifespan=lifespan, debug=settings.fastapi_debug)
 
 security = HTTPBearer()
+
+add_pagination(proclogic)
 
 proclogic.include_router(health_router)
 proclogic.include_router(publications_router)

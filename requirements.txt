@@ -20,3 +20,4 @@ python-dotenv
 nltk
 clerk-backend-api
 python-jose
+fastapi-pagination
