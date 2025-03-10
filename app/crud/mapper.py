@@ -41,6 +41,10 @@ async def convert_publications_to_out_schema_list_free(
         sector=get_cpv_sector_and_description(
             publication.cpv_main_code.code, language="nl"
         ),
+        lots=[
+            get_descr_as_str(lot.titles)
+            for lot in publication.lots
+        ]
     )
 
     return pub_out
@@ -82,6 +86,13 @@ async def convert_publications_to_out_schema_list_paid(
         ],
         sector=get_cpv_sector_and_description(
             publication.cpv_main_code.code, language="nl"
+        ),
+                lots=[
+            get_descr_as_str(lot.titles)
+            for lot in publication.lots
+        ],
+        estimated_value=(
+            publication.estimated_value if publication.estimated_value else 0
         ),
     )
 
@@ -129,6 +140,10 @@ async def convert_publication_to_out_schema_details_free(
         sector=get_cpv_sector_and_description(
             publication.cpv_main_code.code, language="nl"
         ),
+                lots=[
+            get_descr_as_str(lot.titles)
+            for lot in publication.lots
+        ],
         documents=serializable_documents,  # TODO: limit these two
         forum=forum,
     )
@@ -147,6 +162,7 @@ async def convert_publication_to_out_schema_details_paid(
         if match.company_vat_number == company.vat_number:
             is_recommended = match.is_recommended
             is_saved = match.is_saved
+            is_viewed = match.is_viewed
             break
     async with httpx.AsyncClient() as client:
         documents = await get_publication_workspace_documents(
@@ -189,14 +205,16 @@ async def convert_publication_to_out_schema_details_paid(
         sector=get_cpv_sector_and_description(
             publication.cpv_main_code.code, language="nl"
         ),
+                lots=[
+            get_descr_as_str(lot.titles)
+            for lot in publication.lots
+        ],
         estimated_value=(
             publication.estimated_value if publication.estimated_value else 0
         ),
         documents=serializable_documents,
         forum=forum,
     )
-
-    print(serializable_documents)
 
     return pub_out
 

@@ -4,7 +4,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.company_models import Company, Sector
-from app.models.publication_models import CompanyPublicationMatch, Dossier, Organisation, Publication
+from app.models.publication_models import CompanyPublicationMatch, Dossier, Lot, Organisation, Publication
 from app.schemas.company_schemas import CompanySchema, SectorSchema
 
 
@@ -240,7 +240,8 @@ def get_company_recommended_publications(company_vat_number: str, session: Sessi
                 joinedload(Publication.cpv_main_code),
                 joinedload(Publication.cpv_additional_codes),
                 joinedload(Publication.company_matches),
-                joinedload(Publication.lots)
+                joinedload(Publication.lots).joinedload(Lot.descriptions),
+                joinedload(Publication.lots).joinedload(Lot.titles),
             )
             .all()
         )
@@ -282,7 +283,8 @@ def get_company_saved_publications(company_vat_number: str, session: Session):
                 joinedload(Publication.cpv_main_code),
                 joinedload(Publication.cpv_additional_codes),
                 joinedload(Publication.company_matches),
-                joinedload(Publication.lots)
+                joinedload(Publication.lots).joinedload(Lot.descriptions),
+                joinedload(Publication.lots).joinedload(Lot.titles),
             )
             .all()
         )

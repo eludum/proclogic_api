@@ -52,11 +52,11 @@ def get_recommendation(
     match_result = json.loads(completion.choices[0].message.content)
     match = match_result["match"]
     match_percentage = match_result["match_percentage"]
-    print(match, match_percentage)
     return match, match_percentage
 
 
 def summarize_publication_award(xml: str, client: OpenAI = None) -> dict:
+    # TODO: dont send to openai just get relevant info from xml
     client = client or get_openai_client()
 
     completion = client.chat.completions.create(
@@ -214,7 +214,6 @@ def summarize_publication_with_files(
             for i, ann in enumerate(messages[0].content[0].text.annotations)
             if "file_citation" in ann
         ]
-        print(estimated_value, summary, "\n".join(citations))
         return estimated_value, summary, "\n".join(citations)
     except Exception as e:
         logging.error(f"Failed to summarize files: {e}")
