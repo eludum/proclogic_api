@@ -325,35 +325,55 @@ async def setup_assistant(
 ) -> str:
     """Set up an assistant for the conversation with simplified error handling."""
     try:
-        # First, try to find if we already have an assistant for this company
-        assistants = client.beta.assistants.list(order="desc", limit=100)
-
-        # Use the correct naming convention as requested
+        # Look for existing assistant for this company
         assistant_name = f"Company Assistant {company.name}"
-
-        logging.info(f"Looking for existing assistant: {assistant_name}")
-
-        # Look for existing assistant
+        assistants = client.beta.assistants.list(order="desc", limit=100)
+        
+        existing_assistant_id = None
         for assistant in assistants.data:
             if assistant.name == assistant_name:
-                logging.info(f"Found existing assistant with ID: {assistant.id}")
-                return assistant.id
+                existing_assistant_id = assistant.id
+                break
+                
+        # Create detailed instructions with current publication and company info
+        instructions = f"""You are an assistant helping the company {company.name} with public procurement document analysis.
+        
+        PUBLICATION INFORMATION:
+        - Title: {get_publication_title(publication)}
+        - ID: {publication.publication_workspace_id}
+        - Submission deadline: {publication.vault_submission_deadline}
+        - CPV code: {publication.cpv_main_code_code}
+        
+        COMPANY INFORMATION:
+        - VAT: {company.vat_number}
+        - Activities: {company.summary_activities}
+        - Interested sectors: {', '.join(sector.sector for sector in company.interested_sectors)}
+        - Accreditations: {company.accreditations if company.accreditations else 'None'}
+        - Regions: {', '.join(company.operating_regions) if company.operating_regions else 'Not specified'}
+        
+        Always respond in Dutch unless specifically asked to use another language.
+        Be concise but complete in your answers. Focus on helping understand requirements, deadlines, and other important information.
+        """
+        
+        if existing_assistant_id:
+            # Update existing assistant
+            assistant = client.beta.assistants.update(
+                assistant_id=existing_assistant_id,
+                instructions=instructions,
+            )
+            logging.info(f"Updated existing assistant with ID: {existing_assistant_id}")
+        else:
+            # Create new assistant if none exists
+            assistant = client.beta.assistants.create(
+                name=assistant_name,
+                instructions=instructions,
+                model="gpt-4o-mini",
+                tools=[{"type": "file_search"}],
+            )
+            logging.info(f"Created new assistant with ID: {assistant.id}")
+        
+        # Setup vector store with publication documents
 
-        # Create a new assistant
-        logging.info(f"Creating new assistant: {assistant_name}")
-        assistant = client.beta.assistants.create(
-            name=assistant_name,
-            instructions=f"""You are an assistant helping the company {company.name} with public procurement document analysis.
-            The current publication is about: {get_publication_title(publication)}
-            Always respond in Dutch unless specifically asked to use another language.
-            Be concise but complete in your answers. Focus on helping understand requirements, deadlines, and other important information.
-            """,
-            model="gpt-4o-mini",
-            tools=[{"type": "file_search"}],
-        )
-        logging.info(f"Created new assistant with ID: {assistant.id}")
-
-        # Set up vector store with publication documents
         vector_store_id = None
 
         try:
