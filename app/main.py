@@ -14,6 +14,7 @@ from app.routers.health import health_router
 from app.routers.publications import publications_router
 from app.routers.conversations import conversations_router
 from app.routers.analytics import analytics_router
+from app.routers.notifications import notifications_router
 from app.util.alembic_runner import run_migration
 from app.util.pubproc import fetch_pubproc_data
 
@@ -29,7 +30,8 @@ logging.basicConfig(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # TODO: uncomment for prod
-    # run_migration()
+    if not settings.fastapi_debug:
+        run_migration() 
     task = asyncio.create_task(fetch_pubproc_data())
     yield
     task.cancel()
@@ -45,6 +47,7 @@ proclogic.include_router(publications_router)
 proclogic.include_router(conversations_router)
 proclogic.include_router(companies_router)
 proclogic.include_router(analytics_router)
+proclogic.include_router(notifications_router)
 proclogic.include_router(email_router)
 
 

@@ -1,13 +1,6 @@
 from typing import List, Optional
 
-from sqlalchemy import (
-    ARRAY,
-    Float,
-    ForeignKey,
-    Integer,
-    PickleType,
-    String,
-)
+from sqlalchemy import ARRAY, ForeignKey, Integer, PickleType, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -54,9 +47,8 @@ class Company(Base):
     publication_matches: Mapped[List["CompanyPublicationMatch"]] = relationship(
         back_populates="company"
     )
-    conversations: Mapped[List["Conversation"]] = relationship(
-        back_populates="company"
-    )
+    conversations: Mapped[List["Conversation"]] = relationship(back_populates="company")
+    notifications: Mapped[List["Notification"]] = relationship(back_populates="company")
 
     # Helper properties for common queries
     @property
@@ -73,4 +65,6 @@ class Company(Base):
             match.publication for match in self.publication_matches if match.is_saved
         ]
 
+
 from app.models.conversation_models import Conversation
+from app.models.notification_models import Notification
