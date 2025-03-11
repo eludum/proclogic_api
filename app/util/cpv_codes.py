@@ -1,3 +1,8 @@
+from typing import List
+
+from app.models.company_models import Sector
+
+
 en_sectors = {
     "03000000": "Agricultural, farming, fishing, forestry and related products",
     "09000000": "Petroleum products, fuel, electricity and other sources of energy",
@@ -159,3 +164,10 @@ def get_cpv_sector_and_description(input_cpv: str, language: str) -> tuple[bool,
         return sectors[language][first_two]
 
     return "N/A"
+
+
+def check_if_publication_is_in_your_sector(interested_sectors: List[Sector], cpv_main_code: str) -> bool:
+    for sector in interested_sectors:
+        if sector.sector == get_cpv_sector_and_description(cpv_main_code, "nl"):
+            return True
+    return False

@@ -24,6 +24,7 @@ from app.schemas.conversation_schemas import (
 from app.util.clerk import AuthUser, get_auth_user
 from app.util.conversations_helper import (
     process_ai_message,
+    setup_assistant,
     stream_ai_response,
     get_publication_title,
 )
@@ -394,6 +395,20 @@ async def websocket_conversation(
                         publication_workspace_id=publication_workspace_id,
                         session=session,
                     )
+
+                assistant_id = await setup_assistant(
+                    client=client, 
+                    company=company, 
+                    publication=publication
+                )
+
+                # Update conversation with new assistant ID
+                crud_conversation.update_conversation_ai_info(
+                    conversation_id=conversation.id,
+                    assistant_id=assistant_id,
+                    thread_id=conversation.thread_id if conversation.thread_id else None,
+                    session=session
+                )
 
                 # Send confirmation
                 pub_title = get_publication_title(publication)

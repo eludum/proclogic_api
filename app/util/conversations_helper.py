@@ -318,24 +318,20 @@ async def stream_ai_response(
         yield "Sorry, ik kon geen antwoord genereren. Probeer het later nog eens.", []
 
 
+
 async def setup_assistant(
     client: OpenAI,
     company: Company,
     publication: Publication,
 ) -> str:
-    """Set up an assistant for the conversation with simplified error handling."""
+    """Set up an assistant for the conversation with company and publication data."""
     try:
-        # Look for existing assistant for this company
-        assistant_name = f"Company Assistant {company.name}"
-        assistants = client.beta.assistants.list(order="desc", limit=100)
+        # Use a more specific naming convention that includes the publication ID
+        assistant_name = f"Assistant for {company.name} - {publication.publication_workspace_id}"
         
-        existing_assistant_id = None
-        for assistant in assistants.data:
-            if assistant.name == assistant_name:
-                existing_assistant_id = assistant.id
-                break
-                
-        # Create detailed instructions with current publication and company info
+        logging.info(f"Creating or updating assistant: {assistant_name}")
+        
+        # Create more detailed instructions that include company profile
         instructions = f"""You are an assistant helping the company {company.name} with public procurement document analysis.
         
         PUBLICATION INFORMATION:
@@ -355,25 +351,17 @@ async def setup_assistant(
         Be concise but complete in your answers. Focus on helping understand requirements, deadlines, and other important information.
         """
         
-        if existing_assistant_id:
-            # Update existing assistant
-            assistant = client.beta.assistants.update(
-                assistant_id=existing_assistant_id,
-                instructions=instructions,
-            )
-            logging.info(f"Updated existing assistant with ID: {existing_assistant_id}")
-        else:
-            # Create new assistant if none exists
-            assistant = client.beta.assistants.create(
-                name=assistant_name,
-                instructions=instructions,
-                model="gpt-4o-mini",
-                tools=[{"type": "file_search"}],
-            )
-            logging.info(f"Created new assistant with ID: {assistant.id}")
+        # Create a new assistant for each publication-company combination
+        assistant = client.beta.assistants.create(
+            name=assistant_name,
+            instructions=instructions,
+            model="gpt-4o-mini",
+            tools=[{"type": "file_search"}],
+        )
         
-        # Setup vector store with publication documents
+        logging.info(f"Created new assistant with ID: {assistant.id}")
 
+        # Set up vector store with publication documents
         vector_store_id = None
 
         try:

@@ -3,8 +3,6 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
-from app.util.converter import LotInfo
-
 
 class PublicationOut(BaseModel):
     # Basic information about the publication
@@ -33,8 +31,10 @@ class PublicationOut(BaseModel):
     # User-specific information
     publication_in_your_sector: Optional[bool] = None
     is_recommended: Optional[bool] = None
+    match_percentage: Optional[float] = None
     is_saved: Optional[bool] = None
     is_viewed: Optional[bool] = None
+    publication_in_your_region: Optional[bool] = None
 
     # Location and sector information
     region: Optional[List[str]] = None

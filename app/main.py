@@ -17,7 +17,7 @@ from app.routers.analytics import analytics_router
 from app.routers.notifications import notifications_router
 from app.util.alembic_runner import run_migration
 from app.util.pubproc import fetch_pubproc_data
-
+from fastapi_pagination.utils import disable_installed_extensions_check
 
 settings = Settings()
 
@@ -29,6 +29,7 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    disable_installed_extensions_check()
     # TODO: uncomment for prod
     if not settings.fastapi_debug:
         run_migration() 

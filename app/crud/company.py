@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models.company_models import Company, Sector
 from app.models.publication_models import CompanyPublicationMatch, Dossier, Lot, Organisation, Publication
-from app.schemas.company_schemas import CompanySchema, SectorSchema
+from app.schemas.company_schemas import CompanySchema
+from app.util.converter import extract_keywords
 
 
 def create_company(
@@ -36,7 +37,7 @@ def create_company(
             summary_activities=company_schema.summary_activities,
             accreditations=company_schema.accreditations,
             max_publication_value=company_schema.max_publication_value,
-            activity_keywords=company_schema.activity_keywords,
+            activity_keywords=extract_keywords(company_schema.activity_keywords),
             operating_regions=company_schema.operating_regions,
         )
 
@@ -129,7 +130,8 @@ def update_company(
         if company_schema.max_publication_value:
             company.max_publication_value = company_schema.max_publication_value
         if company_schema.activity_keywords:
-            company.activity_keywords = company_schema.activity_keywords
+            company.activity_keywords = extract_keywords(
+                company_schema.activity_keywords)
         if company_schema.operating_regions:
             company.operating_regions = company_schema.operating_regions
 

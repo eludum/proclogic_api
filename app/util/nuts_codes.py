@@ -1,3 +1,6 @@
+from typing import List
+
+
 nuts_codes = {
     "BE100": "Arr. de Bruxelles-Capitale/Arr. Brussel-Hoofdstad",
     "BE10": "Région de Bruxelles-Capitale/ Brussels Hoofdstedelijk Gewest",
@@ -62,3 +65,31 @@ nuts_codes = {
 
 def get_nuts_code_as_str(code: str):
     return nuts_codes[code] if code in nuts_codes else None
+
+def check_if_publication_is_in_your_region(company_regions: List[str], publication_regions: List[str]) -> bool:
+    if not company_regions or not publication_regions:
+        return False
+        
+    # Create sets for quick lookup
+    company_region_set = set(company_regions)
+    publication_region_set = set(publication_regions)
+    
+    # Direct match
+    if company_region_set.intersection(publication_region_set):
+        return True
+    
+    # Check parent-child relationships
+    for pub_region in publication_regions:
+        # Check if any company region is a parent of this publication region
+        for company_region in company_regions:
+            # A region is a parent if it's a prefix of the publication region
+            # and the publication region is longer (more specific)
+            if pub_region.startswith(company_region) and len(pub_region) > len(company_region):
+                return True
+            
+            # Also check the reverse - if company has a specific region that belongs to a broader
+            # publication region
+            if company_region.startswith(pub_region) and len(company_region) > len(pub_region):
+                return True
+    
+    return False
