@@ -238,9 +238,11 @@ async def get_publication_free(
         if not publication:
             raise HTTPException(status_code=404, detail="Publication not found")
 
-        return await convert_publication_to_out_schema_details_free(
+        return paginate([
+         await convert_publication_to_out_schema_details_free(
             publication=publication
         )
+        ])
 
 
 @publications_router.post(
