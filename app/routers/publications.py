@@ -22,10 +22,26 @@ security = HTTPBearer()
 
 
 @publications_router.get("/publications/", response_model=Page[PublicationOut])
-async def get_publications(auth_user: AuthUser = Depends(get_auth_user)):
-    """Get all publications for an authenticated user"""
+async def get_publications(
+    recommended: bool = Query(None, description="Filter by recommended publications"),
+    saved: bool = Query(None, description="Filter by saved publications"),
+    viewed: bool = Query(None, description="Filter by viewed publications"),
+    active: bool = Query(True, description="Filter by active publications only"),
+    search_term: str = Query(None, description="Search in title, description, or organization"),
+    region: List[str] = Query(None, description="Filter by region codes"),
+    sector: List[str] = Query(None, description="Filter by sector"),
+    cpv_code: List[str] = Query(None, description="Filter by CPV codes"),
+    date_from: Optional[date] = Query(None, description="Filter publications from this date"),
+    date_to: Optional[date] = Query(None, description="Filter publications until this date"),
+    auth_user: AuthUser = Depends(get_auth_user)
+) -> List[PublicationOut]:
+    """
+    Get publications with flexible filtering options.
+    Returns paginated publications that match all provided filters.
+    """
     if not auth_user.email:
         raise HTTPException(status_code=400, detail="User email not available")
+    
     with get_session() as session:
         company = crud_company.get_company_by_email(
             email=auth_user.email, session=session
@@ -33,60 +49,87 @@ async def get_publications(auth_user: AuthUser = Depends(get_auth_user)):
         if not company:
             raise HTTPException(status_code=404, detail="Company not found")
 
-        publications = crud_publication.get_all_publications(session=session)
-
-        return paginate([
-            await convert_publications_to_out_schema_list_paid(
-                publication=publication, company=company
+        # Get initial publications based on search term
+        if not search_term or search_term.strip() == "":
+            publications = crud_publication.get_all_publications(session=session)
+        else:
+            publications = crud_publication.search_publications(
+                search_term=search_term, session=session
             )
-            for publication in publications
-        ])
 
+        # Apply active filter
+        if active:
+            publications = [pub for pub in publications if pub.is_active]
+        
+        # Get specific matches for this company
+        matching_publications = []
+        for publication in publications:
+            # Find if there's a match record for this company
+            match = None
+            for pub_match in publication.company_matches:
+                if pub_match.company_vat_number == company.vat_number:
+                    match = pub_match
+                    break
+            
+            # Skip publications that don't match our filters
+            if recommended is not None and (not match or match.is_recommended != recommended):
+                continue
+                
+            if saved is not None and (not match or match.is_saved != saved):
+                continue
+                
+            if viewed is not None and (not match or match.is_viewed != viewed):
+                continue
+            
+            # If all filters passed, add to our results
+            matching_publications.append(publication)
+        
+        # Replace with filtered list
+        publications = matching_publications
+            
+        # Apply region filter if provided
+        if region:
+            publications = [
+                pub for pub in publications 
+                if any(reg in pub.nuts_codes for reg in region)
+            ]
+            
+        # Apply sector filter if provided
+        if sector:
+            # Extract first two digits of CPV code for sector filtering
+            publications = [
+                pub for pub in publications
+                if any(pub.cpv_main_code_code[:2] + "000000" == sec for sec in sector)
+            ]
+            
+        # Apply CPV code filter if provided
+        if cpv_code:
+            filtered_publications = []
+            for pub in publications:
+                # Check if main CPV code matches
+                if pub.cpv_main_code_code in cpv_code:
+                    filtered_publications.append(pub)
+                    continue
+                    
+                # Check if any additional CPV code matches
+                if any(additional_cpv.code in cpv_code for additional_cpv in pub.cpv_additional_codes):
+                    filtered_publications.append(pub)
+                    continue
+                    
+            publications = filtered_publications
+            
+        # Apply date range filter if provided
+        if date_from:
+            publications = [
+                pub for pub in publications if pub.publication_date.date() >= date_from
+            ]
+            
+        if date_to:
+            publications = [
+                pub for pub in publications if pub.publication_date.date() <= date_to
+            ]
 
-@publications_router.get(
-    "/publications/recommended/", response_model=Page[PublicationOut]
-)
-async def get_recommended_publications(auth_user: AuthUser = Depends(get_auth_user)):
-    """Get all publications recommended for the authenticated user's company"""
-    if not auth_user.email:
-        raise HTTPException(status_code=400, detail="User email not available")
-
-    with get_session() as session:
-        company = crud_company.get_company_by_email(
-            email=auth_user.email, session=session
-        )
-        if not company:
-            raise HTTPException(status_code=404, detail="Company not found")
-
-        publications = crud_company.get_company_recommended_publications(
-            company_vat_number=company.vat_number, session=session
-        )
-
-        return paginate([
-            await convert_publications_to_out_schema_list_paid(
-                publication=publication, company=company
-            )
-            for publication in publications
-        ])
-
-
-@publications_router.get("/publications/saved/", response_model=Page[PublicationOut])
-async def get_saved_publications(auth_user: AuthUser = Depends(get_auth_user)):
-    """Get all publications saved by the authenticated user's company"""
-    if not auth_user.email:
-        raise HTTPException(status_code=400, detail="User email not available")
-
-    with get_session() as session:
-        company = crud_company.get_company_by_email(
-            email=auth_user.email, session=session
-        )
-        if not company:
-            raise HTTPException(status_code=404, detail="Company not found")
-
-        publications = crud_company.get_company_saved_publications(
-            company_vat_number=company.vat_number, session=session
-        )
-
+        # Convert to output schema and paginate
         return paginate([
             await convert_publications_to_out_schema_list_paid(
                 publication=publication, company=company
@@ -133,97 +176,6 @@ async def get_publication_by_workspace_id(
         return await convert_publication_to_out_schema_details_paid(
             publication=publication, company=company
         )
-
-
-@publications_router.get(
-    "/publications/search/",
-    response_model=Page[PublicationOut],
-)
-async def search_publications_paid(
-    search_term: Optional[str] = Query(None, description="Search term"),
-    auth_user: AuthUser = Depends(get_auth_user),
-    region: List[str] = Query(None, description="Filter by region codes"),
-    sector: List[str] = Query(None, description="Filter by sector"),
-    cpv_code: List[str] = Query(None, description="Filter by CPV codes"),
-    date_from: Optional[date] = Query(
-        None, description="Filter publications from this date"
-    ),
-    date_to: Optional[date] = Query(
-        None, description="Filter publications until this date"
-    ),
-) -> List[PublicationOut]:
-    """Search publications with authentication (paid version)"""
-    if not auth_user.email:
-        raise HTTPException(status_code=400, detail="User email not available")
-
-    with get_session() as session:
-        company = crud_company.get_company_by_email(
-            email=auth_user.email, session=session
-        )
-        if not company:
-            raise HTTPException(status_code=404, detail="Company not found")
-
-        # Get initial publications based on search term
-        if not search_term or search_term.strip() == "":
-            publications = crud_publication.get_all_publications(session=session)
-        else:
-            publications = crud_publication.search_publications(
-                search_term=search_term, session=session
-            )
-
-        # Apply region filter if provided
-        if region:
-            publications = [
-                pub
-                for pub in publications
-                if any(reg in pub.nuts_codes for reg in region)
-            ]
-
-        # Apply sector filter if provided
-        if sector:
-            # Extract first two digits of CPV code for sector filtering
-            publications = [
-                pub
-                for pub in publications
-                if any(pub.cpv_main_code_code[:2] + "000000" == sec for sec in sector)
-            ]
-
-        # Apply CPV code filter if provided
-        if cpv_code:
-            filtered_publications = []
-            for pub in publications:
-                # Check if main CPV code matches
-                if pub.cpv_main_code_code in cpv_code:
-                    filtered_publications.append(pub)
-                    continue
-
-                # Check if any additional CPV code matches
-                if any(
-                    additional_cpv.code in cpv_code
-                    for additional_cpv in pub.cpv_additional_codes
-                ):
-                    filtered_publications.append(pub)
-                    continue
-
-            publications = filtered_publications
-
-        # Apply date range filter if provided
-        if date_from:
-            publications = [
-                pub for pub in publications if pub.publication_date.date() >= date_from
-            ]
-
-        if date_to:
-            publications = [
-                pub for pub in publications if pub.publication_date.date() <= date_to
-            ]
-
-        return paginate([
-            await convert_publications_to_out_schema_list_paid(
-                publication=publication, company=company
-            )
-            for publication in publications
-        ])
 
 
 @publications_router.get(
