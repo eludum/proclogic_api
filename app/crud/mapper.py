@@ -109,22 +109,6 @@ async def convert_publication_to_out_schema_details_free(
     publication: Publication,
 ) -> PublicationOut:
 
-    async with httpx.AsyncClient() as client:
-        documents = await get_publication_workspace_documents(
-            client, publication.publication_workspace_id
-        )
-        forum = await get_publication_workspace_forum(
-            client, publication.publication_workspace_id
-        )
-
-    serializable_documents = {}
-    if documents:
-        for filename, file_data in documents.items():
-            serializable_documents[filename] = {
-                "filename": filename,
-                # "content": file_data,
-            }
-
     pub_out = PublicationOut(
         title=get_descr_as_str(publication.dossier.titles),
         workspace_id=publication.publication_workspace_id,
@@ -146,8 +130,6 @@ async def convert_publication_to_out_schema_details_free(
             publication.cpv_main_code.code, language="nl"
         ),
         lots=[get_descr_as_str(lot.titles) for lot in publication.lots],
-        documents=serializable_documents,  # TODO: limit these two
-        forum=forum,
     )
 
     return pub_out
@@ -222,6 +204,7 @@ async def convert_publication_to_out_schema_details_paid(
             publication.estimated_value if publication.estimated_value else 0
         ),
         documents=serializable_documents,
+        # TODO: fix forum display frontend
         forum=forum,
     )
 
