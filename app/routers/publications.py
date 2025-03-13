@@ -253,7 +253,7 @@ async def save_publication(
     ),
     auth_user: AuthUser = Depends(get_auth_user),
 ):
-    """Save a publication for the authenticated user's company"""
+    """Save a publication for the authenticated user's company and add it to Kanban board."""
     if not auth_user.email:
         raise HTTPException(status_code=400, detail="User email not available")
 
@@ -270,6 +270,7 @@ async def save_publication(
         if not publication:
             raise HTTPException(status_code=404, detail="Publication not found")
 
+        # Save the publication
         success = crud_company.save_publication_for_company(
             company_vat_number=company.vat_number,
             publication_workspace_id=publication_workspace_id,
@@ -278,6 +279,14 @@ async def save_publication(
 
         if not success:
             raise HTTPException(status_code=500, detail="Failed to save publication")
+
+        # Add to Kanban board
+        from app.util.kanban_integration import add_saved_publication_to_kanban
+        await add_saved_publication_to_kanban(
+            company_vat_number=company.vat_number,
+            publication_workspace_id=publication_workspace_id,
+            session=session
+        )
 
         return {"message": "Publication saved successfully"}
 
@@ -292,7 +301,7 @@ async def unsave_publication(
     ),
     auth_user: AuthUser = Depends(get_auth_user),
 ):
-    """Remove a publication from saved list for the authenticated user's company"""
+    """Remove a publication from saved list and from the Kanban board."""
     if not auth_user.email:
         raise HTTPException(status_code=400, detail="User email not available")
 
@@ -309,6 +318,7 @@ async def unsave_publication(
         if not publication:
             raise HTTPException(status_code=404, detail="Publication not found")
 
+        # Unsave the publication
         success = crud_company.unsave_publication_for_company(
             company_vat_number=company.vat_number,
             publication_workspace_id=publication_workspace_id,
@@ -317,6 +327,14 @@ async def unsave_publication(
 
         if not success:
             raise HTTPException(status_code=404, detail="Publication was not saved")
+
+        # Remove from Kanban board
+        from app.util.kanban_integration import remove_unsaved_publication_from_kanban
+        await remove_unsaved_publication_from_kanban(
+            company_vat_number=company.vat_number,
+            publication_workspace_id=publication_workspace_id,
+            session=session
+        )
 
         return {"message": "Publication removed from saved list"}
 

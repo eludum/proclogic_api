@@ -113,15 +113,15 @@ async def get_auth_user(credentials: HTTPAuthorizationCredentials = Depends(secu
                 if not email and user.email_addresses:
                     # Fallback to first email if no primary is marked
                     email = user.email_addresses[0].email_address
-            
+
             # Ensure we have an email
             if not email:
                 logging.error(f"No email found for user: {user_id}")
                 raise HTTPException(status_code=400, detail="User email not available")
-                
+
             # Return with user_id and email
             return AuthUser(user_id=user_id, email=email)
-            
+
     except HTTPException:
         # Re-raise HTTP exceptions
         raise

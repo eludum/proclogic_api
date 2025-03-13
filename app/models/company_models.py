@@ -49,6 +49,8 @@ class Company(Base):
     )
     conversations: Mapped[List["Conversation"]] = relationship(back_populates="company")
     notifications: Mapped[List["Notification"]] = relationship(back_populates="company")
+    kanban_statuses: Mapped[List["KanbanStatus"]] = relationship(back_populates="company", cascade="all, delete-orphan")
+    publication_statuses: Mapped[List["PublicationStatus"]] = relationship(back_populates="company", cascade="all, delete-orphan")
 
     # Helper properties for common queries
     @property

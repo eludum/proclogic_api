@@ -264,6 +264,7 @@ class Publication(Base):
     conversations: Mapped[List["Conversation"]] = relationship(
         back_populates="publication"
     )
+    status_entries: Mapped[List["PublicationStatus"]] = relationship(back_populates="publication", cascade="all, delete-orphan")
 
     # Helper properties
     @property
@@ -291,3 +292,4 @@ Index("idx_match_percentage", CompanyPublicationMatch.match_percentage)
 Index("idx_match_recommended", CompanyPublicationMatch.is_recommended)
 
 from app.models.conversation_models import Conversation
+from app.models.kanban_models import PublicationStatus
