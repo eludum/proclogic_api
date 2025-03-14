@@ -15,6 +15,7 @@ from app.routers.publications import publications_router
 from app.routers.conversations import conversations_router
 from app.routers.analytics import analytics_router
 from app.routers.notifications import notifications_router
+from app.routers.kanban import kanban_router
 from app.util.alembic_runner import run_migration
 from app.util.pubproc import fetch_pubproc_data
 from fastapi_pagination.utils import disable_installed_extensions_check
@@ -23,19 +24,21 @@ settings = Settings()
 
 logging.basicConfig(
     level=logging.INFO if settings.fastapi_debug else logging.ERROR,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()],
 )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     disable_installed_extensions_check()
     # TODO: uncomment for prod
     if not settings.fastapi_debug:
-        run_migration() 
+        run_migration()
     task = asyncio.create_task(fetch_pubproc_data())
     yield
     task.cancel()
+
 
 proclogic = FastAPI(lifespan=lifespan, debug=settings.fastapi_debug)
 
@@ -50,7 +53,7 @@ proclogic.include_router(companies_router)
 proclogic.include_router(analytics_router)
 proclogic.include_router(notifications_router)
 proclogic.include_router(email_router)
-
+proclogic.include_router(kanban_router)
 
 origins = [
     "http://localhost:3000",

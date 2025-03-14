@@ -164,7 +164,7 @@ async def convert_publication_to_out_schema_details_paid(
         for filename, file_data in documents.items():
             serializable_documents[filename] = {
                 "filename": filename,
-                # "content": file_data,
+                "content": file_data,
             }
 
     pub_out = PublicationOut(

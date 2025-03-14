@@ -14,7 +14,7 @@ from app.crud.mapper import (convert_publication_to_out_schema_details_free,
                              convert_publications_to_out_schema_list_paid)
 from app.schemas.publication_out_schemas import PublicationOut
 from app.util.clerk import AuthUser, get_auth_user
-from fastapi_pagination import Page, add_pagination, paginate
+from fastapi_pagination import Page, paginate
 
 settings = Settings()
 publications_router = APIRouter()
@@ -33,11 +33,21 @@ async def get_publications(
     cpv_code: List[str] = Query(None, description="Filter by CPV codes"),
     date_from: Optional[date] = Query(None, description="Filter publications from this date"),
     date_to: Optional[date] = Query(None, description="Filter publications until this date"),
+    sort_by: str = Query(None, description="Sort field: match_percentage, publication_date, deadline"),
+    sort_order: str = Query("desc", description="Sort order: asc or desc"),
     auth_user: AuthUser = Depends(get_auth_user)
 ) -> List[PublicationOut]:
     """
     Get publications with flexible filtering options.
     Returns paginated publications that match all provided filters.
+    
+    Sorting is applied automatically based on active filters:
+    - When recommended=True: Sort by match_percentage (desc) then publication_date (desc)
+    - When saved=True: Sort by when the publication was saved (desc)
+    - When view=True: Sort by when the publication was viewed (desc)
+    - Default: Sort by publication_date (desc)
+    
+    Custom sorting can override these defaults using sort_by and sort_order parameters.
     """
     if not auth_user.email:
         raise HTTPException(status_code=400, detail="User email not available")
@@ -61,7 +71,7 @@ async def get_publications(
         if active:
             publications = [pub for pub in publications if pub.is_active]
         
-        # Get specific matches for this company
+        # Get specific matches for this company and enrich them with metadata
         matching_publications = []
         for publication in publications:
             # Find if there's a match record for this company
@@ -80,6 +90,17 @@ async def get_publications(
                 
             if viewed is not None and (not match or match.is_viewed != viewed):
                 continue
+            
+            # Enrich publication with sorting metadata
+            if match:
+                # Add metadata for sorting
+                publication.match_percentage = match.match_percentage
+                publication.saved_at = match.updated_at if match.is_saved else None
+                publication.viewed_at = match.updated_at if match.is_viewed else None
+            else:
+                publication.match_percentage = 0
+                publication.saved_at = None
+                publication.viewed_at = None
             
             # If all filters passed, add to our results
             matching_publications.append(publication)
@@ -128,6 +149,44 @@ async def get_publications(
             publications = [
                 pub for pub in publications if pub.publication_date.date() <= date_to
             ]
+        
+        # Apply sorting based on active filters or explicit sort parameters
+        if sort_by:
+            # Explicit sorting takes precedence if provided
+            reverse = sort_order.lower() == "desc"
+            
+            if sort_by == "match_percentage":
+                publications.sort(key=lambda p: p.match_percentage, reverse=reverse)
+            elif sort_by == "publication_date":
+                publications.sort(key=lambda p: p.publication_date, reverse=reverse)
+            elif sort_by == "deadline":
+                # Sort by submission deadline, putting None values at the end
+                publications.sort(
+                    key=lambda p: (p.vault_submission_deadline is None, p.vault_submission_deadline), 
+                    reverse=reverse
+                )
+        else:
+            # Apply automatic sorting based on active filters
+            if recommended:
+                # For recommended publications, sort by match percentage (higher first), then by publication date
+                publications.sort(
+                    key=lambda p: (-p.match_percentage, -p.publication_date.timestamp() if p.publication_date else 0)
+                )
+            elif saved:
+                # For saved publications, sort by saved date (newest first)
+                publications.sort(
+                    key=lambda p: (p.saved_at is None, -p.saved_at.timestamp() if p.saved_at else 0)
+                )
+            elif viewed:
+                # For viewed publications, sort by viewed date (newest first)
+                publications.sort(
+                    key=lambda p: (p.viewed_at is None, -p.viewed_at.timestamp() if p.viewed_at else 0)
+                )
+            else:
+                # Default sorting by publication date (newest first)
+                publications.sort(
+                    key=lambda p: (-p.publication_date.timestamp() if p.publication_date else 0)
+                )
 
         # Convert to output schema and paginate
         return paginate([

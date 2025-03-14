@@ -133,8 +133,6 @@ async def update_existing_publication(
         # Then generate (new) recommendations
         await generate_company_recommendations(pub=pub, session=session)
 
-        # TODO: send email to saved companies
-
 
 async def create_new_publication(
     client: httpx.AsyncClient, pub: PublicationSchema, filesmap: dict, session: Session
@@ -169,10 +167,8 @@ async def process_award_publication(
         publication_workspace_id=pub.publication_workspace_id,
     )
 
-    # Get award information
     pub.award = summarize_publication_award(xml=xml_content)
 
-    # Save to database
     crud_publication.get_or_create_publication(publication_schema=pub, session=session)
 
 
