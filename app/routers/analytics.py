@@ -6,7 +6,7 @@ from app.config.postgres import get_session
 from app.models.publication_models import Publication, CPVCode
 from app.schemas.publication_schemas import PublicationSchema
 from app.util.clerk import AuthUser, get_auth_user
-from app.util.converter import get_descr_as_str, get_org_name_as_str
+from app.util.publication_utils.publication_converter import PublicationConverter
 from app.util.publication_utils.cpv_codes import get_cpv_sector_and_description
 
 analytics_router = APIRouter()
@@ -25,7 +25,7 @@ class AwardSummary:
                     "sector": get_cpv_sector_and_description(pub.cpv_main_code.code, "nl"),
                     "cpv_code": pub.cpv_main_code.code,
                     "winner": pub.award.get("winner", "Unknown"),
-                    "organisation": get_org_name_as_str(pub.organisation.organisation_names),
+                    "organisation": PublicationConverter.get_org_name_as_str(pub.organisation.organisation_names),
                     "value": pub.award.get("value", 0),
                 }
             
@@ -356,8 +356,8 @@ async def get_award_detail(
         if publication.dossier:
             result["dossier"] = {
                 "reference_number": publication.dossier.reference_number,
-                "title": get_descr_as_str(publication.dossier.titles),
-                "description": get_descr_as_str(publication.dossier.descriptions),
+                "title": PublicationConverter.get_descr_as_str(publication.dossier.titles),
+                "description": PublicationConverter.get_descr_as_str(publication.dossier.descriptions),
             }
         
         # Get organisation information

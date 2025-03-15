@@ -8,7 +8,7 @@ from app.models.company_models import Company
 from app.models.kanban_models import KanbanStatus, PublicationStatus
 from app.models.publication_models import Publication
 from app.schemas.publication_out_schemas import PublicationOut
-from app.util.converter import get_descr_as_str, get_org_name_as_str
+from app.util.publication_utils.publication_converter import PublicationConverter
 
 
 # KanbanStatus CRUD operations
@@ -314,8 +314,8 @@ def get_kanban_board(company_vat_number: str, session: Session) -> Tuple[List[di
             # Create a simplified publication object with essential information
             publication_data = {
                 "publication_workspace_id": publication.publication_workspace_id,
-                "title": get_descr_as_str(publication.dossier.titles),
-                "organisation": get_org_name_as_str(publication.organisation.organisation_names),
+                "title": PublicationConverter.get_descr_as_str(publication.dossier.titles),
+                "organisation": PublicationConverter.get_descr_as_str(publication.organisation.organisation_names),
                 "submission_deadline": publication.vault_submission_deadline,
                 "is_active": publication.is_active,
                 "notes": pub_status.notes,

@@ -24,10 +24,10 @@ from app.config.postgres import get_session
 from app.config.settings import Settings
 from app.schemas.company_schemas import CompanyPublicationMatchSchema
 from app.schemas.publication_schemas import CPVCodeSchema, PublicationSchema
-from app.util.converter import get_descr_as_str
 from app.util.messages_helper import send_recommendation_notification
 from app.util.pubproc_token import get_token
 from app.util.redis_cache import invalidate_publication_cache, redis_cache
+from app.util.publication_utils.publication_converter import PublicationConverter
 
 settings = Settings()
 
@@ -229,7 +229,7 @@ async def generate_company_recommendations(
                 await send_recommendation_notification(
                     company_vat_number=company.vat_number,
                     publication_id=pub.publication_workspace_id,
-                    publication_title=get_descr_as_str(pub.dossier.titles)
+                    publication_title=PublicationConverter.get_descr_as_str(pub.dossier.titles)
                 )
         except Exception as e:
             logging.error(

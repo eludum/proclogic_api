@@ -145,15 +145,6 @@ class PublicationConverter(BaseModel):
             # Fallback if NLTK fails
             words = re.findall(r"\b\w+\b", text.lower())
             return list(set(words))
-
-    @staticmethod
-    def truncate_text(text: str, max_length: int = 1000) -> str:
-        """Truncate text to the specified max length."""
-        if not text:
-            return ""
-        if len(text) <= max_length:
-            return text
-        return text[: max_length - 3] + "..."
     
     @classmethod
     def extract_text(cls, publication: Publication) -> PublicationText:

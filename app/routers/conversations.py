@@ -28,12 +28,20 @@ from app.util.conversations_helper import (
     stream_ai_response,
     get_publication_title,
 )
-from app.util.converter import truncate_text
 
 conversations_router = APIRouter()
 
 security = HTTPBearer()
 settings = Settings()
+
+
+def truncate_text(text: str, max_length: int = 1000) -> str:
+    """Truncate text to the specified max length."""
+    if not text:
+        return ""
+    if len(text) <= max_length:
+        return text
+    return text[: max_length - 3] + "..."
 
 
 @conversations_router.get("/conversations/", response_model=List[ConversationSummary])
@@ -274,10 +282,10 @@ async def get_publication_conversation(
         messages = crud_conversation.get_conversation_messages(
             conversation_id=conversation.id, session=session
         )
-        
+
         # Manually add messages to avoid detached instance error
         conversation.messages = messages
-        
+
         return conversation
 
 
@@ -397,17 +405,17 @@ async def websocket_conversation(
                     )
 
                 assistant_id = await setup_assistant(
-                    client=client, 
-                    company=company, 
-                    publication=publication
+                    client=client, company=company, publication=publication
                 )
 
                 # Update conversation with new assistant ID
                 crud_conversation.update_conversation_ai_info(
                     conversation_id=conversation.id,
                     assistant_id=assistant_id,
-                    thread_id=conversation.thread_id if conversation.thread_id else None,
-                    session=session
+                    thread_id=(
+                        conversation.thread_id if conversation.thread_id else None
+                    ),
+                    session=session,
                 )
 
                 # Send confirmation
