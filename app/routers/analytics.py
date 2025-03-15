@@ -7,7 +7,7 @@ from app.models.publication_models import Publication, CPVCode
 from app.schemas.publication_schemas import PublicationSchema
 from app.util.clerk import AuthUser, get_auth_user
 from app.util.converter import get_descr_as_str, get_org_name_as_str
-from app.util.cpv_codes import get_cpv_sector_and_description
+from app.util.publication_utils.cpv_codes import get_cpv_sector_and_description
 
 analytics_router = APIRouter()
 

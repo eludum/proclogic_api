@@ -3,12 +3,11 @@ import logging
 import json
 
 from openai import OpenAI
-from app.util.converter import PublicationInfo
 from app.ai.openai import get_openai_client
 from app.config.settings import Settings
 from app.schemas.company_schemas import CompanySchema
 from app.schemas.publication_schemas import PublicationSchema
-from app.util.converter import get_accreditations_as_str
+from app.util.publication_utils.publication_converter import PublicationConverter
 
 settings = Settings()
 
@@ -17,14 +16,11 @@ def get_recommendation(
     publication: PublicationSchema,
     company: CompanySchema,
     client: OpenAI = None,
-) -> dict:
+) -> tuple[bool, float]:
     client = client or get_openai_client()
-    publication_info = PublicationInfo()
-    publication_info.convert_publication_to_str(publication)
 
-    interested_sectors_as_cpv_str = ", ".join(
-        f"{sector.sector}: {sector.cpv_codes}" for sector in company.interested_sectors
-    )
+    # Use the converter to prepare input for the recommendation
+    recommendation_input = PublicationConverter.to_recommendation_input(publication, company)
 
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -35,16 +31,7 @@ def get_recommendation(
             },
             {
                 "role": "user",
-                "content": (
-                    f"The company {company.name} specializes in {company.summary_activities}. "
-                    f"Accreditations: {get_accreditations_as_str(company.accreditations) if company.accreditations else 'not found in database'}. "
-                    f"Max publication value: {company.max_publication_value if company.max_publication_value else 'not found in database'}. "
-                    f"Interested CPV codes: {interested_sectors_as_cpv_str}. "
-                    f"Publication CPV codes: Main {publication.cpv_main_code.code}, Additional {publication_info.additional_cpv_codes_str}. "
-                    f"Title: {publication_info.dossier_title_str}. "
-                    f"Description: {publication_info.dossier_desc_str}. "
-                    f"Lots: {publication_info.lot_str}. "
-                ),
+                "content": recommendation_input,
             },
         ],
         response_format={"type": "json_object"},
@@ -56,7 +43,6 @@ def get_recommendation(
 
 
 def summarize_publication_award(xml: str, client: OpenAI = None) -> dict:
-    # TODO: dont send to openai just get relevant info from xml
     client = client or get_openai_client()
 
     completion = client.chat.completions.create(
@@ -80,8 +66,9 @@ def summarize_publication_without_files(
     publication: PublicationSchema, xml: str, client: OpenAI = None
 ) -> str:
     client = client or get_openai_client()
-    publication_info = PublicationInfo()
-    publication_info.convert_publication_to_str(publication)
+    
+    # Use the converter to create a summary input for XML processing
+    summary_input = PublicationConverter.to_xml_summary_input(publication)
 
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -92,15 +79,7 @@ def summarize_publication_without_files(
             },
             {
                 "role": "user",
-                "content": (
-                    f"Summarize the publication: "
-                    f"Main CPV code: {publication.cpv_main_code.code}. "
-                    f"Additional CPV codes: {publication_info.additional_cpv_codes_str}. "
-                    f"Title: {publication_info.dossier_title_str}. "
-                    f"Description: {publication_info.dossier_desc_str}. "
-                    f"Lots: {publication_info.lot_str}. "
-                    f"XML: {xml}"
-                ),
+                "content": f"Summarize the publication: {summary_input} XML: {xml}",
             },
         ],
     )
@@ -111,9 +90,9 @@ def summarize_publication_with_files(
     publication: PublicationSchema, xml: str, filesmap: dict, client: OpenAI = None
 ) -> tuple[str, str, str]:
     client = client or get_openai_client()
-
-    publication_info = PublicationInfo()
-    publication_info.convert_publication_to_str(publication)
+    
+    # Use the converter to create a summary input for XML processing
+    summary_input = PublicationConverter.to_xml_summary_input(publication)
 
     try:
         if filesmap:
@@ -180,7 +159,7 @@ def summarize_publication_with_files(
             messages=[
                 {
                     "role": "user",
-                    "content": f"Summarize the publication and attached documents. CPV codes: {publication.cpv_main_code.code}, {publication_info.additional_cpv_codes_str}. Title: {publication_info.dossier_title_str}. Description: {publication_info.dossier_desc_str}. Lots: {publication_info.lot_str}. XML: {xml}",
+                    "content": f"Summarize the publication and attached documents. {summary_input} XML: {xml}",
                 }
             ]
         )
