@@ -13,6 +13,7 @@ from app.config.settings import Settings
 from app.models.company_models import Company
 from app.models.conversation_models import Conversation
 from app.models.publication_models import Publication
+from app.util.publication_utils.publication_converter import PublicationConverter
 from app.util.pubproc import get_publication_workspace_documents
 
 settings = Settings()
@@ -324,34 +325,59 @@ async def setup_assistant(
     company: Company,
     publication: Publication,
 ) -> str:
-    """Set up an assistant for the conversation with company and publication data."""
+    """
+    Set up an assistant for the conversation with company and publication data.
+    Uses PublicationConverter for consistent data formatting.
+    
+    Args:
+        client: OpenAI client
+        company: Company model instance
+        publication: Publication model instance
+        
+    Returns:
+        str: The assistant ID
+    """
     try:
+        # Get properly formatted publication data using PublicationConverter
+        pub_data = PublicationConverter.to_output_schema(publication, company)
+        
         # Use a more specific naming convention that includes the publication ID
-        assistant_name = f"Assistant for {company.name} - {publication.publication_workspace_id}"
+        assistant_name = f"Assistant for {company.name} - {pub_data.workspace_id}"
         
-        logging.info(f"Creating or updating assistant: {assistant_name}")
+        logging.info(f"Creating assistant: {assistant_name}")
         
-        # Create more detailed instructions that include company profile
-        instructions = f"""You are an assistant helping the company {company.name} with public procurement document analysis.
-        
+        # Create detailed instructions using structured data
+        instructions = f"""You are an AI assistant helping {company.name} with public procurement document analysis for tender {pub_data.title}.
+
         PUBLICATION INFORMATION:
-        - Title: {get_publication_title(publication)}
-        - ID: {publication.publication_workspace_id}
-        - Submission deadline: {publication.vault_submission_deadline}
-        - CPV code: {publication.cpv_main_code_code}
-        
+        - Title: {pub_data.title}
+        - Organization: {pub_data.organisation}
+        - Submission deadline: {pub_data.submission_deadline}
+        - CPV code: {pub_data.cpv_code}
+        - Sector: {pub_data.sector}
+        - Estimated value: {pub_data.estimated_value if pub_data.estimated_value else "Unknown"}
+
         COMPANY INFORMATION:
         - VAT: {company.vat_number}
         - Activities: {company.summary_activities}
         - Interested sectors: {', '.join(sector.sector for sector in company.interested_sectors)}
         - Accreditations: {company.accreditations if company.accreditations else 'None'}
         - Regions: {', '.join(company.operating_regions) if company.operating_regions else 'Not specified'}
-        
-        Always respond in Dutch unless specifically asked to use another language.
-        Be concise but complete in your answers. Focus on helping understand requirements, deadlines, and other important information.
+
+        ADDITIONAL CONTEXT:
+        - Match percentage: {pub_data.match_percentage if hasattr(pub_data, 'match_percentage') else 'Unknown'}
+        - Publication in company's sector: {pub_data.publication_in_your_sector if pub_data.publication_in_your_sector else 'Unknown'}
+        - Publication in company's region: {pub_data.publication_in_your_region if pub_data.publication_in_your_sector else 'Unknown'}
+
+        GUIDELINES:
+        - Always respond in Dutch unless specifically asked to use another language
+        - Be concise but complete in your answers
+        - Focus on helping the company understand the publication requirements, deadlines, and eligibility
+        - Provide advice tailored to this company's profile and capabilities
+        - If you reference documents, cite the source clearly
         """
         
-        # Create a new assistant for each publication-company combination
+        # Create a new assistant with the structured instructions
         assistant = client.beta.assistants.create(
             name=assistant_name,
             instructions=instructions,
@@ -359,26 +385,26 @@ async def setup_assistant(
             tools=[{"type": "file_search"}],
         )
         
-        logging.info(f"Created new assistant with ID: {assistant.id}")
+        logging.info(f"Created assistant with ID: {assistant.id}")
 
         # Set up vector store with publication documents
         vector_store_id = None
 
         try:
             async with httpx.AsyncClient() as http_client:
+                # Get publication documents
                 filesmap = await get_publication_workspace_documents(
                     http_client, publication.publication_workspace_id
                 )
 
                 if filesmap:
-                    # Create vector store
+                    # Create vector store with a consistent naming convention
                     vector_store = client.beta.vector_stores.create(
-                        name=f"publication_{publication.publication_workspace_id}"
+                        name=f"pub_{publication.publication_workspace_id}"
                     )
                     vector_store_id = vector_store.id
-                    logging.info(f"Created vector store with ID: {vector_store_id}")
-
-                    # Prepare files for upload (only accepted formats)
+                    
+                    # Filter and prepare files for upload (only accepted formats)
                     file_objects = []
                     for filename, file_data in filesmap.items():
                         if not filename.lower().endswith(
@@ -387,26 +413,29 @@ async def setup_assistant(
                             continue
 
                         try:
-                            if hasattr(file_data, "read") and hasattr(
-                                file_data, "seek"
-                            ):
+                            # Handle different file object types
+                            if hasattr(file_data, "read") and hasattr(file_data, "seek"):
                                 file_data.seek(0)
                                 content = file_data.read()
                                 byte_io = BytesIO(content)
                                 byte_io.name = getattr(file_data, "name", filename)
                                 file_objects.append(byte_io)
+                            elif isinstance(file_data, dict) and "content" in file_data:
+                                content = file_data["content"]
+                                if isinstance(content, bytes):
+                                    byte_io = BytesIO(content)
+                                    byte_io.name = file_data.get("name", filename)
+                                    file_objects.append(byte_io)
                         except Exception as e:
                             logging.error(f"Error processing file {filename}: {e}")
 
                     # Upload files if we have any valid ones
                     if file_objects:
-                        logging.info(
-                            f"Uploading {len(file_objects)} files to vector store"
-                        )
-                        file_batch = (
-                            client.beta.vector_stores.file_batches.upload_and_poll(
-                                vector_store_id=vector_store.id, files=file_objects
-                            )
+                        logging.info(f"Uploading {len(file_objects)} files to vector store")
+                        
+                        file_batch = client.beta.vector_stores.file_batches.upload_and_poll(
+                            vector_store_id=vector_store.id, 
+                            files=file_objects
                         )
 
                         if file_batch.status == "completed":
@@ -420,20 +449,25 @@ async def setup_assistant(
                                     }
                                 },
                             )
+                        else:
+                            logging.warning(f"File upload failed with status: {file_batch.status}")
         except Exception as e:
-            logging.error(f"Error setting up vector store: {e}")
+            logging.error(f"Error setting up vector store: {e}", exc_info=True)
             # Continue without vector store if there was an error
             if vector_store_id:
-                # Still try to update the assistant with an empty vector store
-                client.beta.assistants.update(
-                    assistant_id=assistant.id,
-                    tool_resources={"file_search": {"vector_store_ids": []}},
-                )
+                # Try to update the assistant with an empty vector store
+                try:
+                    client.beta.assistants.update(
+                        assistant_id=assistant.id,
+                        tool_resources={"file_search": {"vector_store_ids": []}},
+                    )
+                except Exception as update_error:
+                    logging.error(f"Error updating assistant after vector store failure: {update_error}")
 
         return assistant.id
 
     except Exception as e:
-        logging.error(f"Error creating assistant: {e}")
+        logging.error(f"Error creating assistant: {e}", exc_info=True)
         raise HTTPException(
             status_code=500, detail=f"Failed to set up AI assistant: {str(e)}"
         )

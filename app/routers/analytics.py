@@ -1,15 +1,20 @@
+import logging
 from typing import Dict, List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 
 from app.config.postgres import get_session
-from app.models.publication_models import Publication, CPVCode
+from app.models.publication_models import CPVCode, Publication
 from app.schemas.publication_schemas import PublicationSchema
 from app.util.clerk import AuthUser, get_auth_user
-from app.util.publication_utils.publication_converter import PublicationConverter
 from app.util.publication_utils.cpv_codes import get_cpv_sector_and_description
+from app.util.publication_utils.publication_converter import \
+    PublicationConverter
 
 analytics_router = APIRouter()
+
+# TODO: refactor this
 
 class AwardSummary:
     """Helper class for award data processing"""
@@ -67,8 +72,9 @@ async def get_awards_total_value(
 async def get_awards_by_sector(
     auth_user: AuthUser = Depends(get_auth_user),
     year: Optional[int] = Query(None, description="Filter by year"),
+    sector: Optional[List[str]] = Query(None, description="Filter by sector CPV codes"),
 ):
-    """Get award counts and total values grouped by sector"""
+    """Get award counts and total values grouped by sector, with optional filtering by specific sectors"""
     with get_session() as session:
         # Get all awarded publications
         query = session.query(Publication) \
@@ -78,12 +84,28 @@ async def get_awards_by_sector(
         if year:
             query = query.filter(func.extract('year', Publication.publication_date) == year)
             
+        # Apply sector filter if provided
+        if sector:
+            query = query.join(Publication.cpv_main_code) \
+                .filter(CPVCode.code.in_(sector))
+                
         publications = query.all()
         
         # Process and group by sector
-        awards_data = AwardSummary.process_award_data(publications)
-        
-        # Group by sector
+        awards_data = []
+        for pub in publications:
+            sector_info = get_cpv_sector_and_description(pub.cpv_main_code.code, "nl")
+            
+            # Add to awards data
+            award_data = {
+                "sector": sector_info,
+                "count": 1,
+                "total_value": pub.award.get("value", 0) if pub.award else 0,
+            }
+            
+            awards_data.append(award_data)
+            
+        # Group the data by sector
         sectors = {}
         for award in awards_data:
             sector = award["sector"]
@@ -93,8 +115,8 @@ async def get_awards_by_sector(
                     "total_value": 0
                 }
             
-            sectors[sector]["count"] += 1
-            sectors[sector]["total_value"] += award["value"]
+            sectors[sector]["count"] += award["count"]
+            sectors[sector]["total_value"] += award["total_value"]
         
         # Convert to list for output
         result = [
@@ -110,6 +132,7 @@ async def get_awards_by_sector(
         result.sort(key=lambda x: x["total_value"], reverse=True)
         
         return result
+
 
 
 @analytics_router.get("/analytics/by-winner")
@@ -372,3 +395,97 @@ async def get_award_detail(
             }
         
         return result
+
+@analytics_router.get("/analytics/by-region")
+async def get_awards_by_region(
+    auth_user: AuthUser = Depends(get_auth_user),
+    year: Optional[int] = Query(None, description="Filter by year"),
+    sector: Optional[List[str]] = Query(None, description="Filter by sector CPV codes"),
+):
+    """Get award counts and values grouped by region (NUTS codes)"""
+    try:
+        with get_session() as session:
+            # Base query for awarded publications
+            query = session.query(Publication) \
+                .filter(Publication.award.isnot(None))
+            
+            # Apply filters
+            if year:
+                query = query.filter(func.extract('year', Publication.publication_date) == year)
+                
+            if sector:
+                # Filter by CPV codes (for sector specificity)
+                query = query.join(Publication.cpv_main_code) \
+                    .filter(CPVCode.code.in_(sector))
+                
+            publications = query.all()
+            
+            # Process and group by region
+            region_data = {}
+            for pub in publications:
+                for region_code in pub.nuts_codes:
+                    region_name = get_region_name(region_code)
+                    if region_name not in region_data:
+                        region_data[region_name] = {
+                            "count": 0,
+                            "total_value": 0
+                        }
+                    
+                    region_data[region_name]["count"] += 1
+                    if pub.award and "value" in pub.award:
+                        region_data[region_name]["total_value"] += pub.award["value"]
+            
+            # Convert to list for output
+            result = [
+                {
+                    "region": region,
+                    "count": data["count"],
+                    "total_value": data["total_value"]
+                }
+                for region, data in region_data.items()
+            ]
+            
+            # Sort by total value
+            result.sort(key=lambda x: x["total_value"], reverse=True)
+            
+            return result
+    except Exception as e:
+        logging.error(f"Error in regional analysis: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing regional data: {str(e)}")
+
+# Helper function to get human-readable region names
+def get_region_name(nuts_code: str) -> str:
+    """Convert NUTS code to region name"""
+    # This would be replaced with a proper lookup from a database or mapping
+    # For now, using a simplified mapping for Belgium
+    region_map = {
+        "BE1": "Brussels",
+        "BE2": "Vlaanderen",
+        "BE21": "Antwerpen",
+        "BE22": "Limburg",
+        "BE23": "Oost-Vlaanderen",
+        "BE24": "Vlaams-Brabant",
+        "BE25": "West-Vlaanderen",
+        "BE3": "Wallonië",
+        "BE31": "Waals-Brabant",
+        "BE32": "Henegouwen",
+        "BE33": "Luik",
+        "BE34": "Luxemburg (BE)",
+        "BE35": "Namen"
+    }
+    
+    # Try direct lookup first
+    if nuts_code in region_map:
+        return region_map[nuts_code]
+    
+    # Try parent region if specific code not found
+    if len(nuts_code) > 2:
+        parent_code = nuts_code[:2]
+        if parent_code in region_map:
+            return region_map[parent_code]
+    
+    # Default fallback
+    return nuts_code
+
+# Modify existing endpoints to support sector filtering
+# For example, update get_awards_by_sector:
