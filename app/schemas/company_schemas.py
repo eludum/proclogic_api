@@ -34,6 +34,6 @@ class CompanySchema(BaseModel):
     max_publication_value: Optional[int]
     activity_keywords: Optional[List[str]] = Field(default_factory=list)
     operating_regions: Optional[List[str]] = Field(default_factory=list)
-    publication_matches: Optional[List[CompanyPublicationMatchSchema]] = Field(default_factory=CompanyPublicationMatchSchema)
+    publication_matches: Optional[List[CompanyPublicationMatchSchema]] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)

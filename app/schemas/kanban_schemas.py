@@ -76,7 +76,7 @@ class KanbanColumn(BaseModel):
     color: str
     position: int
     is_default: bool
-    publications: List[PublicationInKanban] = Field(default_factory=PublicationInKanban)
+    publications: List[PublicationInKanban] = Field(default_factory=list)
     
     model_config = ConfigDict(from_attributes=True)
 

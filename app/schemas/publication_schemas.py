@@ -99,6 +99,6 @@ class PublicationSchema(BaseModel):
     estimated_value: Optional[int] = None
     extracted_keywords: Optional[List[str]] = Field(default_factory=list)
 
-    company_matches: Optional[List[CompanyPublicationMatchSchema]] = Field(default_factory=CompanyPublicationMatchSchema)
+    company_matches: Optional[List[CompanyPublicationMatchSchema]] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True, alias_generator=to_camel)

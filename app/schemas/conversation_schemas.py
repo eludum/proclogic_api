@@ -37,7 +37,7 @@ class ConversationSchema(ConversationBase):
     assistant_id: Optional[str] = None
     thread_id: Optional[str] = None
     is_active: bool
-    messages: List[MessageSchema] = Field(default_factory=MessageSchema)
+    messages: List[MessageSchema] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
