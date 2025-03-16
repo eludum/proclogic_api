@@ -32,6 +32,7 @@ def create_company(
         new_company = Company(
             vat_number=company_schema.vat_number,
             subscription=company_schema.subscription,
+            number_of_employees=company_schema.number_of_employees,
             name=company_schema.name,
             emails=company_schema.emails,
             summary_activities=company_schema.summary_activities,
@@ -51,6 +52,8 @@ def create_company(
                 )
                 for sector_schema in company_schema.interested_sectors
             ]
+
+        # TODO: create automatic publication matches
 
         session.add(new_company)
         session.commit()
@@ -121,8 +124,9 @@ def update_company(
 
         # Update basic fields
         company.name = company_schema.name
-        company.subscription = (company_schema.subscription,)
+        company.subscription = company_schema.subscription
         company.emails = company_schema.emails
+        company.number_of_employees = company_schema.number_of_employees
         company.summary_activities = company_schema.summary_activities
         company.accreditations = company_schema.accreditations
 

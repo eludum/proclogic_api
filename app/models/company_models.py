@@ -28,6 +28,7 @@ class Company(Base):
 
     # Company profile data
     subscription: Mapped[str] = mapped_column(String)
+    number_of_employees: Mapped[int] = mapped_column(Integer)
     summary_activities: Mapped[str] = mapped_column(String)
     accreditations: Mapped[Optional[dict]] = mapped_column(PickleType, nullable=True)
     max_publication_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

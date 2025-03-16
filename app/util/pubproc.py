@@ -80,10 +80,6 @@ async def process_publication(
     """
     Process an individual publication by checking if it exists and handling it accordingly.
     """
-    # Get documents
-    filesmap = await get_publication_workspace_documents(
-        client=client, publication_workspace_id=pub.publication_workspace_id
-    )
 
     # Check if the publication already exists
     existing_publication = crud_publication.publication_exists(
@@ -91,10 +87,30 @@ async def process_publication(
     )
 
     if existing_publication and pub.vault_submission_deadline is not None:
+        # Get documents
+        filesmap = await get_publication_workspace_documents(
+            client=client, publication_workspace_id=pub.publication_workspace_id
+        )
+
+        # TODO: add forum data to ai
+        # Get forum info
+        # forum = await get_publication_workspace_forum(
+        #     client=client, publication_workspace_id=pub.publication_workspace_id
+        # )
         await update_existing_publication(
             client=client, pub=pub, filesmap=filesmap, session=session
         )
     elif not existing_publication and pub.vault_submission_deadline is not None:
+        # Get documents
+        filesmap = await get_publication_workspace_documents(
+            client=client, publication_workspace_id=pub.publication_workspace_id
+        )
+
+        # TODO: add forum data to ai
+        # Get forum info
+        # forum = await get_publication_workspace_forum(
+        #     client=client, publication_workspace_id=pub.publication_workspace_id
+        # )
         await create_new_publication(
             client=client, pub=pub, filesmap=filesmap, session=session
         )
@@ -228,7 +244,9 @@ async def generate_company_recommendations(
                 await send_recommendation_notification(
                     company_vat_number=company.vat_number,
                     publication_id=pub.publication_workspace_id,
-                    publication_title=PublicationConverter.get_descr_as_str(pub.dossier.titles)
+                    publication_title=PublicationConverter.get_descr_as_str(
+                        pub.dossier.titles
+                    ),
                 )
         except Exception as e:
             logging.error(
@@ -361,7 +379,7 @@ async def get_publication_workspace_documents(
 
     if r.status_code != 200:
         return {}
-    
+
     zf = zipfile.ZipFile(BytesIO(r.content))
     file_map = {}
 
