@@ -41,7 +41,8 @@ class PublicationOut(BaseModel):
     sector: str
 
     # Lot information
-    lots: Optional[List[str]] = None
+    lot_titles: Optional[List[str]] = None
+    lot_descriptions: Optional[List[str]] = None
 
     # Forum information
     forum: Optional[dict] = None

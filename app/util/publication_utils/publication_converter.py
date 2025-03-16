@@ -10,10 +10,21 @@ from nltk.tokenize import word_tokenize
 from app.config.settings import Settings
 from app.models.company_models import Company
 from app.models.publication_models import Publication
+from app.schemas.company_schemas import CompanySchema
 from app.schemas.publication_out_schemas import PublicationOut
-from app.schemas.publication_schemas import DescriptionSchema, OrganisationNameSchema
-from app.util.publication_utils.nuts_codes import check_if_publication_is_in_your_region, get_nuts_code_as_str
-from app.util.publication_utils.cpv_codes import check_if_publication_is_in_your_sector, get_cpv_sector_and_description
+from app.schemas.publication_schemas import (
+    DescriptionSchema,
+    OrganisationNameSchema,
+    PublicationSchema,
+)
+from app.util.publication_utils.nuts_codes import (
+    check_if_publication_is_in_your_region,
+    get_nuts_code_as_str,
+)
+from app.util.publication_utils.cpv_codes import (
+    check_if_publication_is_in_your_sector,
+    get_cpv_sector_and_description,
+)
 
 settings = Settings()
 
@@ -27,23 +38,20 @@ except:
 
 class PublicationText(BaseModel):
     """Pydantic model for textual content of a publication"""
+
     title: str
     description: str
     organisation_name: str
     lots_titles: List[str] = Field(default_factory=list)
     lots_descriptions: List[str] = Field(default_factory=list)
     additional_cpv_codes_str: str = ""
-    
+
     model_config = ConfigDict(from_attributes=True)
-    
-    @computed_field
-    def lots_text(self) -> str:
-        """Combine lot titles and descriptions for easier text processing"""
-        return "\n".join([f"{title}: {desc}" for title, desc in zip(self.lots_titles, self.lots_descriptions)])
 
 
 class PublicationData(BaseModel):
     """Pydantic model for structured publication data"""
+
     workspace_id: str
     dispatch_date: datetime
     publication_date: datetime
@@ -56,14 +64,14 @@ class PublicationData(BaseModel):
     estimated_value: int = 0
     ai_summary_without_documents: Optional[str] = None
     ai_summary_with_documents: Optional[str] = None
-    
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     @computed_field
     def region_names(self) -> List[str]:
         """Get human-readable region names from NUTS codes"""
         return [get_nuts_code_as_str(nuts_code) for nuts_code in self.nuts_codes]
-    
+
     @computed_field
     def sector(self) -> str:
         """Get sector description from CPV code"""
@@ -72,29 +80,31 @@ class PublicationData(BaseModel):
 
 class MatchData(BaseModel):
     """Pydantic model for company-publication match data"""
-    company_vat_number: str 
+
+    company_vat_number: str
     is_recommended: bool = False
     is_saved: bool = False
     is_viewed: bool = False
     match_percentage: float = 0.0
     publication_in_sector: bool = False
     publication_in_region: bool = False
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
 class PublicationConverter(BaseModel):
     """Pydantic model for converting Publication models to various formats"""
-    
+
     # Class variables for text processing
     preferred_languages: ClassVar[List[str]] = settings.prefered_languages_descriptions
-    
+
     @staticmethod
     def get_descr_as_str(
         descriptions: List[DescriptionSchema],
         preferred_languages=settings.prefered_languages_descriptions,
     ) -> str:
         """Get the description text in a preferred language."""
+        # TODO: translate if not in preferred language
         descr_text = ""
         for lang in preferred_languages:
             for desc in descriptions:
@@ -145,19 +155,25 @@ class PublicationConverter(BaseModel):
             # Fallback if NLTK fails
             words = re.findall(r"\b\w+\b", text.lower())
             return list(set(words))
-    
+
     @classmethod
     def extract_text(cls, publication: Publication) -> PublicationText:
         """Extract all text content from a publication"""
         return PublicationText(
             title=cls.get_descr_as_str(publication.dossier.titles),
             description=cls.get_descr_as_str(publication.dossier.descriptions),
-            organisation_name=cls.get_org_name_as_str(publication.organisation.organisation_names),
+            organisation_name=cls.get_org_name_as_str(
+                publication.organisation.organisation_names
+            ),
             lots_titles=[cls.get_descr_as_str(lot.titles) for lot in publication.lots],
-            lots_descriptions=[cls.get_descr_as_str(lot.descriptions) for lot in publication.lots],
-            additional_cpv_codes_str=", ".join(cpv.code for cpv in publication.cpv_additional_codes)
+            lots_descriptions=[
+                cls.get_descr_as_str(lot.descriptions) for lot in publication.lots
+            ],
+            additional_cpv_codes_str=", ".join(
+                cpv.code for cpv in publication.cpv_additional_codes
+            ),
         )
-    
+
     @classmethod
     def extract_data(cls, publication: Publication) -> PublicationData:
         """Extract structured data from a publication"""
@@ -171,16 +187,20 @@ class PublicationConverter(BaseModel):
             nuts_codes=publication.nuts_codes,
             accreditations=publication.dossier.accreditations,
             is_active=publication.is_active,
-            estimated_value=publication.estimated_value if publication.estimated_value else 0,
+            estimated_value=(
+                publication.estimated_value if publication.estimated_value else 0
+            ),
             ai_summary_without_documents=publication.ai_summary_without_documents,
-            ai_summary_with_documents=publication.ai_summary_with_documents
+            ai_summary_with_documents=publication.ai_summary_with_documents,
         )
-    
+
     @classmethod
-    def extract_match_data(cls, publication: Publication, company: Company) -> MatchData:
+    def extract_match_data(
+        cls, publication: Publication, company: Company
+    ) -> MatchData:
         """Extract match data between a publication and a company"""
         match_data = MatchData(company_vat_number=company.vat_number)
-        
+
         # Find matching record if it exists
         for match in publication.company_matches:
             if match.company_vat_number == company.vat_number:
@@ -189,7 +209,7 @@ class PublicationConverter(BaseModel):
                 match_data.is_viewed = match.is_viewed
                 match_data.match_percentage = match.match_percentage
                 break
-        
+
         # Calculate sector and region matches
         pub_data = cls.extract_data(publication)
         match_data.publication_in_sector = check_if_publication_is_in_your_sector(
@@ -198,21 +218,21 @@ class PublicationConverter(BaseModel):
         match_data.publication_in_region = check_if_publication_is_in_your_region(
             company.operating_regions, pub_data.nuts_codes
         )
-        
+
         return match_data
-    
+
     @classmethod
     def to_output_schema(
         cls,
-        publication: Publication, 
+        publication: Publication,
         company: Optional[Company] = None,
         documents: Optional[Dict[str, Any]] = None,
-        forum: Optional[Dict[str, Any]] = None
+        forum: Optional[Dict[str, Any]] = None,
     ) -> PublicationOut:
         """Convert a publication to the PublicationOut schema"""
         pub_text = cls.extract_text(publication)
         pub_data = cls.extract_data(publication)
-        
+
         # Create the base output schema
         output = PublicationOut(
             title=pub_text.title,
@@ -228,61 +248,100 @@ class PublicationConverter(BaseModel):
             accreditations=pub_data.accreditations,
             region=pub_data.region_names,
             sector=pub_data.sector,
-            lots=pub_text.lots_titles,
+            lot_titles=pub_text.lots_titles,
+            lot_descriptions=pub_text.lots_descriptions,
             estimated_value=pub_data.estimated_value,
             ai_summary_without_documents=pub_data.ai_summary_without_documents,
             ai_summary_with_documents=pub_data.ai_summary_with_documents,
         )
-        
+
         # Add company-specific data if a company is provided
         if company:
             match_data = cls.extract_match_data(publication, company)
-            
+
             output.is_recommended = match_data.is_recommended
             output.match_percentage = match_data.match_percentage
             output.is_saved = match_data.is_saved
             output.is_viewed = match_data.is_viewed
             output.publication_in_your_sector = match_data.publication_in_sector
             output.publication_in_your_region = match_data.publication_in_region
-        
+
         # Add documents and forum data if provided
         if documents:
             output.documents = documents
-            
+
         if forum:
             output.forum = forum
-            
+
         return output
-    
+
     @classmethod
-    def to_xml_summary_input(cls, publication: Publication) -> str:
-        """Create a text summary of the publication for XML processing"""
-        pub_text = cls.extract_text(publication)
-        
-        return (
-            f"Main CPV code: {publication.cpv_main_code.code}. "
-            f"Additional CPV codes: {pub_text.additional_cpv_codes_str}. "
-            f"Title: {pub_text.title}. "
-            f"Description: {pub_text.description}. "
-            f"Lots: {', '.join(pub_text.lots_titles)}. "
-        )
-    
-    @classmethod
-    def to_recommendation_input(cls, publication: Publication, company: Company) -> str:
-        """Create input for recommendation systems"""
-        pub_text = cls.extract_text(publication)
-        
-        interested_sectors_as_cpv_str = ", ".join(
-            f"{sector.sector}: {sector.cpv_codes}" for sector in company.interested_sectors
-        )
-        
-        return (
-            f"The company {company.name} specializes in {company.summary_activities}. "
-            f"Accreditations: {cls.get_accreditations_as_str(company.accreditations) if company.accreditations else 'not found in database'}. "
-            f"Max publication value: {company.max_publication_value if company.max_publication_value else 'not found in database'}. "
-            f"Interested CPV codes: {interested_sectors_as_cpv_str}. "
-            f"Publication CPV codes: Main {publication.cpv_main_code.code}, Additional {pub_text.additional_cpv_codes_str}. "
-            f"Title: {pub_text.title}. "
-            f"Description: {pub_text.description}. "
-            f"Lots: {', '.join(pub_text.lots_titles)}. "
-        )
+    def to_ai_prompt_format(
+        cls,
+        publication_schema: Optional[PublicationSchema] = None,
+        company_schema: Optional[CompanySchema] = None,
+    ) -> str:
+        """Convert publication and company schemas to a formatted prompt for AI."""
+        prompt = ""
+
+        # Company information section
+        if company_schema:
+            prompt += "COMPANY INFORMATION:\n"
+            prompt += f"""- VAT Number: {company_schema.vat_number}
+                    - Name: {company_schema.name}
+                    - Activities: {company_schema.summary_activities}
+                    - Accreditations: {cls.get_accreditations_as_str(company_schema.accreditations) if company_schema.accreditations else 'None'}
+                    - Max publication value: {company_schema.max_publication_value if company_schema.max_publication_value is not None else 'No limit'}
+                    - Interested Sectors with CPV codes: {", ".join(
+                        f"{sector.sector} ({', '.join(sector.cpv_codes)})" for sector in company_schema.interested_sectors
+                    ) if company_schema.interested_sectors else 'None'}
+                    - Operating regions: {', '.join(company_schema.operating_regions) if company_schema.operating_regions else 'All regions'}
+                    - Keywords: {', '.join(company_schema.activity_keywords) if company_schema.activity_keywords else 'None'}
+                    """
+
+        # Publication information section
+        if publication_schema:
+            prompt += "\nPUBLICATION INFORMATION:\n"
+
+            # Get descriptions from the schema
+            title = cls.get_descr_as_str(publication_schema.dossier.titles)
+            description = cls.get_descr_as_str(publication_schema.dossier.descriptions)
+            organisation_name = cls.get_org_name_as_str(
+                publication_schema.organisation.organisation_names
+            )
+
+            # Get CPV code and sector
+            cpv_code = publication_schema.cpv_main_code.code
+            sector = get_cpv_sector_and_description(cpv_code, language="nl")
+
+            # Get additional CPV codes
+            additional_cpv_codes = [
+                cpv.code for cpv in publication_schema.cpv_additional_codes
+            ]
+
+            # Get regions
+            nuts_codes = publication_schema.nuts_codes
+            region_names = [get_nuts_code_as_str(nuts_code) for nuts_code in nuts_codes]
+
+            prompt += f"""- Title: {title}
+                - Description: {description}
+                - Main CPV code: {cpv_code} ({sector})
+                - Additional CPV codes: {', '.join(additional_cpv_codes) if additional_cpv_codes else 'None'}
+                - Organization: {organisation_name}
+                - Regions: {', '.join(region_names) if region_names else 'Not specified'}
+                - Publication date: {publication_schema.publication_date.strftime('%Y-%m-%d') if publication_schema.publication_date else 'Not specified'}
+                - Submission deadline: {publication_schema.vault_submission_deadline.strftime('%Y-%m-%d') if publication_schema.vault_submission_deadline else 'Not specified'}
+                - Estimated value: {publication_schema.estimated_value if publication_schema.estimated_value else 'Not specified'}
+                """
+
+            # Add lots information if available
+            if publication_schema.lots:
+                prompt += "    - Lots:\n"
+                for i, lot in enumerate(publication_schema.lots):
+                    lot_title = cls.get_descr_as_str(lot.titles)
+                    lot_desc = cls.get_descr_as_str(lot.descriptions)
+                    prompt += (
+                        f"        * Lot {i+1}: {lot_title}\n          {lot_desc}\n"
+                    )
+
+        return prompt

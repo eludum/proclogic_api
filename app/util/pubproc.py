@@ -44,7 +44,7 @@ async def fetch_pubproc_data() -> None:
         # TODO: remove continue in prod
         continue
 
-        if pycron.is_now("*/15 6-19 * * 1-5"):
+        if pycron.is_now("*/15 * * * *"):
             try:
                 async with httpx.AsyncClient() as client:
                     await retrieve_publications(client=client)
@@ -60,19 +60,18 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
     """
     Main function that retrieves and processes publications.
     """
-    pass
-    # with get_session() as session:
-    #     pubproc_r = await get_daily_pubproc_search_data(client=client)
-    #     pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
+    with get_session() as session:
+        pubproc_r = await get_daily_pubproc_search_data(client=client)
+        pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
 
-    #     # Process each publication
-    #     for pub in pubproc_data:
-    #         try:
-    #             await process_publication(client, pub, session)
-    #         except Exception as e:
-    #             logging.error(
-    #                 f"Error processing publication {pub.publication_workspace_id}: {e}"
-    #             )
+        # Process each publication
+        for pub in pubproc_data:
+            try:
+                await process_publication(client, pub, session)
+            except Exception as e:
+                logging.error(
+                    f"Error processing publication {pub.publication_workspace_id}: {e}"
+                )
 
 
 async def process_publication(
@@ -271,28 +270,18 @@ def generate_uuid():
     return str(uuid.uuid4())
 
 
-def get_nearest_business_day(date_obj: date = None) -> date:
-    if date_obj is None:
-        date_obj = date.today()  # get current date, without time
-
-    if date_obj.weekday() == 5:  # Saturday
-        return date_obj - timedelta(days=1)
-    elif date_obj.weekday() == 6:  # Sunday
-        return date_obj - timedelta(days=2)
-    return date_obj
-
-
 async def get_daily_pubproc_search_data(
     client: httpx.AsyncClient,
     interested_cpv_codes: List[CPVCodeSchema] = None,
 ) -> dict:
     token = get_token()
 
-    latest_business_day = get_nearest_business_day()
+    # TODO: remove - 1 for prod
+    today = date.today() - timedelta(1)
     page_size = 100
 
     data = {
-        "dispatch-date-from": f"{latest_business_day.strftime('%Y-%m-%d')}",
+        "dispatch-date-from": f"{today.strftime('%Y-%m-%d')}",
         "page": 1,
         "pageSize": page_size,
     }

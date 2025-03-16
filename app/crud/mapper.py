@@ -14,6 +14,8 @@ from app.util.pubproc import (
 
 settings = Settings()
 
+# TODO: hide stuff for the free part
+
 async def convert_publications_to_out_schema_list_free(
     publication: Publication,
 ) -> PublicationOut:

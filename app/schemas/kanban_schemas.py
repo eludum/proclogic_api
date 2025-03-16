@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 # Base schemas for creating and updating
 class KanbanStatusBase(BaseModel):
@@ -76,7 +76,7 @@ class KanbanColumn(BaseModel):
     color: str
     position: int
     is_default: bool
-    publications: List[PublicationInKanban] = []
+    publications: List[PublicationInKanban] = Field(default_factory=PublicationInKanban)
     
     model_config = ConfigDict(from_attributes=True)
 

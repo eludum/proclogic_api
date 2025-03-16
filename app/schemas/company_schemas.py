@@ -1,5 +1,5 @@
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 class CompanyPublicationMatchSchema(BaseModel):
     publication_workspace_id: str
@@ -21,15 +21,19 @@ class SectorSchema(BaseModel):
 
 class CompanySchema(BaseModel):
     vat_number: str
-    subscription: str
+    subscription: str = Field(
+        ...,
+        description="Type of subscription: starter, team or custom",
+    )
     name: str
     emails: List[str]
+    number_of_employees: int
     interested_sectors: List[SectorSchema]
     summary_activities: str
     accreditations: Optional[dict]
     max_publication_value: Optional[int]
-    activity_keywords: Optional[List[str]] = []
-    operating_regions: Optional[List[str]] = []
-    publication_matches: Optional[List[CompanyPublicationMatchSchema]] = []
+    activity_keywords: Optional[List[str]] = Field(default_factory=list)
+    operating_regions: Optional[List[str]] = Field(default_factory=list)
+    publication_matches: Optional[List[CompanyPublicationMatchSchema]] = Field(default_factory=CompanyPublicationMatchSchema)
 
     model_config = ConfigDict(from_attributes=True)

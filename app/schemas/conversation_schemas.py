@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MessageBase(BaseModel):
@@ -37,7 +37,7 @@ class ConversationSchema(ConversationBase):
     assistant_id: Optional[str] = None
     thread_id: Optional[str] = None
     is_active: bool
-    messages: List[MessageSchema] = []
+    messages: List[MessageSchema] = Field(default_factory=MessageSchema)
 
     model_config = ConfigDict(from_attributes=True)
 
