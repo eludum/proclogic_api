@@ -37,23 +37,21 @@ async def fetch_pubproc_data() -> None:
         try:
             async with httpx.AsyncClient() as client:
                 await retrieve_publications(client=client)
-            await asyncio.sleep(600)  # 10 minutes in seconds
         except Exception as e:
             logging.error("error in fetching data: %s", e)
-            await asyncio.sleep(600)  # wait a minute before retrying
-        # TODO: remove continue in prod
-        continue
+        finally:
+            await asyncio.sleep(600)  # 10 minutes in seconds
 
-        if pycron.is_now("*/15 * * * *"):
-            try:
-                async with httpx.AsyncClient() as client:
-                    await retrieve_publications(client=client)
-            except Exception as e:
-                logging.error("error in fetching data: %s", e)
-            finally:
-                await asyncio.sleep(60)
-        else:
-            await asyncio.sleep(60)
+        # if pycron.is_now("*/15 * * * *"):
+        #     try:
+        #         async with httpx.AsyncClient() as client:
+        #             await retrieve_publications(client=client)
+        #     except Exception as e:
+        #         logging.error("error in fetching data: %s", e)
+        #     finally:
+        #         await asyncio.sleep(60)
+        # else:
+        #     await asyncio.sleep(60)
 
 
 async def retrieve_publications(client: httpx.AsyncClient) -> None:
@@ -114,7 +112,7 @@ async def process_publication(
         await create_new_publication(
             client=client, pub=pub, filesmap=filesmap, session=session
         )
-    elif pub.vault_submission_deadline is None:
+    elif not existing_publication and pub.vault_submission_deadline is None:
         await process_award_publication(client=client, pub=pub, session=session)
 
 

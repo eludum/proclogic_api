@@ -301,14 +301,25 @@ def summarize_publication_with_files(
 ) -> tuple[str, str, str]:
     client = client or get_openai_client()
     
-    # Use the converter to create a summary input for XML processing
-    summary_input = PublicationConverter.to_xml_summary_input(publication)
+    structured_prompt = PublicationConverter.to_ai_prompt_format(
+            publication_schema=publication
+        )
 
+    # Create a prompt for summarization
+    prompt = f"""
+    Create a summary in Dutch of this procurement:
+    
+    {structured_prompt}
+
+    Additional XML information: {xml}
+    
+    Create a concise but complete summary that describes the most important aspects of this procurement.
+    """
     try:
         if filesmap:
             # Filter files with the right extensions
             filtered_filesmap = {
-                file_name: file_data
+                file_name.lower(): file_data
                 for file_name, file_data in filesmap.items()
                 if file_name.lower().endswith(
                     tuple(settings.openai_vector_store_accepted_formats)
@@ -331,11 +342,11 @@ def summarize_publication_with_files(
                         file_objects.append(file_obj)
 
             if file_objects:
-                vector_store = client.beta.vector_stores.create(
+                vector_store = client.vector_stores.create(
                     name=f"publication_workspace_{publication.publication_workspace_id}"
                 )
 
-                file_batch = client.beta.vector_stores.file_batches.upload_and_poll(
+                file_batch = client.vector_stores.file_batches.upload_and_poll(
                     vector_store_id=vector_store.id,
                     files=file_objects,  # Pass the list of file objects
                 )
@@ -369,7 +380,7 @@ def summarize_publication_with_files(
             messages=[
                 {
                     "role": "user",
-                    "content": f"Summarize the publication and attached documents. {summary_input} XML: {xml}",
+                    "content": f"Summarize the publication and attached documents. {prompt} XML: {xml}",
                 }
             ]
         )

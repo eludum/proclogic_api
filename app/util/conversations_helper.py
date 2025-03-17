@@ -399,7 +399,7 @@ async def setup_assistant(
 
                 if filesmap:
                     # Create vector store with a consistent naming convention
-                    vector_store = client.beta.vector_stores.create(
+                    vector_store = client.vector_stores.create(
                         name=f"pub_{publication.publication_workspace_id}"
                     )
                     vector_store_id = vector_store.id
@@ -418,13 +418,13 @@ async def setup_assistant(
                                 file_data.seek(0)
                                 content = file_data.read()
                                 byte_io = BytesIO(content)
-                                byte_io.name = getattr(file_data, "name", filename)
+                                byte_io.name = getattr(file_data, "name", filename.lower())
                                 file_objects.append(byte_io)
                             elif isinstance(file_data, dict) and "content" in file_data:
                                 content = file_data["content"]
                                 if isinstance(content, bytes):
                                     byte_io = BytesIO(content)
-                                    byte_io.name = file_data.get("name", filename)
+                                    byte_io.name = file_data.get("name", filename.lower())
                                     file_objects.append(byte_io)
                         except Exception as e:
                             logging.error(f"Error processing file {filename}: {e}")
@@ -433,7 +433,7 @@ async def setup_assistant(
                     if file_objects:
                         logging.info(f"Uploading {len(file_objects)} files to vector store")
                         
-                        file_batch = client.beta.vector_stores.file_batches.upload_and_poll(
+                        file_batch = client.vector_stores.file_batches.upload_and_poll(
                             vector_store_id=vector_store.id, 
                             files=file_objects
                         )

@@ -1,0 +1,158 @@
+
+   FastAPI   Starting development server 🚀
+ 
+             Searching for package file structure from directories with __init__.py files
+DEBUG    Using path app/main.py                                                                                                                                                                                         
+DEBUG    Resolved absolute path /Users/mehmet/projects/proclogic_api/app/main.py                                                                                                                                        
+/Users/mehmet/projects/proclogic_api/.venv/lib/python3.9/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+DEBUG    Importing from /Users/mehmet/projects/proclogic_api                                                                                                                                                            
+DEBUG    Importing module app.main                                                                                                                                                                                      
+             Importing from /Users/mehmet/projects/proclogic_api
+ 
+    module   📁 app
+             ├── 🐍 __init__.py
+             └── 🐍 main.py
+ 
+      code   Importing the FastAPI app object from the module with the following code:
+ 
+             from app.main import proclogic
+ 
+       app   Using import string: app.main:proclogic
+ 
+    server   Server started at http://127.0.0.1:8000
+    server   Documentation at http://127.0.0.1:8000/docs
+ 
+       tip   Running in development mode, for production use: fastapi run
+ 
+             Logs:
+ 
+      INFO   Will watch for changes in these directories: ['/Users/mehmet/projects/proclogic_api']
+2025-03-17 02:56:14,592 - uvicorn.error - INFO - Will watch for changes in these directories: ['/Users/mehmet/projects/proclogic_api']
+      INFO   Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+2025-03-17 02:56:14,593 - uvicorn.error - INFO - Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+      INFO   Started reloader process [13815] using WatchFiles
+2025-03-17 02:56:14,593 - uvicorn.error - INFO - Started reloader process [13815] using WatchFiles
+/Users/mehmet/projects/proclogic_api/.venv/lib/python3.9/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+      INFO   Started server process [13822]
+2025-03-17 02:56:15,906 - uvicorn.error - INFO - Started server process [13822]
+      INFO   Waiting for application startup.
+2025-03-17 02:56:15,907 - uvicorn.error - INFO - Waiting for application startup.
+      INFO   Application startup complete.
+2025-03-17 02:56:15,909 - uvicorn.error - INFO - Application startup complete.
+      INFO   Shutting down
+2025-03-17 02:56:19,144 - uvicorn.error - INFO - Shutting down
+      INFO   Waiting for application shutdown.
+2025-03-17 02:56:19,246 - uvicorn.error - INFO - Waiting for application shutdown.
+      INFO   Application shutdown complete.
+2025-03-17 02:56:19,248 - uvicorn.error - INFO - Application shutdown complete.
+      INFO   Finished server process [13822]
+2025-03-17 02:56:19,249 - uvicorn.error - INFO - Finished server process [13822]
+      INFO   Stopping reloader process [13815]
+2025-03-17 02:56:19,258 - uvicorn.error - INFO - Stopping reloader process [13815]
+
+
+   FastAPI   Starting development server 🚀
+ 
+             Searching for package file structure from directories with __init__.py files
+DEBUG    Using path app/main.py                                                                                                                                                                                         
+DEBUG    Resolved absolute path /Users/mehmet/projects/proclogic_api/app/main.py                                                                                                                                        
+/Users/mehmet/projects/proclogic_api/.venv/lib/python3.9/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+WARNING:root:Could not download NLTK data. Keyword extraction will be limited.
+DEBUG    Importing from /Users/mehmet/projects/proclogic_api                                                                                                                                                            
+DEBUG    Importing module app.main                                                                                                                                                                                      
+             Importing from /Users/mehmet/projects/proclogic_api
+ 
+    module   📁 app
+             ├── 🐍 __init__.py
+             └── 🐍 main.py
+ 
+      code   Importing the FastAPI app object from the module with the following code:
+ 
+             from app.main import proclogic
+ 
+       app   Using import string: app.main:proclogic
+ 
+    server   Server started at http://127.0.0.1:8000
+    server   Documentation at http://127.0.0.1:8000/docs
+ 
+       tip   Running in development mode, for production use: fastapi run
+ 
+             Logs:
+ 
+      INFO   Will watch for changes in these directories: ['/Users/mehmet/projects/proclogic_api']
+INFO:uvicorn.error:Will watch for changes in these directories: ['/Users/mehmet/projects/proclogic_api']
+      INFO   Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:uvicorn.error:Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+      INFO   Started reloader process [13990] using WatchFiles
+INFO:uvicorn.error:Started reloader process [13990] using WatchFiles
+/Users/mehmet/projects/proclogic_api/.venv/lib/python3.9/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+      INFO   Started server process [13992]
+2025-03-17 02:57:08,401 - uvicorn.error - INFO - Started server process [13992]
+      INFO   Waiting for application startup.
+2025-03-17 02:57:08,402 - uvicorn.error - INFO - Waiting for application startup.
+      INFO   Application startup complete.
+2025-03-17 02:57:08,403 - uvicorn.error - INFO - Application startup complete.
+     ERROR   Traceback (most recent call last):
+               File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/runners.py", line 44, in run
+                 return loop.run_until_complete(main)
+               File "uvloop/loop.pyx", line 1512, in uvloop.loop.Loop.run_until_complete
+               File "uvloop/loop.pyx", line 1505, in uvloop.loop.Loop.run_until_complete
+               File "uvloop/loop.pyx", line 1379, in uvloop.loop.Loop.run_forever
+               File "uvloop/loop.pyx", line 557, in uvloop.loop.Loop._run
+               File "uvloop/loop.pyx", line 476, in uvloop.loop.Loop._on_idle
+               File "uvloop/cbhandles.pyx", line 83, in uvloop.loop.Handle._run
+               File "uvloop/cbhandles.pyx", line 63, in uvloop.loop.Handle._run
+               File "/Users/mehmet/projects/proclogic_api/.venv/lib/python3.9/site-packages/uvicorn/server.py", line 70, in serve
+                 await self._serve(sockets)
+               File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/contextlib.py", line 124, in __exit__
+                 next(self.gen)
+               File "/Users/mehmet/projects/proclogic_api/.venv/lib/python3.9/site-packages/uvicorn/server.py", line 330, in capture_signals
+                 signal.raise_signal(captured_signal)
+             KeyboardInterrupt
+             
+             During handling of the above exception, another exception occurred:
+             
+             Traceback (most recent call last):
+               File "/Users/mehmet/projects/proclogic_api/.venv/lib/python3.9/site-packages/starlette/routing.py", line 700, in lifespan
+                 await receive()
+               File "/Users/mehmet/projects/proclogic_api/.venv/lib/python3.9/site-packages/uvicorn/lifespan/on.py", line 137, in receive
+                 return await self.receive_queue.get()
+               File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/queues.py", line 166, in get
+                 await getter
+             asyncio.exceptions.CancelledError
+2025-03-17 02:57:08,421 - uvicorn.error - ERROR - Traceback (most recent call last):
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "uvloop/loop.pyx", line 1512, in uvloop.loop.Loop.run_until_complete
+  File "uvloop/loop.pyx", line 1505, in uvloop.loop.Loop.run_until_complete
+  File "uvloop/loop.pyx", line 1379, in uvloop.loop.Loop.run_forever
+  File "uvloop/loop.pyx", line 557, in uvloop.loop.Loop._run
+  File "uvloop/loop.pyx", line 476, in uvloop.loop.Loop._on_idle
+  File "uvloop/cbhandles.pyx", line 83, in uvloop.loop.Handle._run
+  File "uvloop/cbhandles.pyx", line 63, in uvloop.loop.Handle._run
+  File "/Users/mehmet/projects/proclogic_api/.venv/lib/python3.9/site-packages/uvicorn/server.py", line 70, in serve
+    await self._serve(sockets)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/contextlib.py", line 124, in __exit__
+    next(self.gen)
+  File "/Users/mehmet/projects/proclogic_api/.venv/lib/python3.9/site-packages/uvicorn/server.py", line 330, in capture_signals
+    signal.raise_signal(captured_signal)
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/mehmet/projects/proclogic_api/.venv/lib/python3.9/site-packages/starlette/routing.py", line 700, in lifespan
+    await receive()
+  File "/Users/mehmet/projects/proclogic_api/.venv/lib/python3.9/site-packages/uvicorn/lifespan/on.py", line 137, in receive
+    return await self.receive_queue.get()
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/queues.py", line 166, in get
+    await getter
+asyncio.exceptions.CancelledError
+
+      INFO   Stopping reloader process [13990]
+INFO:uvicorn.error:Stopping reloader process [13990]
+
