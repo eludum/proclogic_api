@@ -88,7 +88,7 @@ async def create_company(
         if existing_company:
             raise HTTPException(status_code=400, detail="User already has a company")
 
-        created_company = crud_company.create_company(company=company, session=session)
+        created_company = crud_company.create_company(company_schema=company, session=session)
         if not created_company:
             raise HTTPException(status_code=500, detail="Failed to create company")
 
@@ -122,7 +122,7 @@ async def update_current_company(
         if auth_user.email not in company.emails:
             company.emails.append(auth_user.email)
 
-        updated_company = crud_company.update_company(company=company, session=session)
+        updated_company = crud_company.update_company(company_schema=company, session=session)
         if not updated_company:
             raise HTTPException(status_code=500, detail="Failed to update company")
 
@@ -146,6 +146,7 @@ async def delete_current_company(
         if not existing_company:
             raise HTTPException(status_code=404, detail="Company not found")
 
+        # TODO: implement
         success = crud_company.delete_company(
             vat_number=existing_company.vat_number, session=session
         )
