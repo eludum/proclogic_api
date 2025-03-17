@@ -28,18 +28,18 @@ def create_company(
             )
             return existing_company
 
-        # Create the new company
+        # Create the new company, setting defaults for any missing fields
         new_company = Company(
             vat_number=company_schema.vat_number,
             subscription=company_schema.subscription,
-            number_of_employees=company_schema.number_of_employees,
+            number_of_employees=company_schema.number_of_employees or 1,
             name=company_schema.name,
             emails=company_schema.emails,
             summary_activities=company_schema.summary_activities,
             accreditations=company_schema.accreditations,
             max_publication_value=company_schema.max_publication_value,
-            activity_keywords=PublicationConverter.extract_keywords(company_schema.activity_keywords),
-            operating_regions=company_schema.operating_regions,
+            activity_keywords=company_schema.activity_keywords or PublicationConverter.extract_keywords(company_schema.summary_activities),
+            operating_regions=company_schema.operating_regions or [],
         )
 
         # Create sectors
@@ -66,43 +66,6 @@ def create_company(
         session.close()
 
 
-def get_company_by_vat_number(vat_number: str, session: Session) -> Optional[Company]:
-    """Retrieve a company by its VAT number."""
-    try:
-        return (
-            session.query(Company)
-            .options(
-                joinedload(Company.interested_sectors),
-                joinedload(Company.publication_matches),
-            )
-            .filter(Company.vat_number == vat_number)
-            .first()
-        )
-    except Exception as e:
-        logging.error("Error getting company: %s", e)
-        return None
-    finally:
-        session.close()
-
-
-def get_all_companies(session: Session) -> List[Company]:
-    """Retrieve all companies."""
-    try:
-        return (
-            session.query(Company)
-            .options(
-                joinedload(Company.interested_sectors),
-                joinedload(Company.publication_matches),
-            )
-            .all()
-        )
-    except Exception as e:
-        logging.error("Error getting all companies: %s", e)
-        return []
-    finally:
-        session.close()
-
-
 def update_company(
     company_schema: CompanySchema,
     session: Session,
@@ -123,24 +86,33 @@ def update_company(
             return None
 
         # Update basic fields
-        company.name = company_schema.name
-        company.subscription = company_schema.subscription
-        company.emails = company_schema.emails
-        company.number_of_employees = company_schema.number_of_employees
-        company.summary_activities = company_schema.summary_activities
-        company.accreditations = company_schema.accreditations
+        if company_schema.name:
+            company.name = company_schema.name
+        if company_schema.subscription:
+            company.subscription = company_schema.subscription
+        if company_schema.emails:
+            company.emails = company_schema.emails
+        if company_schema.number_of_employees:
+            company.number_of_employees = company_schema.number_of_employees
+        if company_schema.summary_activities:
+            company.summary_activities = company_schema.summary_activities
+        if company_schema.accreditations is not None:
+            company.accreditations = company_schema.accreditations
 
         # Update new fields if present in schema
-        if company_schema.max_publication_value:
+        if company_schema.max_publication_value is not None:
             company.max_publication_value = company_schema.max_publication_value
         if company_schema.activity_keywords:
+            company.activity_keywords = company_schema.activity_keywords
+        elif company_schema.summary_activities:
+            # Auto-extract keywords from updated activities
             company.activity_keywords = PublicationConverter.extract_keywords(
-                company_schema.activity_keywords)
-        if company_schema.operating_regions:
+                company_schema.summary_activities)
+        if company_schema.operating_regions is not None:
             company.operating_regions = company_schema.operating_regions
 
-        # Update sectors - first remove existing ones
-        if company_schema.interested_sectors:
+        # Update sectors only if provided
+        if company_schema.interested_sectors is not None:
             # Delete existing sectors
             session.query(Sector).filter(
                 Sector.company_vat_number == company.vat_number
@@ -166,36 +138,22 @@ def update_company(
         session.close()
 
 
-def delete_company(vat_number: str, session: Session) -> bool:
-    """Delete a company by its VAT number."""
+# Ensures the route /company/ accepts PATCH correctly to support partial updates
+def get_company_by_vat_number(vat_number: str, session: Session) -> Optional[Company]:
+    """Retrieve a company by its VAT number."""
     try:
-        # First delete all company-publication matches
-        session.query(CompanyPublicationMatch).filter(
-            CompanyPublicationMatch.company_vat_number == vat_number
-        ).delete(synchronize_session=False)
-
-        # Then delete the sectors
-        session.query(Sector).filter(Sector.company_vat_number == vat_number).delete(
-            synchronize_session=False
-        )
-
-        # Finally delete the company
-        company = (
-            session.query(Company).filter(Company.vat_number == vat_number).first()
-        )
-        if not company:
-            logging.error(
-                "Company with VAT number %s not found. Deletion failed.", vat_number
+        return (
+            session.query(Company)
+            .options(
+                joinedload(Company.interested_sectors),
+                joinedload(Company.publication_matches),
             )
-            return False
-
-        session.delete(company)
-        session.commit()
-        return True
+            .filter(Company.vat_number == vat_number)
+            .first()
+        )
     except Exception as e:
-        logging.error("Error deleting company: %s", e)
-        session.rollback()
-        return False
+        logging.error("Error getting company: %s", e)
+        return None
     finally:
         session.close()
 

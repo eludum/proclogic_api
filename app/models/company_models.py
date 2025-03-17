@@ -27,8 +27,8 @@ class Company(Base):
     emails: Mapped[List[str]] = mapped_column(ARRAY(String), index=True)
 
     # Company profile data
-    subscription: Mapped[str] = mapped_column(String)
-    number_of_employees: Mapped[int] = mapped_column(Integer)
+    subscription: Mapped[str] = mapped_column(String) 
+    number_of_employees: Mapped[int] = mapped_column(Integer, default=1) # Default to 1 employee
     summary_activities: Mapped[str] = mapped_column(String)
     accreditations: Mapped[Optional[dict]] = mapped_column(PickleType, nullable=True)
     max_publication_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -67,7 +67,6 @@ class Company(Base):
         return [
             match.publication for match in self.publication_matches if match.is_saved
         ]
-
 
 from app.models.conversation_models import Conversation
 from app.models.notification_models import Notification
