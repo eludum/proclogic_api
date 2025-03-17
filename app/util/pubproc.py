@@ -85,39 +85,21 @@ async def process_publication(
     )
 
     if existing_publication and pub.vault_submission_deadline is not None:
-        # Get documents
-        filesmap = await get_publication_workspace_documents(
-            client=client, publication_workspace_id=pub.publication_workspace_id
-        )
 
-        # TODO: add forum data to ai
-        # Get forum info
-        # forum = await get_publication_workspace_forum(
-        #     client=client, publication_workspace_id=pub.publication_workspace_id
-        # )
         await update_existing_publication(
-            client=client, pub=pub, filesmap=filesmap, session=session
+            client=client, pub=pub, session=session
         )
     elif not existing_publication and pub.vault_submission_deadline is not None:
-        # Get documents
-        filesmap = await get_publication_workspace_documents(
-            client=client, publication_workspace_id=pub.publication_workspace_id
-        )
 
-        # TODO: add forum data to ai
-        # Get forum info
-        # forum = await get_publication_workspace_forum(
-        #     client=client, publication_workspace_id=pub.publication_workspace_id
-        # )
         await create_new_publication(
-            client=client, pub=pub, filesmap=filesmap, session=session
+            client=client, pub=pub, session=session
         )
     elif not existing_publication and pub.vault_submission_deadline is None:
         await process_award_publication(client=client, pub=pub, session=session)
 
 
 async def update_existing_publication(
-    client: httpx.AsyncClient, pub: PublicationSchema, filesmap: dict, session: Session
+    client: httpx.AsyncClient, pub: PublicationSchema, session: Session
 ) -> None:
     """
     Update an existing publication with new information if necessary.
@@ -134,6 +116,17 @@ async def update_existing_publication(
             publication_workspace_id=pub.publication_workspace_id,
         )
 
+        # Get documents
+        filesmap = await get_publication_workspace_documents(
+            client=client, publication_workspace_id=pub.publication_workspace_id
+        )
+
+        # TODO: add forum data to ai
+        # Get forum info
+        # forum = await get_publication_workspace_forum(
+        #     client=client, publication_workspace_id=pub.publication_workspace_id
+        # )
+
         await enrich_publication_with_ai(
             pub=pub, xml_content=xml_content, filesmap=filesmap
         )
@@ -148,7 +141,7 @@ async def update_existing_publication(
 
 
 async def create_new_publication(
-    client: httpx.AsyncClient, pub: PublicationSchema, filesmap: dict, session: Session
+    client: httpx.AsyncClient, pub: PublicationSchema, session: Session
 ) -> None:
     """
     Create a new publication and generate recommendations for companies.
@@ -156,6 +149,17 @@ async def create_new_publication(
     xml_content = await get_notice_xml(
         client=client, publication_workspace_id=pub.publication_workspace_id
     )
+
+        # Get documents
+    filesmap = await get_publication_workspace_documents(
+        client=client, publication_workspace_id=pub.publication_workspace_id
+    )
+
+    # TODO: add forum data to ai
+    # Get forum info
+    # forum = await get_publication_workspace_forum(
+    #     client=client, publication_workspace_id=pub.publication_workspace_id
+    # )
 
     # Add AI-generated content
     await enrich_publication_with_ai(

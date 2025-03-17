@@ -317,29 +317,60 @@ def summarize_publication_with_files(
     """
     try:
         if filesmap:
-            # Filter files with the right extensions
-            filtered_filesmap = {
-                file_name.lower(): file_data
-                for file_name, file_data in filesmap.items()
-                if file_name.lower().endswith(
-                    tuple(settings.openai_vector_store_accepted_formats)
-                )
-            }
+            # Filter files with the right extensions - ensure consistent lowercase for extension comparison
+            filtered_filesmap = {}
+            for file_name, file_data in filesmap.items():
+                # Get extension in lowercase for comparison
+                if "." in file_name:
+                    extension = file_name.split(".")[-1].lower()
+                    if extension in [ext.lstrip(".") for ext in settings.openai_vector_store_accepted_formats]:
+                        filtered_filesmap[file_name] = file_data
 
             # Make sure we're passing file objects, not dictionaries
             file_objects = []
             for file_name, file_data in filtered_filesmap.items():
-                # If it's already an IO object, use it directly
-                if hasattr(file_data, "read") and hasattr(file_data, "seek"):
-                    file_data.seek(0)  # Reset file position
-                    file_objects.append(file_data)
-                # If it's a dictionary with 'content', create a new BytesIO object
-                elif isinstance(file_data, dict) and "content" in file_data:
-                    content = file_data["content"]
-                    if isinstance(content, bytes):
-                        file_obj = BytesIO(content)
-                        file_obj.name = file_data.get("name", file_name)
-                        file_objects.append(file_obj)
+                try:
+                    # If it's already an IO object, use it directly
+                    if hasattr(file_data, "read") and hasattr(file_data, "seek"):
+                        file_data.seek(0)  # Reset file position
+                        # Ensure the file object has a name attribute with lowercase extension
+                        if hasattr(file_data, "name"):
+                            original_name = file_data.name
+                            if "." in original_name:
+                                name_parts = original_name.rsplit(".", 1)
+                                file_data.name = f"{name_parts[0]}.{name_parts[1].lower()}"
+                        else:
+                            # If no name, use the filename with lowercase extension
+                            if "." in file_name:
+                                name_parts = file_name.rsplit(".", 1)
+                                file_data.name = f"{name_parts[0]}.{name_parts[1].lower()}"
+                            else:
+                                file_data.name = file_name
+                        file_objects.append(file_data)
+                    # If it's a dictionary with 'content', create a new BytesIO object
+                    elif isinstance(file_data, dict) and "content" in file_data:
+                        content = file_data["content"]
+                        if isinstance(content, bytes):
+                            file_obj = BytesIO(content)
+                            # Set name with lowercase extension
+                            if "name" in file_data:
+                                original_name = file_data["name"]
+                                if "." in original_name:
+                                    name_parts = original_name.rsplit(".", 1)
+                                    file_obj.name = f"{name_parts[0]}.{name_parts[1].lower()}"
+                                else:
+                                    file_obj.name = original_name
+                            else:
+                                # Use filename with lowercase extension
+                                if "." in file_name:
+                                    name_parts = file_name.rsplit(".", 1)
+                                    file_obj.name = f"{name_parts[0]}.{name_parts[1].lower()}"
+                                else:
+                                    file_obj.name = file_name
+                            file_objects.append(file_obj)
+                except Exception as file_error:
+                    logging.error(f"Error processing file {file_name}: {file_error}")
+                    continue
 
             if file_objects:
                 vector_store = client.vector_stores.create(

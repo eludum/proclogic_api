@@ -319,7 +319,6 @@ async def stream_ai_response(
         yield "Sorry, ik kon geen antwoord genereren. Probeer het later nog eens.", []
 
 
-
 async def setup_assistant(
     client: OpenAI,
     company: Company,
@@ -407,9 +406,14 @@ async def setup_assistant(
                     # Filter and prepare files for upload (only accepted formats)
                     file_objects = []
                     for filename, file_data in filesmap.items():
-                        if not filename.lower().endswith(
-                            tuple(settings.openai_vector_store_accepted_formats)
-                        ):
+                        # Extract the extension in lowercase for comparison
+                        file_extension = ""
+                        if "." in filename:
+                            file_extension = filename.split(".")[-1].lower()
+                        
+                        # Check if this extension is in the accepted formats list (normalize both for comparison)
+                        accepted_formats = [fmt.lstrip(".").lower() for fmt in settings.openai_vector_store_accepted_formats]
+                        if file_extension not in accepted_formats:
                             continue
 
                         try:
@@ -418,13 +422,45 @@ async def setup_assistant(
                                 file_data.seek(0)
                                 content = file_data.read()
                                 byte_io = BytesIO(content)
-                                byte_io.name = getattr(file_data, "name", filename.lower())
+                                
+                                # Ensure lowercase extension in name
+                                if hasattr(file_data, "name") and file_data.name:
+                                    original_name = file_data.name
+                                    if "." in original_name:
+                                        name_parts = original_name.rsplit(".", 1)
+                                        byte_io.name = f"{name_parts[0]}.{name_parts[1].lower()}"
+                                    else:
+                                        byte_io.name = original_name
+                                else:
+                                    # Use the filename with lowercase extension
+                                    if "." in filename:
+                                        name_parts = filename.rsplit(".", 1)
+                                        byte_io.name = f"{name_parts[0]}.{name_parts[1].lower()}"
+                                    else:
+                                        byte_io.name = filename
+                                
                                 file_objects.append(byte_io)
                             elif isinstance(file_data, dict) and "content" in file_data:
                                 content = file_data["content"]
                                 if isinstance(content, bytes):
                                     byte_io = BytesIO(content)
-                                    byte_io.name = file_data.get("name", filename.lower())
+                                    
+                                    # Ensure lowercase extension in name
+                                    if "name" in file_data and file_data["name"]:
+                                        original_name = file_data["name"]
+                                        if "." in original_name:
+                                            name_parts = original_name.rsplit(".", 1)
+                                            byte_io.name = f"{name_parts[0]}.{name_parts[1].lower()}"
+                                        else:
+                                            byte_io.name = original_name
+                                    else:
+                                        # Use the filename with lowercase extension
+                                        if "." in filename:
+                                            name_parts = filename.rsplit(".", 1)
+                                            byte_io.name = f"{name_parts[0]}.{name_parts[1].lower()}"
+                                        else:
+                                            byte_io.name = filename
+                                    
                                     file_objects.append(byte_io)
                         except Exception as e:
                             logging.error(f"Error processing file {filename}: {e}")
