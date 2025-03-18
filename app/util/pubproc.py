@@ -122,6 +122,8 @@ async def update_existing_publication(
             client=client, publication_workspace_id=pub.publication_workspace_id
         )
 
+        # TODO: put update in timeline on the frontend
+
         # TODO: add forum data to ai
         # Get forum info
         # forum = await get_publication_workspace_forum(

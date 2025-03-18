@@ -34,6 +34,7 @@ def create_kanban_status(
         
         session.add(status)
         session.commit()
+        session.refresh(status)
         return status
     except Exception as e:
         logging.error(f"Error creating Kanban status: {e}")
@@ -79,6 +80,8 @@ def update_kanban_status(
                 setattr(status, key, value)
 
         session.commit()
+        session.refresh(status)
+
         return status
     except Exception as e:
         logging.error(f"Error updating Kanban status: {e}")
@@ -119,6 +122,7 @@ def delete_kanban_status(status_id: int, company_vat_number: str, session: Sessi
         # Now delete the status
         session.delete(status)
         session.commit()
+        session.refresh(status)
         return True
     except Exception as e:
         logging.error(f"Error deleting Kanban status: {e}")
@@ -174,6 +178,8 @@ def set_publication_status(
             session.add(pub_status)
         
         session.commit()
+        session.refresh(status)
+
         return pub_status
     except Exception as e:
         logging.error(f"Error setting publication status: {e}")
@@ -217,6 +223,7 @@ def update_publication_status(
                 setattr(pub_status, key, value)
         
         session.commit()
+        session.refresh(pub_status)
         return pub_status
     except Exception as e:
         logging.error(f"Error updating publication status: {e}")
@@ -241,6 +248,7 @@ def remove_publication_status(
         
         session.delete(pub_status)
         session.commit()
+        session.refresh(pub_status)
         return True
     except Exception as e:
         logging.error(f"Error removing publication status: {e}")
@@ -276,12 +284,14 @@ def move_publication(
         pub_status.position = new_position
         
         session.commit()
+        
+        session.refresh(pub_status)
+        
         return pub_status
     except Exception as e:
         logging.error(f"Error moving publication: {e}")
         session.rollback()
         return None
-
 
 def get_kanban_board(company_vat_number: str, session: Session) -> Tuple[List[dict], List[dict]]:
     """
@@ -356,12 +366,9 @@ def initialize_default_kanban_statuses(company_vat_number: str, session: Session
         
         # Create default statuses
         default_statuses = [
-            {"name": "Te bekijken", "color": "#3883a4", "position": 0, "is_default": True},
-            {"name": "Geïnteresseerd", "color": "#52b7c2", "position": 1, "is_default": False},
-            {"name": "In voorbereiding", "color": "#b7bf10", "position": 2, "is_default": False},
-            {"name": "Aangeboden", "color": "#ff9900", "position": 3, "is_default": False},
-            {"name": "Gewonnen", "color": "#00cc66", "position": 4, "is_default": False},
-            {"name": "Verloren", "color": "#ff6666", "position": 5, "is_default": False},
+            {"name": "Opgeslagen", "color": "#3883a4", "position": 0, "is_default": True},
+            {"name": "In voorbereiding", "color": "#52b7c2", "position": 1, "is_default": False},
+            {"name": "Ingediend", "color": "#b7bf10", "position": 2, "is_default": False},
         ]
         
         for status_data in default_statuses:
@@ -375,6 +382,7 @@ def initialize_default_kanban_statuses(company_vat_number: str, session: Session
             session.add(status)
         
         session.commit()
+        session.refresh(status)
         return True
     except Exception as e:
         logging.error(f"Error initializing default Kanban statuses: {e}")
