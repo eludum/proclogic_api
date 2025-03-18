@@ -247,23 +247,26 @@ async def scrape_company_website(
                         
                         Extract the following information:
                         - Company name
-                        - Summary of activities
+                        - Summary of activities (Generate a concise and comprehensive summary of the company's activities based on the scraped website data. Ensure the summary accurately reflects all aspects of what the company does, without adding unrelated information. This summary will be used to generate relevant public tender recommendations, so it must be precise and directly aligned with the company's actual services and expertise.)
                         - Main sectors/industries they operate in (try to match with these categories: Landbouw en Voedselindustrie, Energie en Grondstoffen, Industrie en Productie, Technologie en IT, Bouw en Infrastructuur, Gezondheid en Onderwijs, Diensten en Overheid, Transport en Logistiek)
                         - Approximate number of employees (if mentioned)
-                        - Operating regions/locations in Belgium
+                        - Operating regions/locations in Belgium (use provinces instead of city names)
                         - Keywords related to their activities
                         
                         Return the information in JSON format with the following structure:
                         {
                             "company_name": string,
+                            "vat_number": string,
                             "summary_activities": string,
-                            "sectors": [{"sector": string, "confidence": float}],
+                            "sectors": [{"sector": string,, "cpv_codes": [string], "confidence": float}],
                             "employee_count": int or null,
                             "operating_regions": [string],
                             "activity_keywords": [string]
                         }
                         
                         If you cannot determine a field, use null for that field. For confidence scores, use a scale from 0.0 to 1.0.
+
+                        Your response should be in Dutch.
                         """,
                     },
                     {
@@ -271,6 +274,7 @@ async def scrape_company_website(
                         "content": f"Here is the text content extracted from {website_url} and related pages:\n\n{combined_content}\n\nExtract the company information.",
                     },
                 ],
+                temperature=0.3,
             )
 
             # Return the raw JSON string

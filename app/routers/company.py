@@ -2,7 +2,7 @@ import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, HttpUrl
+from pydantic import AnyHttpUrl, BaseModel
 from starlette.responses import JSONResponse
 
 import app.crud.company as crud_company
@@ -17,7 +17,7 @@ companies_router = APIRouter()
 
 
 class WebsiteScrapingRequest(BaseModel):
-    website_url: HttpUrl
+    website_url: AnyHttpUrl
 
 
 @companies_router.get("/company/", response_model=CompanySchema)
@@ -206,6 +206,7 @@ async def scrape_company_website_endpoint(
 
         # Construct response with fields suitable for onboarding
         response = {
+            "vat_number": scraped_data.get("vat_number"),
             "name": scraped_data.get("company_name"),
             "summary_activities": scraped_data.get("summary_activities"),
             "interested_sectors": processed_sectors,
