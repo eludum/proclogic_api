@@ -4,7 +4,13 @@ from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.company_models import Company, Sector
-from app.models.publication_models import CompanyPublicationMatch, Dossier, Lot, Organisation, Publication
+from app.models.publication_models import (
+    CompanyPublicationMatch,
+    Dossier,
+    Lot,
+    Organisation,
+    Publication,
+)
 from app.schemas.company_schemas import CompanySchema
 from app.util.publication_utils.publication_converter import PublicationConverter
 
@@ -38,7 +44,8 @@ def create_company(
             summary_activities=company_schema.summary_activities,
             accreditations=company_schema.accreditations,
             max_publication_value=company_schema.max_publication_value,
-            activity_keywords=company_schema.activity_keywords or PublicationConverter.extract_keywords(company_schema.summary_activities),
+            activity_keywords=company_schema.activity_keywords
+            or PublicationConverter.extract_keywords(company_schema.summary_activities),
             operating_regions=company_schema.operating_regions or [],
         )
 
@@ -107,7 +114,8 @@ def update_company(
         elif company_schema.summary_activities:
             # Auto-extract keywords from updated activities
             company.activity_keywords = PublicationConverter.extract_keywords(
-                company_schema.summary_activities)
+                company_schema.summary_activities
+            )
         if company_schema.operating_regions is not None:
             company.operating_regions = company_schema.operating_regions
 
@@ -188,11 +196,13 @@ def get_company_recommended_publications(company_vat_number: str, session: Sessi
             )
             .all()
         )
-        publication_ids = [id[0] for id in publication_ids]  # Extract IDs from result tuples
-        
+        publication_ids = [
+            id[0] for id in publication_ids
+        ]  # Extract IDs from result tuples
+
         if not publication_ids:
             return []
-        
+
         # Query publications with all needed relationships eagerly loaded
         publications = (
             session.query(Publication)
@@ -200,7 +210,9 @@ def get_company_recommended_publications(company_vat_number: str, session: Sessi
             .options(
                 joinedload(Publication.dossier).joinedload(Dossier.titles),
                 joinedload(Publication.dossier).joinedload(Dossier.descriptions),
-                joinedload(Publication.organisation).joinedload(Organisation.organisation_names),
+                joinedload(Publication.organisation).joinedload(
+                    Organisation.organisation_names
+                ),
                 joinedload(Publication.cpv_main_code),
                 joinedload(Publication.cpv_additional_codes),
                 joinedload(Publication.company_matches),
@@ -209,8 +221,8 @@ def get_company_recommended_publications(company_vat_number: str, session: Sessi
             )
             .all()
         )
-        
-        return publications    
+
+        return publications
     except Exception as e:
         logging.error("Error getting recommended publications: %s", e)
         return []
@@ -230,12 +242,14 @@ def get_company_saved_publications(company_vat_number: str, session: Session):
             )
             .all()
         )
-        
-        publication_ids = [id[0] for id in publication_ids]  # Extract IDs from result tuples
-        
+
+        publication_ids = [
+            id[0] for id in publication_ids
+        ]  # Extract IDs from result tuples
+
         if not publication_ids:
             return []
-        
+
         # Query publications with all needed relationships eagerly loaded
         publications = (
             session.query(Publication)
@@ -243,7 +257,9 @@ def get_company_saved_publications(company_vat_number: str, session: Session):
             .options(
                 joinedload(Publication.dossier).joinedload(Dossier.titles),
                 joinedload(Publication.dossier).joinedload(Dossier.descriptions),
-                joinedload(Publication.organisation).joinedload(Organisation.organisation_names),
+                joinedload(Publication.organisation).joinedload(
+                    Organisation.organisation_names
+                ),
                 joinedload(Publication.cpv_main_code),
                 joinedload(Publication.cpv_additional_codes),
                 joinedload(Publication.company_matches),
@@ -252,7 +268,7 @@ def get_company_saved_publications(company_vat_number: str, session: Session):
             )
             .all()
         )
-        
+
         return publications
     except Exception as e:
         logging.error("Error getting saved publications: %s", e)
@@ -363,5 +379,23 @@ def mark_publication_as_viewed(
         logging.error("Error marking publication as viewed: %s", e)
         session.rollback()
         return False
+    finally:
+        session.close()
+
+
+def get_all_companies(session: Session) -> List[Company]:
+    """Retrieve all companies."""
+    try:
+        return (
+            session.query(Company)
+            .options(
+                joinedload(Company.interested_sectors),
+                joinedload(Company.publication_matches),
+            )
+            .all()
+        )
+    except Exception as e:
+        logging.error("Error getting all companies: %s", e)
+        return []
     finally:
         session.close()

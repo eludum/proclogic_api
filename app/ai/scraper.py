@@ -1,3 +1,4 @@
+import json
 import logging
 import asyncio
 import httpx
@@ -179,6 +180,7 @@ async def scrape_company_website(
         # Create an HTTP client for scraping with retry mechanism
         transport = httpx.AsyncHTTPTransport(retries=2)
         async with httpx.AsyncClient(timeout=15.0, transport=transport, follow_redirects=True) as http_client:
+            # Existing code for fetching the website...
             try:
                 # Fetch the main page
                 response = await http_client.get(website_url)
@@ -234,6 +236,9 @@ async def scrape_company_website(
             if len(combined_content) > max_chars:
                 combined_content = combined_content[:max_chars] + "...[content truncated]"
 
+            # Create a list of available sectors to provide to OpenAI
+            available_sectors = [{"cpv": code, "name": name} for code, name in nl_sectors.items()]
+
             # Use OpenAI to analyze the website content with multilingual support
             completion = client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -241,31 +246,44 @@ async def scrape_company_website(
                 messages=[
                     {
                         "role": "system",
-                        "content": """You are a specialized company information extractor for Belgian companies. 
+                        "content": f"""You are a specialized company information extractor for Belgian companies. 
                         Analyze the provided text content extracted from a company website to extract the following information.
                         The text may be in Dutch, French, or English - analyze the content in whichever language it's presented.
                         
                         Extract the following information:
                         - Company name
                         - Summary of activities (Generate a concise and comprehensive summary of the company's activities based on the scraped website data. Ensure the summary accurately reflects all aspects of what the company does, without adding unrelated information. This summary will be used to generate relevant public tender recommendations, so it must be precise and directly aligned with the company's actual services and expertise.)
-                        - Main sectors/industries they operate in (try to match with these categories: Landbouw en Voedselindustrie, Energie en Grondstoffen, Industrie en Productie, Technologie en IT, Bouw en Infrastructuur, Gezondheid en Onderwijs, Diensten en Overheid, Transport en Logistiek)
+                        - Main sectors/industries they operate in
                         - Approximate number of employees (if mentioned)
                         - Operating regions/locations in Belgium (use provinces instead of city names)
                         - Keywords related to their activities
                         
+                        For sectors, you MUST choose ONLY from this standardized list of valid CPV sectors:
+                        {json.dumps(available_sectors, indent=2)}
+                        
                         Return the information in JSON format with the following structure:
-                        {
+                        {{
                             "company_name": string,
                             "vat_number": string,
                             "summary_activities": string,
-                            "sectors": [{"sector": string,, "cpv_codes": [string], "confidence": float}],
+                            "sectors": [
+                                {{
+                                    "sector": string,
+                                    "cpv_codes": [string],
+                                    "confidence": float
+                                }}
+                            ],
                             "employee_count": int or null,
                             "operating_regions": [string],
                             "activity_keywords": [string]
-                        }
+                        }}
                         
-                        If you cannot determine a field, use null for that field. For confidence scores, use a scale from 0.0 to 1.0.
-
+                        When selecting sectors, each entry in the sectors array must have:
+                        - "sector" exactly matching a name from the provided standardized list
+                        - "cpv_codes" containing an array with the corresponding CPV code (e.g., ["03000000"])
+                        - "confidence" with a value from 0.0 to 1.0
+                        
+                        If you cannot determine a field, use null for that field.
                         Your response should be in Dutch.
                         """,
                     },

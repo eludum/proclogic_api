@@ -1,6 +1,7 @@
-from typing import List
+from typing import List, Optional, Tuple, Dict
 
 from app.models.company_models import Sector
+from app.schemas.company_schemas import SectorSchema
 
 
 en_sectors = {
@@ -148,7 +149,8 @@ fr_sectors = {
 }
 
 
-def get_cpv_sector_and_description(input_cpv: str, language: str) -> tuple[bool, str, str]:
+def get_cpv_sector_and_description(input_cpv: str, language: str) -> str:
+    """Get sector description based on CPV code and language."""
     # Extract the main part of the CPV code before the hyphen
     sectors = {
         "en": en_sectors,
@@ -157,7 +159,7 @@ def get_cpv_sector_and_description(input_cpv: str, language: str) -> tuple[bool,
     }
     cpv_main = input_cpv.split("-")[0]  # e.g., "45232440-8" -> "45232440"
 
-    # Extract first three and first two digits
+    # Extract first two digits and form the sector code
     first_two = cpv_main[:2] + "000000"
 
     if first_two in sectors[language].keys():
@@ -167,6 +169,7 @@ def get_cpv_sector_and_description(input_cpv: str, language: str) -> tuple[bool,
 
 
 def check_if_publication_is_in_your_sector(interested_sectors: List[Sector], cpv_main_code: str) -> bool:
+    """Check if a publication's CPV code matches any of the company's interested sectors."""
     for sector in interested_sectors:
         if sector.sector == get_cpv_sector_and_description(cpv_main_code, "nl"):
             return True

@@ -1,3 +1,4 @@
+import logging
 import httpx
 
 from app.config.settings import Settings
@@ -54,11 +55,24 @@ async def convert_publication_to_out_schema_details_paid(
     serializable_documents = {}
     if documents:
         for filename, file_data in documents.items():
-            serializable_documents[filename] = {
-                "filename": filename,
-                # "content": file_data,
-            }
+            try:
+                # Create a metadata object without the actual binary content
+                serializable_documents[filename] = {
+                    "filename": filename,
+                    "size": len(file_data.read()) if hasattr(file_data, "read") else len(file_data.get("content", b"")),
+                    "content_type": getattr(file_data, "content_type", "application/octet-stream"),
+                    # Don't include the actual content in the response
+                }
+                
+                # Reset file position if it's a file-like object
+                if hasattr(file_data, "seek"):
+                    file_data.seek(0)
+            except Exception as e:
+                logging.error(f"Error processing document {filename}: {e}")
+                continue
 
+    print(forum)
+            
     # Use the converter with all available data
     return PublicationConverter.to_output_schema(
         publication=publication,

@@ -255,6 +255,7 @@ class Publication(Base):
     cpv_additional_codes: Mapped[List["CPVCode"]] = relationship(
         secondary=publication_cpv_additional_codes
     )
+    # TODO: show lots in frontend
     lots: Mapped[List["Lot"]] = relationship(secondary=publication_lots)
 
     # Match relationships

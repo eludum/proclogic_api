@@ -246,6 +246,7 @@ async def generate_company_recommendations(
                 match_schemas.append(match_schema)
 
                 # Send notification about the recommendation
+                # TODO: asyncio.create_task(
                 await send_recommendation_notification(
                     company_vat_number=company.vat_number,
                     publication_id=pub.publication_workspace_id,
@@ -405,6 +406,8 @@ async def get_publication_workspace_forum(
         "Authorization": f"Bearer {token}",
         "BelGov-Trace-Id": generate_uuid(),
     }
+
+    # TODO: display in frontend
 
     r = await client.get(
         settings.pubproc_server

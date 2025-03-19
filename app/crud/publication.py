@@ -17,7 +17,6 @@ from app.models.publication_models import (
 )
 from app.schemas.publication_schemas import (
     CPVCodeSchema,
-    CompanyPublicationMatchSchema,
     DescriptionSchema,
     DossierSchema,
     EnterpriseCategorySchema,

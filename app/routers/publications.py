@@ -3,18 +3,27 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.security import HTTPBearer
+import httpx
+
+from fastapi.responses import StreamingResponse
+import io
+
 
 import app.crud.company as crud_company
 import app.crud.publication as crud_publication
 from app.config.postgres import get_session
 from app.config.settings import Settings
-from app.crud.mapper import (convert_publication_to_out_schema_details_free,
-                             convert_publication_to_out_schema_details_paid,
-                             convert_publications_to_out_schema_list_free,
-                             convert_publications_to_out_schema_list_paid)
+from app.crud.mapper import (
+    convert_publication_to_out_schema_details_free,
+    convert_publication_to_out_schema_details_paid,
+    convert_publications_to_out_schema_list_free,
+    convert_publications_to_out_schema_list_paid,
+)
 from app.schemas.publication_out_schemas import PublicationOut
 from app.util.clerk import AuthUser, get_auth_user
 from fastapi_pagination import Page, paginate
+
+from app.util.pubproc import get_publication_workspace_documents
 
 settings = Settings()
 publications_router = APIRouter()
@@ -27,31 +36,39 @@ async def get_publications(
     saved: bool = Query(None, description="Filter by saved publications"),
     viewed: bool = Query(None, description="Filter by viewed publications"),
     active: bool = Query(True, description="Filter by active publications only"),
-    search_term: str = Query(None, description="Search in title, description, or organization"),
+    search_term: str = Query(
+        None, description="Search in title, description, or organization"
+    ),
     region: List[str] = Query(None, description="Filter by region codes"),
     sector: List[str] = Query(None, description="Filter by sector"),
     cpv_code: List[str] = Query(None, description="Filter by CPV codes"),
-    date_from: Optional[date] = Query(None, description="Filter publications from this date"),
-    date_to: Optional[date] = Query(None, description="Filter publications until this date"),
-    sort_by: str = Query(None, description="Sort field: match_percentage, publication_date, deadline"),
+    date_from: Optional[date] = Query(
+        None, description="Filter publications from this date"
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Filter publications until this date"
+    ),
+    sort_by: str = Query(
+        None, description="Sort field: match_percentage, publication_date, deadline"
+    ),
     sort_order: str = Query("desc", description="Sort order: asc or desc"),
-    auth_user: AuthUser = Depends(get_auth_user)
+    auth_user: AuthUser = Depends(get_auth_user),
 ) -> List[PublicationOut]:
     """
     Get publications with flexible filtering options.
     Returns paginated publications that match all provided filters.
-    
+
     Sorting is applied automatically based on active filters:
     - When recommended=True: Sort by match_percentage (desc) then publication_date (desc)
     - When saved=True: Sort by when the publication was saved (desc)
     - When view=True: Sort by when the publication was viewed (desc)
     - Default: Sort by publication_date (desc)
-    
+
     Custom sorting can override these defaults using sort_by and sort_order parameters.
     """
     if not auth_user.email:
         raise HTTPException(status_code=400, detail="User email not available")
-    
+
     with get_session() as session:
         company = crud_company.get_company_by_email(
             email=auth_user.email, session=session
@@ -70,7 +87,7 @@ async def get_publications(
         # Apply active filter
         if active:
             publications = [pub for pub in publications if pub.is_active]
-        
+
         # Get specific matches for this company and enrich them with metadata
         matching_publications = []
         for publication in publications:
@@ -80,17 +97,19 @@ async def get_publications(
                 if pub_match.company_vat_number == company.vat_number:
                     match = pub_match
                     break
-            
+
             # Skip publications that don't match our filters
-            if recommended is not None and (not match or match.is_recommended != recommended):
+            if recommended is not None and (
+                not match or match.is_recommended != recommended
+            ):
                 continue
-                
+
             if saved is not None and (not match or match.is_saved != saved):
                 continue
-                
+
             if viewed is not None and (not match or match.is_viewed != viewed):
                 continue
-            
+
             # Enrich publication with sorting metadata
             if match:
                 # Add metadata for sorting
@@ -101,28 +120,30 @@ async def get_publications(
                 publication.match_percentage = 0
                 publication.saved_at = None
                 publication.viewed_at = None
-            
+
             # If all filters passed, add to our results
             matching_publications.append(publication)
-        
+
         # Replace with filtered list
         publications = matching_publications
-            
+
         # Apply region filter if provided
         if region:
             publications = [
-                pub for pub in publications 
+                pub
+                for pub in publications
                 if any(reg in pub.nuts_codes for reg in region)
             ]
-            
+
         # Apply sector filter if provided
         if sector:
             # Extract first two digits of CPV code for sector filtering
             publications = [
-                pub for pub in publications
+                pub
+                for pub in publications
                 if any(pub.cpv_main_code_code[:2] + "000000" == sec for sec in sector)
             ]
-            
+
         # Apply CPV code filter if provided
         if cpv_code:
             filtered_publications = []
@@ -131,30 +152,33 @@ async def get_publications(
                 if pub.cpv_main_code_code in cpv_code:
                     filtered_publications.append(pub)
                     continue
-                    
+
                 # Check if any additional CPV code matches
-                if any(additional_cpv.code in cpv_code for additional_cpv in pub.cpv_additional_codes):
+                if any(
+                    additional_cpv.code in cpv_code
+                    for additional_cpv in pub.cpv_additional_codes
+                ):
                     filtered_publications.append(pub)
                     continue
-                    
+
             publications = filtered_publications
-            
+
         # Apply date range filter if provided
         if date_from:
             publications = [
                 pub for pub in publications if pub.publication_date.date() >= date_from
             ]
-            
+
         if date_to:
             publications = [
                 pub for pub in publications if pub.publication_date.date() <= date_to
             ]
-        
+
         # Apply sorting based on active filters or explicit sort parameters
         if sort_by:
             # Explicit sorting takes precedence if provided
             reverse = sort_order.lower() == "desc"
-            
+
             if sort_by == "match_percentage":
                 publications.sort(key=lambda p: p.match_percentage, reverse=reverse)
             elif sort_by == "publication_date":
@@ -162,39 +186,55 @@ async def get_publications(
             elif sort_by == "deadline":
                 # Sort by submission deadline, putting None values at the end
                 publications.sort(
-                    key=lambda p: (p.vault_submission_deadline is None, p.vault_submission_deadline), 
-                    reverse=reverse
+                    key=lambda p: (
+                        p.vault_submission_deadline is None,
+                        p.vault_submission_deadline,
+                    ),
+                    reverse=reverse,
                 )
         else:
             # Apply automatic sorting based on active filters
             if recommended:
                 # For recommended publications, sort by match percentage (higher first), then by publication date
                 publications.sort(
-                    key=lambda p: (-p.match_percentage, -p.publication_date.timestamp() if p.publication_date else 0)
+                    key=lambda p: (
+                        -p.match_percentage,
+                        -p.publication_date.timestamp() if p.publication_date else 0,
+                    )
                 )
             elif saved:
                 # For saved publications, sort by saved date (newest first)
                 publications.sort(
-                    key=lambda p: (p.saved_at is None, -p.saved_at.timestamp() if p.saved_at else 0)
+                    key=lambda p: (
+                        p.saved_at is None,
+                        -p.saved_at.timestamp() if p.saved_at else 0,
+                    )
                 )
             elif viewed:
                 # For viewed publications, sort by viewed date (newest first)
                 publications.sort(
-                    key=lambda p: (p.viewed_at is None, -p.viewed_at.timestamp() if p.viewed_at else 0)
+                    key=lambda p: (
+                        p.viewed_at is None,
+                        -p.viewed_at.timestamp() if p.viewed_at else 0,
+                    )
                 )
             else:
                 # Default sorting by publication date (newest first)
                 publications.sort(
-                    key=lambda p: (-p.publication_date.timestamp() if p.publication_date else 0)
+                    key=lambda p: (
+                        -p.publication_date.timestamp() if p.publication_date else 0
+                    )
                 )
 
         # Convert to output schema and paginate
-        return paginate([
-            await convert_publications_to_out_schema_list_paid(
-                publication=publication, company=company
-            )
-            for publication in publications
-        ])
+        return paginate(
+            [
+                await convert_publications_to_out_schema_list_paid(
+                    publication=publication, company=company
+                )
+                for publication in publications
+            ]
+        )
 
 
 @publications_router.get(
@@ -273,10 +313,14 @@ async def search_publications_free(
                 if any(pub.cpv_main_code_code[:2] + "000000" == sec for sec in sector)
             ]
 
-        return paginate([
-            await convert_publications_to_out_schema_list_free(publication=publication)
-            for publication in publications
-        ])
+        return paginate(
+            [
+                await convert_publications_to_out_schema_list_free(
+                    publication=publication
+                )
+                for publication in publications
+            ]
+        )
 
 
 @publications_router.get(
@@ -341,10 +385,11 @@ async def save_publication(
 
         # Add to Kanban board
         from app.util.kanban_integration import add_saved_publication_to_kanban
+
         await add_saved_publication_to_kanban(
             company_vat_number=company.vat_number,
             publication_workspace_id=publication_workspace_id,
-            session=session
+            session=session,
         )
 
         return {"message": "Publication saved successfully"}
@@ -389,10 +434,11 @@ async def unsave_publication(
 
         # Remove from Kanban board
         from app.util.kanban_integration import remove_unsaved_publication_from_kanban
+
         await remove_unsaved_publication_from_kanban(
             company_vat_number=company.vat_number,
             publication_workspace_id=publication_workspace_id,
-            session=session
+            session=session,
         )
 
         return {"message": "Publication removed from saved list"}
@@ -437,3 +483,76 @@ async def mark_publication_viewed(
             )
 
         return {"message": "Publication marked as viewed"}
+
+
+@publications_router.get(
+    "/publications/publication/{publication_workspace_id}/document/{filename}",
+)
+#TODO: implement this in the frontend
+async def get_publication_document(
+    publication_workspace_id: str,
+    filename: str,
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """Get a specific document from a publication."""
+    if not auth_user.email:
+        raise HTTPException(status_code=400, detail="User email not available")
+
+    with get_session() as session:
+        company = crud_company.get_company_by_email(
+            email=auth_user.email, session=session
+        )
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Check if publication exists
+        publication = crud_publication.get_publication_by_workspace_id(
+            publication_workspace_id=publication_workspace_id, session=session
+        )
+        if not publication:
+            raise HTTPException(status_code=404, detail="Publication not found")
+
+    # Get the document
+    async with httpx.AsyncClient() as client:
+        documents = await get_publication_workspace_documents(
+            client, publication_workspace_id
+        )
+
+    if not documents or filename not in documents:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    file_data = documents[filename]
+
+    # Handle different file types
+    if hasattr(file_data, "read") and hasattr(file_data, "seek"):
+        # It's a file-like object
+        file_data.seek(0)
+        content = file_data.read()
+    elif isinstance(file_data, dict) and "content" in file_data:
+        # It's a dict with content
+        content = file_data["content"]
+    else:
+        # Unexpected format
+        raise HTTPException(status_code=500, detail="Unable to read document")
+
+    # Determine content type
+    content_type = "application/octet-stream"  # Default
+    if filename.lower().endswith(".pdf"):
+        content_type = "application/pdf"
+    elif filename.lower().endswith((".doc", ".docx")):
+        content_type = "application/msword"
+    elif filename.lower().endswith((".xls", ".xlsx")):
+        content_type = "application/vnd.ms-excel"
+    elif filename.lower().endswith(".txt"):
+        content_type = "text/plain"
+    elif filename.lower().endswith((".jpg", ".jpeg")):
+        content_type = "image/jpeg"
+    elif filename.lower().endswith(".png"):
+        content_type = "image/png"
+
+    # Return the file as a streaming response
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=content_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

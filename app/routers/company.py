@@ -4,14 +4,24 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import AnyHttpUrl, BaseModel
 from starlette.responses import JSONResponse
+from datetime import datetime, timedelta
 
+
+import asyncio
+from fastapi import BackgroundTasks
+
+from app.ai.recommend import get_recommendation
 import app.crud.company as crud_company
 from app.ai.openai import get_openai_client
 from app.ai.scraper import scrape_company_website
 from app.config.postgres import get_session
 from app.crud.mapper import convert_company_to_schema
-from app.schemas.company_schemas import CompanySchema
+from app.models.publication_models import CompanyPublicationMatch, Publication
+from app.schemas.company_schemas import CompanyPublicationMatchSchema, CompanySchema
+from app.schemas.publication_schemas import PublicationSchema
 from app.util.clerk import AuthUser, get_auth_user
+from app.util.messages_helper import send_recommendation_notification
+from app.util.publication_utils.publication_converter import PublicationConverter
 
 companies_router = APIRouter()
 
@@ -67,10 +77,11 @@ async def get_company_by_vat_number(
         return await convert_company_to_schema(company)
 
 
-# TODO: update recommended publications when adding company
 @companies_router.post("/company/", response_model=CompanySchema)
 async def create_company(
-    company: CompanySchema, auth_user: AuthUser = Depends(get_auth_user)
+    company: CompanySchema, 
+    background_tasks: BackgroundTasks,
+    auth_user: AuthUser = Depends(get_auth_user)
 ) -> CompanySchema:
     """Create a new company. User must be authenticated."""
     if not auth_user.email:
@@ -91,11 +102,96 @@ async def create_company(
         created_company = crud_company.create_company(company_schema=company, session=session)
         if not created_company:
             raise HTTPException(status_code=500, detail="Failed to create company")
+        
+        # Add background task to generate recommendations
+        # background_tasks.add_task(
+        #     generate_recommendations_for_new_company,
+        #     company_vat_number=created_company.vat_number
+        # )
 
         return created_company
 
+async def generate_recommendations_for_new_company(company_vat_number: str):
+    """
+    Background task to generate recommendations for a newly created company
+    for all active publications from the past week.
+    """
+    logging.info(f"Starting background recommendation generation for company {company_vat_number}")
+    try:        
+        # Get publications from the past week
+        one_week_ago = datetime.now() - timedelta(days=7)
+        
+        with get_session() as session:
+            company = crud_company.get_company_by_vat_number(
+                vat_number=company_vat_number, session=session
+            )
+            
+            if not company:
+                logging.error(f"Company {company_vat_number} not found for recommendation generation")
+                return
+                
+            # Get active publications from the past week
+            publications = session.query(Publication).filter(
+                Publication.publication_date >= one_week_ago,
+                Publication.vault_submission_deadline > datetime.now()
+            ).all()
+            
+            logging.info(f"Found {len(publications)} recent publications for recommendation")
+            
+            # Process each publication for recommendations
+            for publication in publications:
+                try:
+                    # Generate recommendation
+                    # TODO: fix that get_recommendation takes a db model instead of schema
+                    match, match_percentage = get_recommendation(
+                        publication=publication, company=company
+                    )
+                    
+                    if match:
+                        # Create match record
+                        match_schema = CompanyPublicationMatchSchema(
+                            company_vat_number=company.vat_number,
+                            publication_workspace_id=publication.publication_workspace_id,
+                            match_percentage=float(match_percentage),
+                            is_recommended=True,
+                            is_saved=False,
+                            is_viewed=False,
+                        )
+                        
+                        # Add to database
+                        company_match = CompanyPublicationMatch(
+                            company_vat_number=match_schema.company_vat_number,
+                            publication_workspace_id=match_schema.publication_workspace_id,
+                            match_percentage=match_schema.match_percentage,
+                            is_recommended=match_schema.is_recommended,
+                            is_saved=match_schema.is_saved,
+                            is_viewed=match_schema.is_viewed
+                        )
+                        session.add(company_match)
+                        
+                        # Send notification asynchronously
+                        asyncio.create_task(
+                            send_recommendation_notification(
+                                company_vat_number=company.vat_number,
+                                publication_id=publication.publication_workspace_id,
+                                publication_title=PublicationConverter.get_descr_as_str(
+                                    publication.dossier.titles
+                                ),
+                            )
+                        )
+                    
+                except Exception as e:
+                    logging.error(f"Error processing publication {publication.publication_workspace_id}: {e}")
+                    continue
+            
+            # Commit all changes
+            session.commit()
+            
+        logging.info(f"Completed background recommendation generation for company {company_vat_number}")
+    except Exception as e:
+        logging.error(f"Error in background recommendation generation: {e}")
 
-# TODO: update recommended publications when updating company
+
 @companies_router.patch("/company/", response_model=CompanySchema)
 async def update_current_company(
     company: CompanySchema, auth_user: AuthUser = Depends(get_auth_user)
@@ -129,7 +225,7 @@ async def update_current_company(
         return updated_company
 
 
-# TODO: update recommended publications when deleting company
+# TODO: just lock the user account in clerk
 @companies_router.delete("/company/", status_code=200)
 async def delete_current_company(
     auth_user: AuthUser = Depends(get_auth_user),
