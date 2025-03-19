@@ -64,6 +64,8 @@ def create_company(
 
         session.add(new_company)
         session.commit()
+
+        session.refresh(new_company)
         return new_company
     except Exception as e:
         logging.error("Error creating company: %s", e)
@@ -137,6 +139,8 @@ def update_company(
             ]
 
         session.commit()
+
+        session.refresh(company)
         return company
     except Exception as e:
         session.rollback()
@@ -146,7 +150,6 @@ def update_company(
         session.close()
 
 
-# Ensures the route /company/ accepts PATCH correctly to support partial updates
 def get_company_by_vat_number(vat_number: str, session: Session) -> Optional[Company]:
     """Retrieve a company by its VAT number."""
     try:

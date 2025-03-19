@@ -45,7 +45,6 @@ async def get_current_company(
         if not company:
             raise HTTPException(status_code=404, detail="Company not found")
 
-        # Directly return the company schema instead of the coroutine
         return await convert_company_to_schema(company)
 
 
@@ -73,7 +72,6 @@ async def get_company_by_vat_number(
         if not company:
             raise HTTPException(status_code=404, detail="Company not found")
 
-        # Directly return the company schema
         return await convert_company_to_schema(company)
 
 
@@ -222,7 +220,8 @@ async def update_current_company(
         if not updated_company:
             raise HTTPException(status_code=500, detail="Failed to update company")
 
-        return updated_company
+        # Convert to schema before the session is closed
+        return await convert_company_to_schema(updated_company)
 
 
 # TODO: just lock the user account in clerk
