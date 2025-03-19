@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 from typing import List, Optional, Dict, Any
 
@@ -5,7 +6,7 @@ from sqlalchemy.orm import Session
 
 import app.crud.company as crud_company
 from app.config.settings import Settings
-from clerk_backend_api import Clerk
+from clerk_backend_api import Clerk, CreateInvitationRequestBody, GetUserListRequest, ListInvitationsRequest
 
 settings = Settings()
 
@@ -20,7 +21,7 @@ def check_user_company_access(email: str, session: Session) -> Optional[str]:
         company = crud_company.get_company_by_email(email=email, session=session)
         if not company:
             return None
-            
+
         return company.vat_number
     except Exception as e:
         logging.error(f"Error checking user company access: {e}")
@@ -36,37 +37,39 @@ def add_user_to_company(company_vat_number: str, email: str, session: Session) -
         company = crud_company.get_company_by_vat_number(
             vat_number=company_vat_number, session=session
         )
-        
+
         if not company:
             return False
-            
+
         # Check if email already exists
         if email in company.emails:
             return True
-        
+
         # Create Clerk invitation
         with Clerk(bearer_auth=settings.clerk_secret_key) as clerk:
             invitation = clerk.invitations.create(
-                email_address=email,
-                redirect_url=f"{settings.frontend_url}/dashboard"  # Redirect to dashboard after signup
+                CreateInvitationRequestBody(email_address=email)
             )
-            
+
             if not invitation:
                 logging.error(f"Failed to create Clerk invitation for {email}")
                 return False
-                
+
             # Add email to company
+            # TODO: email not actually addede wtf
             company.emails.append(email)
             session.commit()
             return True
-            
+
     except Exception as e:
         logging.error(f"Error adding user to company: {e}")
         session.rollback()
         return False
 
 
-def remove_user_from_company(company_vat_number: str, email: str, user_id: str, session: Session) -> bool:
+def remove_user_from_company(
+    company_vat_number: str, email: str, user_id: str, session: Session
+) -> bool:
     """
     Remove a user from a company by deleting the Clerk user and removing the email
     from the company's authorized emails.
@@ -75,18 +78,18 @@ def remove_user_from_company(company_vat_number: str, email: str, user_id: str, 
         company = crud_company.get_company_by_vat_number(
             vat_number=company_vat_number, session=session
         )
-        
+
         if not company:
             return False
-            
+
         # Check if email exists
         if email not in company.emails:
             return False
-            
+
         # Make sure at least one email remains
         if len(company.emails) <= 1:
             return False
-        
+
         # Remove from Clerk if user_id is provided
         if user_id:
             try:
@@ -95,7 +98,7 @@ def remove_user_from_company(company_vat_number: str, email: str, user_id: str, 
             except Exception as clerk_error:
                 logging.error(f"Error removing user from Clerk: {clerk_error}")
                 # Continue anyway to remove from company
-            
+
         # Remove email from company
         company.emails.remove(email)
         session.commit()
@@ -106,7 +109,9 @@ def remove_user_from_company(company_vat_number: str, email: str, user_id: str, 
         return False
 
 
-def get_company_users(company_vat_number: str, session: Session) -> List[Dict[str, Any]]:
+def get_company_users(
+    company_vat_number: str, session: Session
+) -> List[Dict[str, Any]]:
     """
     Get all authorized users for a company with details from Clerk.
     """
@@ -114,70 +119,76 @@ def get_company_users(company_vat_number: str, session: Session) -> List[Dict[st
         company = crud_company.get_company_by_vat_number(
             vat_number=company_vat_number, session=session
         )
-        
+
         if not company:
             return []
-        
+
         users = []
-        
+
         # Get user details from Clerk
         with Clerk(bearer_auth=settings.clerk_secret_key) as clerk:
             for email in company.emails:
+                print(email)
                 try:
                     # Search for users with this email
                     clerk_users = clerk.users.list(
-                        email_address=[email],
+                        request=GetUserListRequest(email_address=[email]),
                     )
-                    
-                    if clerk_users.data:
+                    print(clerk_users)
+
+                    if clerk_users != []:
                         # User exists in Clerk
-                        for user in clerk_users.data:
-                            users.append({
-                                "id": user.id,
-                                "email": email,
-                                "first_name": user.first_name,
-                                "last_name": user.last_name,
-                                "created_at": user.created_at,
-                                "last_sign_in_at": user.last_sign_in_at,
-                                "status": "active"
-                            })
+                        for user in clerk_users:
+                            users.append(
+                                {
+                                    "id": user.id,
+                                    "email": user.email_addresses[0].email_address,
+                                    "first_name": user.first_name,
+                                    "last_name": user.last_name,
+                                    
+
+                                    "created_at": datetime.fromtimestamp(user.created_at / 1000).strftime("%m/%d/%Y, %H:%M:%S"),
+                                    "last_sign_in_at": datetime.fromtimestamp(user.last_sign_in_at / 1000).strftime("%m/%d/%Y, %H:%M:%S"),
+                                    "status": "active",
+                                }
+                            )
                     else:
                         # User invited but not yet registered
                         # Check if there's a pending invitation
                         invitations = clerk.invitations.list(
-                            email_address=email
+                            query=email
                         )
-                        
-                        if invitations.data:
-                            status = "invited"
-                            created_at = invitations.data[0].created_at
-                        else:
-                            status = "unknown"
-                            created_at = None
-                            
-                        users.append({
+                        print(invitations)
+
+                        if invitations is not []:
+                            for invitation in invitations:
+                                users.append(
+                                    {
+                                        "id": None,
+                                        "email": email,
+                                        "first_name": None,
+                                        "last_name": None,
+                                        "created_at": datetime.fromtimestamp(invitation.created_at / 1000).strftime("%m/%d/%Y, %H:%M:%S"),
+                                        "last_sign_in_at": None,
+                                        "status": "invited",
+                                    }
+                                )
+
+                except Exception as e:
+                    logging.error(f"Error getting Clerk data for {email}: {e}")
+                    # Add basic info even if Clerk lookup fails
+                    users.append(
+                        {
                             "id": None,
                             "email": email,
                             "first_name": None,
                             "last_name": None,
-                            "created_at": created_at,
+                            "created_at": None,
                             "last_sign_in_at": None,
-                            "status": status
-                        })
-                        
-                except Exception as e:
-                    logging.error(f"Error getting Clerk data for {email}: {e}")
-                    # Add basic info even if Clerk lookup fails
-                    users.append({
-                        "id": None,
-                        "email": email,
-                        "first_name": None,
-                        "last_name": None,
-                        "created_at": None,
-                        "last_sign_in_at": None,
-                        "status": "error"
-                    })
-            
+                            "status": "error",
+                        }
+                    )
+
         return users
     except Exception as e:
         logging.error(f"Error getting company users: {e}")

@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     mail_username: str = "info@proclogic.be"
     mail_password: str
     mail_from: str = "info@proclogic.be"
-    frontend_url: str = "https://proclogic.be"
+    frontend_url: str = "https://app.proclogic.be"
 
     fastapi_debug: bool = True
     prefered_languages_descriptions: List[str] = ["NL", "EN", "FR"]
