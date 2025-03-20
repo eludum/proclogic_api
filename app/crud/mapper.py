@@ -17,6 +17,7 @@ settings = Settings()
 
 # TODO: hide stuff for the free part
 
+
 async def convert_publications_to_out_schema_list_free(
     publication: Publication,
 ) -> PublicationOut:
@@ -59,11 +60,17 @@ async def convert_publication_to_out_schema_details_paid(
                 # Create a metadata object without the actual binary content
                 serializable_documents[filename] = {
                     "filename": filename,
-                    "size": len(file_data.read()) if hasattr(file_data, "read") else len(file_data.get("content", b"")),
-                    "content_type": getattr(file_data, "content_type", "application/octet-stream"),
+                    "size": (
+                        len(file_data.read())
+                        if hasattr(file_data, "read")
+                        else len(file_data.get("content", b""))
+                    ),
+                    "content_type": getattr(
+                        file_data, "content_type", "application/octet-stream"
+                    ),
                     # Don't include the actual content in the response
                 }
-                
+
                 # Reset file position if it's a file-like object
                 if hasattr(file_data, "seek"):
                     file_data.seek(0)
@@ -71,14 +78,12 @@ async def convert_publication_to_out_schema_details_paid(
                 logging.error(f"Error processing document {filename}: {e}")
                 continue
 
-    print(forum)
-            
     # Use the converter with all available data
     return PublicationConverter.to_output_schema(
         publication=publication,
         company=company,
         documents=serializable_documents,
-        forum=forum
+        forum=forum,
     )
 
 

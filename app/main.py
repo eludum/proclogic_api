@@ -33,6 +33,7 @@ logging.basicConfig(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     disable_installed_extensions_check()
+    # TODO: add ratelimiter
     # TODO: uncomment for prod
     if not settings.fastapi_debug:
         run_migration()

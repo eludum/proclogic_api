@@ -128,13 +128,11 @@ def get_company_users(
         # Get user details from Clerk
         with Clerk(bearer_auth=settings.clerk_secret_key) as clerk:
             for email in company.emails:
-                print(email)
                 try:
                     # Search for users with this email
                     clerk_users = clerk.users.list(
                         request=GetUserListRequest(email_address=[email]),
                     )
-                    print(clerk_users)
 
                     if clerk_users != []:
                         # User exists in Clerk
@@ -158,7 +156,6 @@ def get_company_users(
                         invitations = clerk.invitations.list(
                             query=email
                         )
-                        print(invitations)
 
                         if invitations is not []:
                             for invitation in invitations:
