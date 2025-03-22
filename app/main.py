@@ -24,7 +24,7 @@ from app.util.pubproc import fetch_pubproc_data
 settings = Settings()
 
 logging.basicConfig(
-    level=logging.INFO if settings.fastapi_debug else logging.ERROR,
+    level=logging.INFO if settings.debug_mode else logging.ERROR,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler()],
 )
@@ -34,38 +34,39 @@ logging.basicConfig(
 async def lifespan(app: FastAPI):
     disable_installed_extensions_check()
     # TODO: add ratelimiter
-    # TODO: uncomment for prod
-    if not settings.fastapi_debug:
+    if settings.scraper_mode:
         run_migration()
-    task = asyncio.create_task(fetch_pubproc_data())
-    yield
-    task.cancel()
+        task = asyncio.create_task(fetch_pubproc_data())
+        yield
+        task.cancel()
 
 
-proclogic = FastAPI(lifespan=lifespan, debug=settings.fastapi_debug)
+proclogic = FastAPI(lifespan=lifespan, debug=settings.debug_mode)
 
 security = HTTPBearer()
 
-add_pagination(proclogic)
-
 proclogic.include_router(health_router)
-proclogic.include_router(publications_router)
-proclogic.include_router(conversations_router)
-proclogic.include_router(companies_router)
-proclogic.include_router(users_router)
-proclogic.include_router(analytics_router)
-proclogic.include_router(notifications_router)
-proclogic.include_router(email_router)
-proclogic.include_router(kanban_router)
 
-origins = [
-    "http://localhost:3000",
-]
+if not settings.scraper_mode:
+    add_pagination(proclogic)
+    proclogic.include_router(publications_router)
+    proclogic.include_router(conversations_router)
+    proclogic.include_router(companies_router)
+    proclogic.include_router(users_router)
+    proclogic.include_router(analytics_router)
+    proclogic.include_router(notifications_router)
+    proclogic.include_router(email_router)
+    proclogic.include_router(kanban_router)
 
-proclogic.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if settings.debug_mode:
+    origins = [
+        "http://localhost:3000",
+    ]
+
+    proclogic.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )

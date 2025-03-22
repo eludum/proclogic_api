@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    scraper_mode: bool = False
     openai_api_key: str
     deepseek_api_key: str
     pubproc_client_id: str
@@ -31,7 +32,7 @@ class Settings(BaseSettings):
     mail_from: str = "info@proclogic.be"
     frontend_url: str = "https://app.proclogic.be"
 
-    fastapi_debug: bool = True
+    debug_mode: bool = False
     prefered_languages_descriptions: List[str] = ["NL", "EN", "FR"]
     openai_vector_store_accepted_formats: List[str] = [
         "c",
