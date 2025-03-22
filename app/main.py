@@ -47,16 +47,15 @@ security = HTTPBearer()
 
 proclogic.include_router(health_router)
 
-if not settings.scraper_mode:
-    add_pagination(proclogic)
-    proclogic.include_router(publications_router)
-    proclogic.include_router(conversations_router)
-    proclogic.include_router(companies_router)
-    proclogic.include_router(users_router)
-    proclogic.include_router(analytics_router)
-    proclogic.include_router(notifications_router)
-    proclogic.include_router(email_router)
-    proclogic.include_router(kanban_router)
+add_pagination(proclogic)
+proclogic.include_router(publications_router)
+proclogic.include_router(conversations_router)
+proclogic.include_router(companies_router)
+proclogic.include_router(users_router)
+proclogic.include_router(analytics_router)
+proclogic.include_router(notifications_router)
+proclogic.include_router(email_router)
+proclogic.include_router(kanban_router)
 
 if settings.debug_mode:
     origins = [
