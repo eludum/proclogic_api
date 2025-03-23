@@ -23,12 +23,11 @@ class Settings(BaseSettings):
     postgres_con_url: str
     redis_host: str = "localhost"
     redis_port: int = 6379
-    redis_password: Optional[str] = None
     redis_db: int = 0
     redis_agent_ttl: int = 86400  # Default TTL for agent data (24 hours)
     template_folder: str = "email_template"
-    mail_username: Optional[str] = None
-    mail_password: Optional[str] = None
+    mail_username: Optional[str] = ""
+    mail_password: Optional[str] = ""
     mail_from: str = "info@proclogic.be"
     frontend_url: str = "https://app.proclogic.be"
 
