@@ -34,6 +34,7 @@ logging.basicConfig(
 async def lifespan(app: FastAPI):
     disable_installed_extensions_check()
     if settings.scraper_mode:
+        # probably only done via terminal however do it here if we use HA psql
         # run_migration()
         task = asyncio.create_task(fetch_pubproc_data())
         yield
