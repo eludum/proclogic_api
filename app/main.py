@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
         yield
 
 
-proclogic = FastAPI(lifespan=lifespan, debug=settings.debug_mode)
+proclogic = FastAPI(docs_url=None, lifespan=lifespan, debug=settings.debug_mode)
 
 security = HTTPBearer()
 
@@ -59,15 +59,15 @@ proclogic.include_router(notifications_router)
 proclogic.include_router(email_router)
 proclogic.include_router(kanban_router)
 
-if settings.debug_mode:
-    origins = [
-        "http://localhost:3000",
-    ]
+# if settings.debug_mode:
+#     origins = [
+#         "http://localhost:3000",
+#     ]
 
-    proclogic.add_middleware(
-        CORSMiddleware,
-        allow_origins=origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+#     proclogic.add_middleware(
+#         CORSMiddleware,
+#         allow_origins=origins,
+#         allow_credentials=True,
+#         allow_methods=["*"],
+#         allow_headers=["*"],
+#     )
