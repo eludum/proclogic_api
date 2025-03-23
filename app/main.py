@@ -33,8 +33,6 @@ logging.basicConfig(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     disable_installed_extensions_check()
-    print(settings.__pydantic_extra__)
-    # TODO: add ratelimiter
     if settings.scraper_mode:
         run_migration()
         task = asyncio.create_task(fetch_pubproc_data())
