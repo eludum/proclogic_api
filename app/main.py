@@ -39,6 +39,9 @@ async def lifespan(app: FastAPI):
         task = asyncio.create_task(fetch_pubproc_data())
         yield
         task.cancel()
+    else:
+        # Make sure we always yield
+        yield
 
 
 proclogic = FastAPI(lifespan=lifespan, debug=settings.debug_mode)
