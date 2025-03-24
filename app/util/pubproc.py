@@ -34,24 +34,13 @@ settings = Settings()
 
 async def fetch_pubproc_data() -> None:
     while True:
-        # try:
-        #     async with httpx.AsyncClient() as client:
-        #         await retrieve_publications(client=client)
-        # except Exception as e:
-        #     logging.error("error in fetching data: %s", e)
-        # finally:
-        #     await asyncio.sleep(600)  # 10 minutes in seconds
-
-        if pycron.is_now("*/15 * * * *"):
-            try:
-                async with httpx.AsyncClient() as client:
-                    await retrieve_publications(client=client)
-            except Exception as e:
-                logging.error("error in fetching data: %s", e)
-            finally:
-                await asyncio.sleep(60)
-        else:
-            await asyncio.sleep(60)
+        try:
+            async with httpx.AsyncClient() as client:
+                await retrieve_publications(client=client)
+        except Exception as e:
+            logging.error("error in fetching data: %s", e)
+        finally:
+            await asyncio.sleep(600)  # 10 minutes in seconds
 
 
 async def retrieve_publications(client: httpx.AsyncClient) -> None:
