@@ -12,9 +12,7 @@ RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 
 COPY ./app /code/app
 
-ENV SCRAPER_MODE=true
+CMD ["fastapi", "run", "app/main.py", "--port", "8000"]
 
-# CMD ["fastapi", "run", "app/main.py", "--port", "8000"]
-
-# If running behind a proxy like Nginx or Traefik add --proxy-headers
-CMD ["fastapi", "run", "app/main.py", "--port", "8000", "--proxy-headers"]
+# # If running behind a proxy like Nginx or Traefik add --proxy-headers
+# CMD ["fastapi", "run", "app/main.py", "--port", "8000", "--proxy-headers"]
