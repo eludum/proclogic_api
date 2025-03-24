@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    scraper_mode: bool = False
+    scraper_mode: bool
     openai_api_key: str
     deepseek_api_key: Optional[str] = None
     pubproc_client_id: str
@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     pubproc_token: str = ""
     pubproc_token_exp: str = ""
     postgres_con_url: str
-    redis_host: str = "localhost"
+    redis_host: str = "redis"
     redis_port: int = 6379
     redis_db: int = 0
     redis_agent_ttl: int = 86400  # Default TTL for agent data (24 hours)
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     mail_from: str = "info@proclogic.be"
     frontend_url: str = "https://app.proclogic.be"
 
-    debug_mode: bool = False
+    debug_mode: bool
     
     prefered_languages_descriptions: List[str] = ["NL", "EN", "FR"]
     openai_vector_store_accepted_formats: List[str] = [
@@ -68,5 +68,5 @@ class Settings(BaseSettings):
     ]
 
     class Config:
-        env_file = ".env.prod", ".env"
+        env_file = ".env"
         env_file_encoding = "utf-8"
