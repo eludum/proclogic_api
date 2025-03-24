@@ -34,6 +34,14 @@ settings = Settings()
 
 async def fetch_pubproc_data() -> None:
     while True:
+        # try:
+        #     async with httpx.AsyncClient() as client:
+        #         await retrieve_publications(client=client)
+        # except Exception as e:
+        #     logging.error("error in fetching data: %s", e)
+        # finally:
+        #     await asyncio.sleep(600)  # 10 minutes in seconds
+
         if pycron.is_now("*/15 * * * *"):
             try:
                 async with httpx.AsyncClient() as client:
@@ -290,6 +298,7 @@ async def get_daily_pubproc_search_data(
     today = date.today()
     page_size = 100
 
+    # TODO: go page by page and stop if we hit already processed ones, to limit api usage
     data = {
         "dispatch-date-from": f"{today.strftime('%Y-%m-%d')}",
         "page": 1,
