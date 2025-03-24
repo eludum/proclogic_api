@@ -33,26 +33,17 @@ settings = Settings()
 
 
 async def fetch_pubproc_data() -> None:
-    pass
-    # while True:
-    #     try:
-    #         async with httpx.AsyncClient() as client:
-    #             await retrieve_publications(client=client)
-    #     except Exception as e:
-    #         logging.error("error in fetching data: %s", e)
-    #     finally:
-    #         await asyncio.sleep(600)  # 10 minutes in seconds
-
-        # if pycron.is_now("*/15 * * * *"):
-        #     try:
-        #         async with httpx.AsyncClient() as client:
-        #             await retrieve_publications(client=client)
-        #     except Exception as e:
-        #         logging.error("error in fetching data: %s", e)
-        #     finally:
-        #         await asyncio.sleep(60)
-        # else:
-        #     await asyncio.sleep(60)
+    while True:
+        if pycron.is_now("*/15 * * * *"):
+            try:
+                async with httpx.AsyncClient() as client:
+                    await retrieve_publications(client=client)
+            except Exception as e:
+                logging.error("error in fetching data: %s", e)
+            finally:
+                await asyncio.sleep(60)
+        else:
+            await asyncio.sleep(60)
 
 
 async def retrieve_publications(client: httpx.AsyncClient) -> None:
@@ -87,14 +78,10 @@ async def process_publication(
 
     if existing_publication and pub.vault_submission_deadline is not None:
 
-        await update_existing_publication(
-            client=client, pub=pub, session=session
-        )
+        await update_existing_publication(client=client, pub=pub, session=session)
     elif not existing_publication and pub.vault_submission_deadline is not None:
 
-        await create_new_publication(
-            client=client, pub=pub, session=session
-        )
+        await create_new_publication(client=client, pub=pub, session=session)
     elif not existing_publication and pub.vault_submission_deadline is None:
         await process_award_publication(client=client, pub=pub, session=session)
 
@@ -153,7 +140,7 @@ async def create_new_publication(
         client=client, publication_workspace_id=pub.publication_workspace_id
     )
 
-        # Get documents
+    # Get documents
     filesmap = await get_publication_workspace_documents(
         client=client, publication_workspace_id=pub.publication_workspace_id
     )
@@ -300,8 +287,7 @@ async def get_daily_pubproc_search_data(
 ) -> dict:
     token = get_token()
 
-    # TODO: remove - 1 for prod
-    today = date.today() - timedelta(1)
+    today = date.today()
     page_size = 100
 
     data = {
