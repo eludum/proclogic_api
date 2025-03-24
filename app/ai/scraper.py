@@ -4,7 +4,7 @@ import asyncio
 import httpx
 from typing import Optional, List
 from bs4 import BeautifulSoup
-from util.publication_utils.cpv_codes import nl_sectors
+from app.util.publication_utils.cpv_codes import nl_sectors
 import html2text
 from urllib.parse import urljoin, urlparse
 from openai import OpenAI
