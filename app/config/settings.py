@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     mail_from: str = "info@proclogic.be"
     frontend_url: str = "https://app.proclogic.be"
 
-    debug_mode: bool
+    debug_mode: bool = True
     
     prefered_languages_descriptions: List[str] = ["NL", "EN", "FR"]
     openai_vector_store_accepted_formats: List[str] = [
