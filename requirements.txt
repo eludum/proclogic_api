@@ -1,7 +1,8 @@
 fastapi[all]
+uvicorn[standard]
+gunicorn
 fastapi-mail
 pydantic
-uvicorn[standard]
 openai
 asyncio
 httpx
