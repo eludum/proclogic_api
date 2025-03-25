@@ -14,4 +14,7 @@ COPY ./app /code/app
 
 EXPOSE 80
 
-CMD ["gunicorn", "-b 0.0.0.0:80", "app.main:proclogic"]
+CMD ["uvicorn", "app.main:proclogic", "--host", "0.0.0.0", "--port", "80"]
+
+# # If running behind a proxy like Nginx or Traefik add --proxy-headers
+# CMD ["fastapi", "run", "app/main.py", "--port", "8000", "--proxy-headers"]
