@@ -14,4 +14,4 @@ COPY ./app /code/app
 
 EXPOSE 80
 
-CMD ["gunicorn", "app.main:proclogic", "--host", "0.0.0.0", "--port", "80"]
+CMD ["gunicorn", "-b 0.0.0.0:80", "app.main:proclogic"]
