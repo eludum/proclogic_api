@@ -48,7 +48,7 @@ def add_user_to_company(company_vat_number: str, email: str, session: Session) -
         # Create Clerk invitation
         with Clerk(bearer_auth=settings.clerk_secret_key) as clerk:
             invitation = clerk.invitations.create(
-                CreateInvitationRequestBody(email_address=email)
+                request=CreateInvitationRequestBody(email_address=email)
             )
 
             if not invitation:

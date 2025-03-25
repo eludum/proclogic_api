@@ -23,7 +23,7 @@ class SectorSchema(BaseModel):
 class CompanySchema(BaseModel):
     vat_number: str
     subscription: str = Field(
-        default="premium",
+        default="starter",
         description="Type of subscription: starter, team or custom",
     )
     name: str

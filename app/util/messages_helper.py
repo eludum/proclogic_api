@@ -32,7 +32,7 @@ async def send_deadline_notification(company_vat_number: str, publication_id: st
             
         notification = crud_notification.create_notification(
             title=f"Deadline nadert voor aanbesteding",
-            content=f"De deadline voor '{publication_title}' nadert. U heeft nog {days_left} dagen om te reageren.",
+            content=f"De deadline voor '{publication_title}' nadert. Je hebt nog {days_left} dag(en) om te reageren.",
             notification_type="deadline",
             company_vat_number=company_vat_number,
             link=f"/publications/detail/{publication_id}",
