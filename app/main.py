@@ -60,14 +60,9 @@ proclogic.include_router(notifications_router)
 proclogic.include_router(email_router)
 proclogic.include_router(kanban_router)
 
-origins = [
-    "http://localhost:3000",
-    settings.frontend_url,
-]
-
 proclogic.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
