@@ -15,7 +15,7 @@ COPY ./app /code/app
 EXPOSE 80
 
 # Run with Uvicorn (standard for FastAPI)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80"]
+CMD ["uvicorn", "uvicorn app.main:proclogic", "--host", "0.0.0.0", "--port", "80"]
 
 # If behind proxy like Nginx/Traefik:
-# CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80", "--proxy-headers"]
+# CMD ["uvicorn", "uvicorn app.main:proclogic", "--host", "0.0.0.0", "--port", "80", "--proxy-headers"]
