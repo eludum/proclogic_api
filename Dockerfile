@@ -12,9 +12,8 @@ RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 
 COPY ./app /code/app
 
-EXPOSE 3000
+# Run with Uvicorn (standard for FastAPI)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80"]
 
-CMD ["fastapi", "run", "app/main.py", "--port", "8000"]
-
-# # If running behind a proxy like Nginx or Traefik add --proxy-headers
-# CMD ["fastapi", "run", "app/main.py", "--port", "8000", "--proxy-headers"]
+# If behind proxy like Nginx/Traefik:
+# CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80", "--proxy-headers"]
