@@ -360,6 +360,8 @@ async def get_publication_workspace_documents(
         "BelGov-Trace-Id": generate_uuid(),
     }
 
+    # TODO: send notification if saved and docs change
+
     r = await client.get(
         settings.pubproc_server
         + settings.path_dos_api
@@ -391,7 +393,7 @@ async def get_publication_workspace_forum(
         "BelGov-Trace-Id": generate_uuid(),
     }
 
-    # TODO: display in frontend
+    # TODO: display in frontend, TODO: send forum if saved and docs change
 
     r = await client.get(
         settings.pubproc_server

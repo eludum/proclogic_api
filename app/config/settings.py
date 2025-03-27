@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     path_dos_api: str = "/api/eProcurementDos/v1"
 
     postgres_con_url: str
-    redis_host: str = "redis"
+    redis_host: str = "proclogic-redis"
     redis_port: int = 6379
     redis_db: int = 0
     redis_agent_ttl: int = 86400  # Default TTL for agent data (24 hours)
