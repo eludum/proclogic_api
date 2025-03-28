@@ -35,9 +35,7 @@ class Settings(BaseSettings):
     mail_username: Optional[str] = ""
     mail_password: Optional[str] = ""
     mail_from: str = "info@proclogic.be"
-    
-    frontend_url: str = "https://app.proclogic.be"
-    
+        
     prefered_languages_descriptions: List[str] = ["NL", "EN", "FR"]
     openai_vector_store_accepted_formats: List[str] = [
         "c",
