@@ -33,7 +33,7 @@ def encode_file_to_base64(file_obj: Union[BytesIO, bytes]) -> str:
         raise
 
 
-def decode_base64_to_bytesio(base64_str: str, filename: str = None) -> io.BytesIO:
+def decode_base64_to_bytesio(base64_str: str, filename: str = None) -> BytesIO:
     """
     Convert a base64 encoded string to a BytesIO object.
     """
