@@ -19,7 +19,7 @@ from app.routers.notifications import notifications_router
 from app.routers.publications import publications_router
 from app.routers.users import users_router
 from app.util.alembic_runner import run_migration
-from app.util.pubproc import fetch_pubproc_data
+from app.util.pubproc import fetch_pubproc_data, update_pubproc_data, gather_notifications
 
 settings = Settings()
 
@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
     if settings.scraper_mode:
         # probably only done via terminal however do it here if we use HA psql
         # run_migration()
-        task = asyncio.create_task(fetch_pubproc_data())
+        task = asyncio.gather(fetch_pubproc_data(), update_pubproc_data(), gather_notifications())
         yield
         task.cancel()
     else:

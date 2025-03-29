@@ -221,6 +221,7 @@ async def update_current_company(
             raise HTTPException(status_code=500, detail="Failed to update company")
 
         # Convert to schema before the session is closed
+        # TODO just return true, so we dont reload the company
         return await convert_company_to_schema(updated_company)
 
 

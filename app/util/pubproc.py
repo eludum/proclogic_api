@@ -34,6 +34,7 @@ settings = Settings()
 
 async def fetch_pubproc_data() -> None:
     while True:
+        # TODO: scan all saved publications and check if they have changed documents or forum
         try:
             async with httpx.AsyncClient() as client:
                 await retrieve_publications(client=client)
@@ -41,6 +42,20 @@ async def fetch_pubproc_data() -> None:
             logging.error("error in fetching data: %s", e)
         finally:
             await asyncio.sleep(600)  # 10 minutes in seconds
+
+
+async def update_pubproc_data() -> None:
+    # TODO: update all saved publications data forums docs, daily send to ai and send notification
+    #       clean files from minio if not active anymore and implement minio
+    pass
+    # with get_session() as session:
+    #     for company in crud_company.get_all_companies(session=session):
+    #         await crud_publication.get_all_publications()
+
+
+async def gather_notifications() -> None:
+    # TODO: scan for deadlines and send notifications
+    pass
 
 
 async def retrieve_publications(client: httpx.AsyncClient) -> None:
@@ -109,7 +124,7 @@ async def update_existing_publication(
         # TODO: put update in timeline on the frontend
 
         # TODO: add forum data to ai
-        # Get forum info
+        # Get forum info, get forum_id
         # forum = await get_publication_workspace_forum(
         #     client=client, publication_workspace_id=pub.publication_workspace_id
         # )
@@ -361,26 +376,79 @@ async def get_publication_workspace_documents(
     }
 
     # TODO: send notification if saved and docs change
+    # add external links
 
-    r = await client.get(
-        settings.pubproc_server
-        + settings.path_dos_api
-        + f"/publication-workspaces/{publication_workspace_id}/archive",
-        headers=headers,
-    )
+    try:
+        # Add a 5-minute timeout for large files
+        r = await client.get(
+            settings.pubproc_server
+            + settings.path_dos_api
+            + f"/publication-workspaces/{publication_workspace_id}/archive",
+            # TODO: /publication-workspaces/{publication-workspace-id}/urls	
+            headers=headers,
+            timeout=300,  # 5 minutes
+        )
 
-    if r.status_code != 200:
+        if r.status_code != 200:
+            return {}
+
+        # Process the zip file
+        file_map = {}
+
+        # First level zip extraction
+        with zipfile.ZipFile(BytesIO(r.content)) as primary_zip:
+            for file_name in primary_zip.namelist():
+                file_content = primary_zip.read(file_name)
+
+                # Get just the base filename without folder path
+                base_file_name = os.path.basename(file_name)
+
+                # Skip if it's a directory (empty base name)
+                if not base_file_name:
+                    continue
+
+                # Check if this is another zip file (second level)
+                if base_file_name.lower().endswith(".zip"):
+                    try:
+                        with zipfile.ZipFile(BytesIO(file_content)) as secondary_zip:
+                            for inner_file_name in secondary_zip.namelist():
+                                # Get just the base filename for inner files too
+                                inner_base_name = os.path.basename(inner_file_name)
+
+                                # Skip if it's a directory
+                                if not inner_base_name:
+                                    continue
+
+                                inner_content = secondary_zip.read(inner_file_name)
+                                inner_file = BytesIO(inner_content)
+                                inner_file.name = inner_base_name
+                                file_map[inner_base_name] = inner_file
+                    except zipfile.BadZipFile:
+                        # If it's not actually a valid zip, treat it as a regular file
+                        file_data = BytesIO(file_content)
+                        file_data.name = base_file_name
+                        file_map[base_file_name] = file_data
+                else:
+                    # Regular file, not a zip
+                    file_data = BytesIO(file_content)
+                    file_data.name = base_file_name
+                    file_map[base_file_name] = file_data
+
+        return file_map
+
+    except asyncio.TimeoutError:
+        logging.error(
+            f"Timeout while downloading archive for {publication_workspace_id}"
+        )
         return {}
-
-    zf = zipfile.ZipFile(BytesIO(r.content))
-    file_map = {}
-
-    for file_name in zf.namelist():
-        file_data = BytesIO(zf.read(file_name))
-        file_data.name = file_name
-        file_map[file_name] = file_data
-
-    return file_map
+    except zipfile.BadZipFile:
+        logging.error(f"Invalid zip file received for {publication_workspace_id}")
+        return {}
+    except Exception as e:
+        logging.error(
+            f"Error downloading documents for {publication_workspace_id}: {str(e)}"
+        )
+        return {}
 
 
 @redis_cache("pubproc:forum")

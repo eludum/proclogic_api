@@ -471,6 +471,7 @@ def get_all_publications(session: Session) -> List[Publication]:
     return (
         session.query(Publication)
         # filter added here to only see active ones
+        # TODO use is active niffo instead of this
         .filter(Publication.vault_submission_deadline.isnot(None))
         .options(
             joinedload(Publication.cpv_main_code),

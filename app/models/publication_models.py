@@ -223,6 +223,7 @@ class Publication(Base):
     vault_submission_deadline: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True, index=True
     )
+    # forum: Mapped[Optional[dict]] = mapped_column(PickleType, nullable=True)
     ai_summary_without_documents: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True
     )

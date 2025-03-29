@@ -92,6 +92,7 @@ class PublicationSchema(BaseModel):
     sent_at: List[datetime]
     ted_published: bool
     vault_submission_deadline: Optional[datetime] = None
+    # forum: Optional[dict] = None
     ai_summary_without_documents: Optional[str] = None
     ai_summary_with_documents: Optional[str] = None
     award: Optional[dict] = None

@@ -150,6 +150,8 @@ def get_company_users(
                                     "status": "active",
                                 }
                             )
+
+                    # TODO: always include invitations
                     else:
                         # User invited but not yet registered
                         # Check if there's a pending invitation

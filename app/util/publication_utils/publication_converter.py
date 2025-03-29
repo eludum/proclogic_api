@@ -227,7 +227,7 @@ class PublicationConverter(BaseModel):
         publication: Publication,
         company: Optional[Company] = None,
         documents: Optional[Dict[str, Any]] = None,
-        forum: Optional[Dict[str, Any]] = None,
+        # forum: Optional[Dict[str, Any]] = None,
     ) -> PublicationOut:
         """Convert a publication to the PublicationOut schema"""
         pub_text = cls.extract_text(publication)
@@ -270,8 +270,8 @@ class PublicationConverter(BaseModel):
         if documents:
             output.documents = documents
 
-        if forum:
-            output.forum = forum
+        # if forum:
+        #     output.forum = forum
 
         return output
 

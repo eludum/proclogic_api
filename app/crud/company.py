@@ -71,8 +71,6 @@ def create_company(
         logging.error("Error creating company: %s", e)
         session.rollback()
         return None
-    finally:
-        session.close()
 
 
 def update_company(
@@ -146,8 +144,6 @@ def update_company(
         session.rollback()
         logging.error("Error updating company: %s", e)
         return None
-    finally:
-        session.close()
 
 
 def get_company_by_vat_number(vat_number: str, session: Session) -> Optional[Company]:
@@ -165,8 +161,6 @@ def get_company_by_vat_number(vat_number: str, session: Session) -> Optional[Com
     except Exception as e:
         logging.error("Error getting company: %s", e)
         return None
-    finally:
-        session.close()
 
 
 def get_company_by_email(email: str, session: Session) -> Optional[Company]:
@@ -184,8 +178,6 @@ def get_company_by_email(email: str, session: Session) -> Optional[Company]:
     except Exception as e:
         logging.error("Error getting company: %s", e)
         return None
-    finally:
-        session.close()
 
 
 def get_company_recommended_publications(company_vat_number: str, session: Session):
@@ -229,8 +221,6 @@ def get_company_recommended_publications(company_vat_number: str, session: Sessi
     except Exception as e:
         logging.error("Error getting recommended publications: %s", e)
         return []
-    finally:
-        session.close()
 
 
 def get_company_saved_publications(company_vat_number: str, session: Session):
@@ -314,8 +304,6 @@ def save_publication_for_company(
         logging.error("Error saving publication for company: %s", e)
         session.rollback()
         return False
-    finally:
-        session.close()
 
 
 def unsave_publication_for_company(
@@ -342,8 +330,6 @@ def unsave_publication_for_company(
         logging.error("Error unsaving publication for company: %s", e)
         session.rollback()
         return False
-    finally:
-        session.close()
 
 
 def mark_publication_as_viewed(
@@ -382,8 +368,6 @@ def mark_publication_as_viewed(
         logging.error("Error marking publication as viewed: %s", e)
         session.rollback()
         return False
-    finally:
-        session.close()
 
 
 def get_all_companies(session: Session) -> List[Company]:
@@ -400,5 +384,3 @@ def get_all_companies(session: Session) -> List[Company]:
     except Exception as e:
         logging.error("Error getting all companies: %s", e)
         return []
-    finally:
-        session.close()

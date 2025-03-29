@@ -44,20 +44,21 @@ async def convert_publication_to_out_schema_details_paid(
 ) -> PublicationOut:
     """Convert a publication with detailed info to output schema with company-specific data"""
     # Get documents and forum info
+    # TODO: only pass file names and lot info put  them in seperate tab and load in the background
     async with httpx.AsyncClient() as client:
         documents = await get_publication_workspace_documents(
             client, publication.publication_workspace_id
         )
-        forum = await get_publication_workspace_forum(
-            client, publication.publication_workspace_id
-        )
+        # forum = await get_publication_workspace_forum(
+        #     client, publication.publication_workspace_id
+        # )
 
     # Convert documents to a serializable format
     serializable_documents = {}
     if documents:
         for filename, file_data in documents.items():
             try:
-                # Create a metadata object without the actual binary content
+                # Create a metadata object
                 serializable_documents[filename] = {
                     "filename": filename,
                     "size": (
@@ -68,10 +69,7 @@ async def convert_publication_to_out_schema_details_paid(
                     "content_type": getattr(
                         file_data, "content_type", "application/octet-stream"
                     ),
-                    # Don't include the actual content in the response
                 }
-
-                # Reset file position if it's a file-like object
                 if hasattr(file_data, "seek"):
                     file_data.seek(0)
             except Exception as e:
@@ -83,7 +81,7 @@ async def convert_publication_to_out_schema_details_paid(
         publication=publication,
         company=company,
         documents=serializable_documents,
-        forum=forum,
+        # forum=forum,
     )
 
 
