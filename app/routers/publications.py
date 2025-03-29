@@ -488,7 +488,6 @@ async def mark_publication_viewed(
 @publications_router.get(
     "/publications/publication/{publication_workspace_id}/document/{filename}",
 )
-#TODO: implement this in the frontend
 async def get_publication_document(
     publication_workspace_id: str,
     filename: str,
@@ -521,19 +520,11 @@ async def get_publication_document(
     if not documents or filename not in documents:
         raise HTTPException(status_code=404, detail="Document not found")
 
+    # Get the file object - it will always be a BytesIO object now
     file_data = documents[filename]
 
-    # Handle different file types
-    if hasattr(file_data, "read") and hasattr(file_data, "seek"):
-        # It's a file-like object
-        file_data.seek(0)
-        content = file_data.read()
-    elif isinstance(file_data, dict) and "content" in file_data:
-        # It's a dict with content
-        content = file_data["content"]
-    else:
-        # Unexpected format
-        raise HTTPException(status_code=500, detail="Unable to read document")
+    # Reset position to start of file
+    file_data.seek(0)
 
     # Determine content type
     content_type = "application/octet-stream"  # Default
@@ -550,9 +541,9 @@ async def get_publication_document(
     elif filename.lower().endswith(".png"):
         content_type = "image/png"
 
-    # Return the file as a streaming response
+    # Return the file directly as a streaming response
     return StreamingResponse(
-        io.BytesIO(content),
+        file_data,  # We can pass the BytesIO object directly
         media_type=content_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

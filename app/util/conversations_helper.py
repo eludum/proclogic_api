@@ -15,6 +15,7 @@ from app.models.conversation_models import Conversation
 from app.models.publication_models import Publication
 from app.util.publication_utils.publication_converter import PublicationConverter
 from app.util.pubproc import get_publication_workspace_documents
+from proclogic_api.app.util.redis_utils import prepare_files_for_vector_store
 
 settings = Settings()
 
@@ -403,67 +404,8 @@ async def setup_assistant(
                     )
                     vector_store_id = vector_store.id
                     
-                    # Filter and prepare files for upload (only accepted formats)
-                    file_objects = []
-                    for filename, file_data in filesmap.items():
-                        # Extract the extension in lowercase for comparison
-                        file_extension = ""
-                        if "." in filename:
-                            file_extension = filename.split(".")[-1].lower()
-                        
-                        # Check if this extension is in the accepted formats list (normalize both for comparison)
-                        accepted_formats = [fmt.lstrip(".").lower() for fmt in settings.openai_vector_store_accepted_formats]
-                        if file_extension not in accepted_formats:
-                            continue
-
-                        try:
-                            # Handle different file object types
-                            if hasattr(file_data, "read") and hasattr(file_data, "seek"):
-                                file_data.seek(0)
-                                content = file_data.read()
-                                byte_io = BytesIO(content)
-                                
-                                # Ensure lowercase extension in name
-                                if hasattr(file_data, "name") and file_data.name:
-                                    original_name = file_data.name
-                                    if "." in original_name:
-                                        name_parts = original_name.rsplit(".", 1)
-                                        byte_io.name = f"{name_parts[0]}.{name_parts[1].lower()}"
-                                    else:
-                                        byte_io.name = original_name
-                                else:
-                                    # Use the filename with lowercase extension
-                                    if "." in filename:
-                                        name_parts = filename.rsplit(".", 1)
-                                        byte_io.name = f"{name_parts[0]}.{name_parts[1].lower()}"
-                                    else:
-                                        byte_io.name = filename
-                                
-                                file_objects.append(byte_io)
-                            elif isinstance(file_data, dict) and "content" in file_data:
-                                content = file_data["content"]
-                                if isinstance(content, bytes):
-                                    byte_io = BytesIO(content)
-                                    
-                                    # Ensure lowercase extension in name
-                                    if "name" in file_data and file_data["name"]:
-                                        original_name = file_data["name"]
-                                        if "." in original_name:
-                                            name_parts = original_name.rsplit(".", 1)
-                                            byte_io.name = f"{name_parts[0]}.{name_parts[1].lower()}"
-                                        else:
-                                            byte_io.name = original_name
-                                    else:
-                                        # Use the filename with lowercase extension
-                                        if "." in filename:
-                                            name_parts = filename.rsplit(".", 1)
-                                            byte_io.name = f"{name_parts[0]}.{name_parts[1].lower()}"
-                                        else:
-                                            byte_io.name = filename
-                                    
-                                    file_objects.append(byte_io)
-                        except Exception as e:
-                            logging.error(f"Error processing file {filename}: {e}")
+                    # Use the utility function to prepare files for the vector store
+                    file_objects = prepare_files_for_vector_store(filesmap)
 
                     # Upload files if we have any valid ones
                     if file_objects:
@@ -507,7 +449,6 @@ async def setup_assistant(
         raise HTTPException(
             status_code=500, detail=f"Failed to set up AI assistant: {str(e)}"
         )
-
 
 def get_publication_title(publication: Publication) -> str:
     """Extract publication title from publication object."""

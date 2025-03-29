@@ -45,6 +45,7 @@ async def convert_publication_to_out_schema_details_paid(
     """Convert a publication with detailed info to output schema with company-specific data"""
     # Get documents and forum info
     # TODO: only pass file names and lot info put  them in seperate tab and load in the background
+    serializable_documents = {}
     async with httpx.AsyncClient() as client:
         documents = await get_publication_workspace_documents(
             client, publication.publication_workspace_id
@@ -53,28 +54,12 @@ async def convert_publication_to_out_schema_details_paid(
         #     client, publication.publication_workspace_id
         # )
 
-    # Convert documents to a serializable format
-    serializable_documents = {}
-    if documents:
-        for filename, file_data in documents.items():
-            try:
-                # Create a metadata object
+        if documents:
+            for filename, _ in documents.items():
                 serializable_documents[filename] = {
-                    "filename": filename,
-                    "size": (
-                        len(file_data.read())
-                        if hasattr(file_data, "read")
-                        else len(file_data.get("content", b""))
-                    ),
-                    "content_type": getattr(
-                        file_data, "content_type", "application/octet-stream"
-                    ),
+                    "filename": filename
                 }
-                if hasattr(file_data, "seek"):
-                    file_data.seek(0)
-            except Exception as e:
-                logging.error(f"Error processing document {filename}: {e}")
-                continue
+
 
     # Use the converter with all available data
     return PublicationConverter.to_output_schema(

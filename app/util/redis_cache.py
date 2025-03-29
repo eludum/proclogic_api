@@ -2,32 +2,27 @@ import pickle
 from functools import wraps
 from typing import Callable
 import logging
-import io
 
-from app.config.redis_manager import get_redis_client, get_binary_redis_client
+from app.config.redis_manager import get_redis_client
+from proclogic_api.app.util.redis_utils import decode_base64_to_bytesio, encode_file_to_base64
 
-# Cache TTL in seconds
+# Cache TTL in seconds (7 days default)
 CACHE_TTL = 7 * 24 * 60 * 60
 
 
 def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
     """
     Decorator for caching async function results in Redis.
+    Files will be stored as base64 encoded strings.
     """
-
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            # Check if we're caching documents
-            is_document_func = "documents" in key_prefix
-
             # Extract the ID from arguments
             if len(args) > id_arg_index:
                 entity_id = args[id_arg_index]
             elif "publication_workspace_id" in kwargs:
                 entity_id = kwargs["publication_workspace_id"]
-            elif "forum_id" in kwargs:
-                entity_id = kwargs["forum_id"]
             else:
                 # If no ID found, just call the original function
                 return await func(*args, **kwargs)
@@ -35,21 +30,40 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
             # Create a cache key
             cache_key = f"{key_prefix}:{entity_id}"
 
-            # Get appropriate Redis client based on data type
-            if is_document_func or "forum" in key_prefix:
-                # Use binary client for document data and forum data
-                redis_client = get_binary_redis_client()
-            else:
-                # Use text client for other data types
-                redis_client = get_redis_client()
+            # Get Redis client
+            redis_client = get_redis_client()
 
             # Try to get from cache
             try:
-                raw_data = redis_client.get(cache_key)
-                if raw_data:
+                cached_data = redis_client.get(cache_key)
+                if cached_data:
                     try:
-                        # Always use pickle.loads directly on raw_data for binary data
-                        return pickle.loads(raw_data)
+                        data = pickle.loads(cached_data)
+                        
+                        # Special handling for document data
+                        if key_prefix == "pubproc:documents" and isinstance(data, dict):
+                            # Convert base64 back to file objects
+                            reconstructed_files = {}
+                            for filename, file_data in data.items():
+                                if isinstance(file_data, dict) and "content_base64" in file_data:
+                                    # Create BytesIO from base64
+                                    file_obj = decode_base64_to_bytesio(file_data["content_base64"])
+                                    
+                                    # Set additional metadata
+                                    if "name" in file_data:
+                                        file_obj.name = file_data["name"]
+                                    else:
+                                        file_obj.name = filename
+                                        
+                                    reconstructed_files[filename] = file_obj
+                                else:
+                                    # Handle older cache format or malformed data
+                                    reconstructed_files[filename] = file_data
+                            
+                            return reconstructed_files
+                        else:
+                            # Return other data types as is
+                            return data
                     except Exception as e:
                         logging.warning(f"Error unpickling data from cache: {str(e)}")
             except Exception as e:
@@ -61,35 +75,26 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
             # Cache the result if we got something
             if result:
                 try:
-                    if is_document_func:
-                        # Serialize file objects
+                    if key_prefix == "pubproc:documents" and isinstance(result, dict):
+                        # For document data, encode files to base64
                         serialized_files = {}
-                        for file_name, file_obj in result.items():
+                        for filename, file_obj in result.items():
                             try:
-                                # Save current position
-                                current_pos = file_obj.tell()
-                                # Read all content
-                                file_obj.seek(0, io.SEEK_SET)
-                                content = file_obj.read()
-                                # Restore position
-                                file_obj.seek(current_pos)
-
-                                serialized_files[file_name] = {
-                                    "content": content,
-                                    "name": getattr(file_obj, "name", file_name),
+                                # Store as a dict with base64 and metadata
+                                serialized_files[filename] = {
+                                    "content_base64": encode_file_to_base64(file_obj),
+                                    "name": getattr(file_obj, "name", filename),
                                 }
                             except Exception as e:
-                                logging.warning(
-                                    f"Error serializing {file_name}: {str(e)}"
-                                )
+                                logging.warning(f"Error serializing {filename}: {str(e)}")
                                 continue
-
+                        
                         if serialized_files:
                             redis_client.set(
                                 cache_key, pickle.dumps(serialized_files), ex=ttl
                             )
                     else:
-                        # For forum and all other data types
+                        # For all other data types
                         redis_client.set(cache_key, pickle.dumps(result), ex=ttl)
                 except Exception as e:
                     logging.warning(f"Cache storage failed for {cache_key}: {str(e)}")
@@ -105,16 +110,12 @@ def invalidate_publication_cache(publication_workspace_id: str):
     """
     Invalidate Redis cache entries related to a specific publication workspace ID.
     """
-    # Need to delete from both Redis clients to ensure complete cleanup
-    binary_redis = get_binary_redis_client()
-    text_redis = get_redis_client()
+    redis_client = get_redis_client()
 
     keys_to_delete = [
         f"pubproc:documents:{publication_workspace_id}",
-        f"pubproc:forum:{publication_workspace_id}",
     ]
 
-    # Delete keys from both clients
+    # Delete keys
     if keys_to_delete:
-        binary_redis.delete(*keys_to_delete)
-        text_redis.delete(*keys_to_delete)
+        redis_client.delete(*keys_to_delete)

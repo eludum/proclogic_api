@@ -10,6 +10,7 @@ from app.config.settings import Settings
 from app.schemas.company_schemas import CompanySchema
 from app.schemas.publication_schemas import PublicationSchema
 from app.util.publication_utils.publication_converter import PublicationConverter
+from proclogic_api.app.util.redis_utils import prepare_files_for_vector_store
 
 settings = Settings()
 
@@ -300,10 +301,10 @@ def summarize_publication_with_files(
     publication: PublicationSchema, xml: str, filesmap: dict, client: OpenAI = None
 ) -> tuple[str, str, str]:
     client = client or get_openai_client()
-    
+
     structured_prompt = PublicationConverter.to_ai_prompt_format(
-            publication_schema=publication
-        )
+        publication_schema=publication
+    )
 
     # Create a prompt for summarization
     prompt = f"""
@@ -317,60 +318,8 @@ def summarize_publication_with_files(
     """
     try:
         if filesmap:
-            # Filter files with the right extensions - ensure consistent lowercase for extension comparison
-            filtered_filesmap = {}
-            for file_name, file_data in filesmap.items():
-                # Get extension in lowercase for comparison
-                if "." in file_name:
-                    extension = file_name.split(".")[-1].lower()
-                    if extension in [ext.lstrip(".") for ext in settings.openai_vector_store_accepted_formats]:
-                        filtered_filesmap[file_name] = file_data
-
-            # Make sure we're passing file objects, not dictionaries
-            file_objects = []
-            for file_name, file_data in filtered_filesmap.items():
-                try:
-                    # If it's already an IO object, use it directly
-                    if hasattr(file_data, "read") and hasattr(file_data, "seek"):
-                        file_data.seek(0)  # Reset file position
-                        # Ensure the file object has a name attribute with lowercase extension
-                        if hasattr(file_data, "name"):
-                            original_name = file_data.name
-                            if "." in original_name:
-                                name_parts = original_name.rsplit(".", 1)
-                                file_data.name = f"{name_parts[0]}.{name_parts[1].lower()}"
-                        else:
-                            # If no name, use the filename with lowercase extension
-                            if "." in file_name:
-                                name_parts = file_name.rsplit(".", 1)
-                                file_data.name = f"{name_parts[0]}.{name_parts[1].lower()}"
-                            else:
-                                file_data.name = file_name
-                        file_objects.append(file_data)
-                    # If it's a dictionary with 'content', create a new BytesIO object
-                    elif isinstance(file_data, dict) and "content" in file_data:
-                        content = file_data["content"]
-                        if isinstance(content, bytes):
-                            file_obj = BytesIO(content)
-                            # Set name with lowercase extension
-                            if "name" in file_data:
-                                original_name = file_data["name"]
-                                if "." in original_name:
-                                    name_parts = original_name.rsplit(".", 1)
-                                    file_obj.name = f"{name_parts[0]}.{name_parts[1].lower()}"
-                                else:
-                                    file_obj.name = original_name
-                            else:
-                                # Use filename with lowercase extension
-                                if "." in file_name:
-                                    name_parts = file_name.rsplit(".", 1)
-                                    file_obj.name = f"{name_parts[0]}.{name_parts[1].lower()}"
-                                else:
-                                    file_obj.name = file_name
-                            file_objects.append(file_obj)
-                except Exception as file_error:
-                    logging.error(f"Error processing file {file_name}: {file_error}")
-                    continue
+            # Use the utility function to prepare files for the vector store
+            file_objects = prepare_files_for_vector_store(filesmap)
 
             if file_objects:
                 vector_store = client.vector_stores.create(
@@ -379,7 +328,7 @@ def summarize_publication_with_files(
 
                 file_batch = client.vector_stores.file_batches.upload_and_poll(
                     vector_store_id=vector_store.id,
-                    files=file_objects,  # Pass the list of file objects
+                    files=file_objects,
                 )
 
                 if file_batch.status != "completed":
@@ -427,7 +376,9 @@ def summarize_publication_with_files(
             logging.error("No response from assistant.")
             return None, None, None
 
-        message_content = handle_json_response_formats(messages[0].content[0].text.value)
+        message_content = handle_json_response_formats(
+            messages[0].content[0].text.value
+        )
 
         summary = message_content.get("summary", "Geen samenvatting beschikbaar.")
         estimated_value = message_content.get("estimated_value", 0)
@@ -439,7 +390,7 @@ def summarize_publication_with_files(
         ]
 
         return estimated_value, summary, "\n".join(citations)
-    
+
     except Exception as e:
         logging.error(f"Failed to summarize files: {e}")
         return None, None, None
