@@ -4,7 +4,7 @@ from typing import Callable
 import logging
 
 from app.config.redis_manager import get_redis_client
-from proclogic_api.app.util.redis_utils import (
+from app.util.redis_utils import (
     decode_base64_to_bytesio,
     encode_file_to_base64,
 )

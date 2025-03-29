@@ -10,7 +10,7 @@ from app.config.settings import Settings
 from app.schemas.company_schemas import CompanySchema
 from app.schemas.publication_schemas import PublicationSchema
 from app.util.publication_utils.publication_converter import PublicationConverter
-from proclogic_api.app.util.redis_utils import prepare_files_for_vector_store
+from app.util.redis_utils import prepare_files_for_vector_store
 
 settings = Settings()
 

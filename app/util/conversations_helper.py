@@ -15,7 +15,7 @@ from app.models.conversation_models import Conversation
 from app.models.publication_models import Publication
 from app.util.publication_utils.publication_converter import PublicationConverter
 from app.util.pubproc import get_publication_workspace_documents
-from proclogic_api.app.util.redis_utils import prepare_files_for_vector_store
+from app.util.redis_utils import prepare_files_for_vector_store
 
 settings = Settings()
 
