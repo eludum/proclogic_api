@@ -1,7 +1,11 @@
 import base64
-from io import BytesIO
 import logging
-from typing import Union
+from io import BytesIO
+from typing import Dict, List, Union
+
+from app.config.settings import Settings
+
+settings = Settings()
 
 
 def encode_file_to_base64(file_obj: Union[BytesIO, bytes]) -> str:
@@ -48,15 +52,6 @@ def decode_base64_to_bytesio(base64_str: str, filename: str = None) -> io.BytesI
     except Exception as e:
         logging.error(f"Error decoding base64 to file: {e}")
         raise
-
-
-import logging
-from io import BytesIO
-from typing import Dict, List, Any
-
-from app.config.settings import Settings
-
-settings = Settings()
 
 
 def prepare_files_for_vector_store(

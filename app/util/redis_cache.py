@@ -4,9 +4,13 @@ from typing import Callable
 import logging
 
 from app.config.redis_manager import get_redis_client
-from proclogic_api.app.util.redis_utils import decode_base64_to_bytesio, encode_file_to_base64
+from proclogic_api.app.util.redis_utils import (
+    decode_base64_to_bytesio,
+    encode_file_to_base64,
+)
 
 # Cache TTL in seconds (7 days default)
+# TODO: increase, check daily for saved publications?
 CACHE_TTL = 7 * 24 * 60 * 60
 
 
@@ -15,6 +19,7 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
     Decorator for caching async function results in Redis.
     Files will be stored as base64 encoded strings.
     """
+
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -39,27 +44,32 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
                 if cached_data:
                     try:
                         data = pickle.loads(cached_data)
-                        
+
                         # Special handling for document data
                         if key_prefix == "pubproc:documents" and isinstance(data, dict):
                             # Convert base64 back to file objects
                             reconstructed_files = {}
                             for filename, file_data in data.items():
-                                if isinstance(file_data, dict) and "content_base64" in file_data:
+                                if (
+                                    isinstance(file_data, dict)
+                                    and "content_base64" in file_data
+                                ):
                                     # Create BytesIO from base64
-                                    file_obj = decode_base64_to_bytesio(file_data["content_base64"])
-                                    
+                                    file_obj = decode_base64_to_bytesio(
+                                        file_data["content_base64"]
+                                    )
+
                                     # Set additional metadata
                                     if "name" in file_data:
                                         file_obj.name = file_data["name"]
                                     else:
                                         file_obj.name = filename
-                                        
+
                                     reconstructed_files[filename] = file_obj
                                 else:
                                     # Handle older cache format or malformed data
                                     reconstructed_files[filename] = file_data
-                            
+
                             return reconstructed_files
                         else:
                             # Return other data types as is
@@ -86,9 +96,11 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
                                     "name": getattr(file_obj, "name", filename),
                                 }
                             except Exception as e:
-                                logging.warning(f"Error serializing {filename}: {str(e)}")
+                                logging.warning(
+                                    f"Error serializing {filename}: {str(e)}"
+                                )
                                 continue
-                        
+
                         if serialized_files:
                             redis_client.set(
                                 cache_key, pickle.dumps(serialized_files), ex=ttl
