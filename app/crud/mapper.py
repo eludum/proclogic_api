@@ -10,7 +10,7 @@ from app.schemas.publication_schemas import CompanyPublicationMatchSchema
 from app.util.publication_utils.publication_converter import PublicationConverter
 from app.util.pubproc import (
     get_publication_workspace_documents,
-    get_publication_workspace_forum,
+    # get_publication_workspace_forum,
 )
 
 settings = Settings()
