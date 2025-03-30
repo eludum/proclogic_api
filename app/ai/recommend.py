@@ -15,6 +15,9 @@ settings = Settings()
 
 
 def handle_json_response_formats(response_text: str) -> dict:
+    """
+    Parse a JSON response from the OpenAI API
+    """
     if "```json" in response_text:
         json_start = response_text.find("```json\n") + len("```json\n")
         json_end = response_text.rfind("\n```")
@@ -46,7 +49,7 @@ def extract_data_from_xml(xml_content: str) -> Dict[str, Any]:
 
         # Extract winner information
         try:
-            # Look for winner organization in NoticeResult/LotTender/TenderingParty
+            # Look for winner organization in NoticeResult/LotTender/TenderingParty/Tenderer
             winner_paths = [
                 ".//efac:NoticeResult/efac:LotTender/efac:TenderingParty/efac:Tenderer",
                 ".//efac:NoticeResult/efac:TenderingParty/efac:Tenderer",
@@ -73,6 +76,32 @@ def extract_data_from_xml(xml_content: str) -> Dict[str, Any]:
         except Exception as e:
             logging.warning(f"Error extracting winner: {e}")
 
+        # Extract supplier information
+        try:
+            # Look for supplier organization in the Organizations section
+            supplier_elements = root.findall(
+                ".//efac:Organizations/efac:Organization/efac:Company", namespaces
+            )
+
+            suppliers = []
+            for org in supplier_elements:
+                party_name = org.find(".//cac:PartyName/cbc:Name", namespaces)
+                if party_name is not None:
+                    # Try to get company ID if available
+                    company_id = "Unknown"
+                    company_id_elem = org.find(
+                        ".//cac:PartyLegalEntity/cbc:CompanyID", namespaces
+                    )
+                    if company_id_elem is not None:
+                        company_id = company_id_elem.text
+
+                    suppliers.append({"name": party_name.text, "id": company_id})
+
+            if suppliers:
+                result["suppliers"] = suppliers
+        except Exception as e:
+            logging.warning(f"Error extracting suppliers: {e}")
+
         # Extract contract value
         try:
             # Try different paths for total amount
@@ -95,6 +124,74 @@ def extract_data_from_xml(xml_content: str) -> Dict[str, Any]:
     except Exception as e:
         logging.error(f"Failed to parse XML with ElementTree: {e}")
         return {}
+
+
+def summarize_publication_award(xml: str, client: OpenAI = None) -> dict:
+    """
+    Extract award information from publication XML.
+    First tries to parse with ElementTree, falls back to AI if needed.
+
+    Returns:
+        dict: Contains winner (str), suppliers (list), and value (int)
+    """
+    # First try to extract data using Python's XML parser
+    extracted_data = extract_data_from_xml(xml)
+
+    if (
+        extracted_data
+        and "value" in extracted_data
+        and ("winner" in extracted_data or "suppliers" in extracted_data)
+    ):
+        logging.info("Successfully extracted award data using XML parser")
+        return extracted_data
+
+    # Fall back to using AI if Python parsing was unsuccessful
+    logging.info("Falling back to AI for award data extraction")
+    client = client or get_openai_client()
+
+    completion = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": """
+                    You are a public procurement assistant tasked with summarizing the award of a publication.
+                    Extract the winner (contractor name), suppliers, and the contract value from the XML.
+                    If multiple winners or values exist, choose the primary one.
+                    Respond in JSON with these keys:
+                    - winner (string): The name of the winning contractor if specified
+                    - suppliers (array): List of all suppliers mentioned in the XML, each with a name and identifier if available
+                    - value (integer): The contract value in euros as an integer (no decimal places)
+                    - date (string, optional): The award date if available in YYYY-MM-DD format
+                    - contract_ref (string, optional): The contract reference number if available
+                """,
+            },
+            {
+                "role": "user",
+                "content": f"Extract the winner name, suppliers and contract value from this XML: {xml}",
+            },
+        ],
+        response_format={"type": "json_object"},
+        temperature=0.1,  # Lower temperature for more factual extraction
+    )
+
+    try:
+        result = handle_json_response_formats(completion.choices[0].message.content)
+
+        # Ensure required fields with proper types
+        if "winner" not in result:
+            result["winner"] = "Unknown"
+
+        if "suppliers" not in result or not isinstance(result["suppliers"], list):
+            result["suppliers"] = []
+
+        if "value" not in result or not isinstance(result["value"], (int, float)):
+            result["value"] = 0
+
+        return result
+    except (json.JSONDecodeError, KeyError) as e:
+        logging.error(f"Error extracting award data via AI: {e}")
+        return {"winner": "Unknown", "suppliers": [], "value": 0}
 
 
 def get_recommendation(
@@ -177,64 +274,6 @@ def get_recommendation(
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         logging.error(f"Error processing recommendation result: {e}")
         return False, 0.0
-
-
-def summarize_publication_award(xml: str, client: OpenAI = None) -> dict:
-    """
-    Extract award information from publication XML.
-    First tries to parse with ElementTree, falls back to AI if needed.
-
-    Returns:
-        dict: Contains winner (str) and value (int)
-    """
-    # First try to extract data using Python's XML parser
-    extracted_data = extract_data_from_xml(xml)
-
-    if extracted_data and "winner" in extracted_data and "value" in extracted_data:
-        logging.info("Successfully extracted award data using XML parser")
-        return extracted_data
-
-    # Fall back to using AI if Python parsing was unsuccessful
-    logging.info("Falling back to AI for award data extraction")
-    client = client or get_openai_client()
-
-    completion = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                # TODO: do something extra with additional info
-                "role": "system",
-                "content": """
-                    You are a public procurement assistant tasked with summarizing the award of a publication.
-                    Extract the winner (contractor name) and the contract value from the XML.
-                    If multiple winners or values exist, choose the primary one.
-                    Respond in JSON with these keys:
-                    - winner (string): The name of the winning contractor
-                    - value (integer): The contract value in euros as an integer (no decimal places)
-                    - date (string, optional): The award date if available in YYYY-MM-DD format
-                    - contract_ref (string, optional): The contract reference number if available
-                """,
-            },
-            {
-                "role": "user",
-                "content": f"Extract the winner name and contract value from this XML: {xml}",
-            },
-        ],
-        response_format={"type": "json_object"},
-        temperature=0.1,  # Lower temperature for more factual extraction
-    )
-
-    try:
-        result = handle_json_response_formats(completion.choices[0].message.content)
-        # Ensure we have both required fields with proper types
-        if "winner" not in result:
-            result["winner"] = "Unknown"
-        if "value" not in result or not isinstance(result["value"], (int, float)):
-            result["value"] = 0
-        return result
-    except (json.JSONDecodeError, KeyError) as e:
-        logging.error(f"Error extracting award data via AI: {e}")
-        return {"winner": "Unknown", "value": 0}
 
 
 def summarize_publication_without_files(
