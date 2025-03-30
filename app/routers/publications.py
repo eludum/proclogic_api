@@ -1,16 +1,9 @@
 from datetime import date
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from fastapi.security import HTTPBearer
-import httpx
-
-from fastapi.responses import StreamingResponse
-import io
-
-
 import app.crud.company as crud_company
 import app.crud.publication as crud_publication
+import httpx
 from app.config.postgres import get_session
 from app.config.settings import Settings
 from app.crud.mapper import (
@@ -18,12 +11,15 @@ from app.crud.mapper import (
     convert_publication_to_out_schema_details_paid,
     convert_publications_to_out_schema_list_free,
     convert_publications_to_out_schema_list_paid,
+    fetch_publication_documents,
 )
 from app.schemas.publication_out_schemas import PublicationOut
 from app.util.clerk import AuthUser, get_auth_user
-from fastapi_pagination import Page, paginate
-
 from app.util.pubproc import get_publication_workspace_documents
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPBearer
+from fastapi_pagination import Page, paginate
 
 settings = Settings()
 publications_router = APIRouter()
@@ -483,6 +479,36 @@ async def mark_publication_viewed(
             )
 
         return {"message": "Publication marked as viewed"}
+
+
+@publications_router.get(
+    "/publications/publication/{publication_workspace_id}/documents",
+)
+async def get_publication_documents(
+    publication_workspace_id: str,
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """Get document list for a specific publication."""
+    if not auth_user.email:
+        raise HTTPException(status_code=400, detail="User email not available")
+
+    with get_session() as session:
+        company = crud_company.get_company_by_email(
+            email=auth_user.email, session=session
+        )
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Check if publication exists
+        publication = crud_publication.get_publication_by_workspace_id(
+            publication_workspace_id=publication_workspace_id, session=session
+        )
+        if not publication:
+            raise HTTPException(status_code=404, detail="Publication not found")
+
+    documents = await fetch_publication_documents(publication_workspace_id)
+
+    return {"documents": documents}
 
 
 @publications_router.get(

@@ -27,6 +27,7 @@ class PublicationOut(BaseModel):
     accreditations: Optional[dict] = None
     estimated_value: int = 0
     documents: Optional[dict] = None
+    documents_loading: Optional[bool] = None
     # TODO: add external links
     external_links: Optional[str] = None
 
