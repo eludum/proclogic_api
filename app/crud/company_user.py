@@ -1,12 +1,12 @@
-from datetime import datetime
 import logging
-from typing import List, Optional, Dict, Any
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
+from clerk_backend_api import Clerk, CreateInvitationRequestBody, GetUserListRequest
 from sqlalchemy.orm import Session
 
 import app.crud.company as crud_company
 from app.config.settings import Settings
-from clerk_backend_api import Clerk, CreateInvitationRequestBody, GetUserListRequest, ListInvitationsRequest
 
 settings = Settings()
 
@@ -143,10 +143,12 @@ def get_company_users(
                                     "email": user.email_addresses[0].email_address,
                                     "first_name": user.first_name,
                                     "last_name": user.last_name,
-                                    
-
-                                    "created_at": datetime.fromtimestamp(user.created_at / 1000).strftime("%m/%d/%Y, %H:%M:%S"),
-                                    "last_sign_in_at": datetime.fromtimestamp(user.last_sign_in_at / 1000).strftime("%m/%d/%Y, %H:%M:%S"),
+                                    "created_at": datetime.fromtimestamp(
+                                        user.created_at / 1000
+                                    ).strftime("%m/%d/%Y, %H:%M:%S"),
+                                    "last_sign_in_at": datetime.fromtimestamp(
+                                        user.last_sign_in_at / 1000
+                                    ).strftime("%m/%d/%Y, %H:%M:%S"),
                                     "status": "active",
                                 }
                             )
@@ -155,9 +157,7 @@ def get_company_users(
                     else:
                         # User invited but not yet registered
                         # Check if there's a pending invitation
-                        invitations = clerk.invitations.list(
-                            query=email
-                        )
+                        invitations = clerk.invitations.list(query=email)
 
                         if invitations is not []:
                             for invitation in invitations:
@@ -167,7 +167,9 @@ def get_company_users(
                                         "email": email,
                                         "first_name": None,
                                         "last_name": None,
-                                        "created_at": datetime.fromtimestamp(invitation.created_at / 1000).strftime("%m/%d/%Y, %H:%M:%S"),
+                                        "created_at": datetime.fromtimestamp(
+                                            invitation.created_at / 1000
+                                        ).strftime("%m/%d/%Y, %H:%M:%S"),
                                         "last_sign_in_at": None,
                                         "status": "invited",
                                     }

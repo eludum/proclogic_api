@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session, aliased, joinedload
 from app.models.company_models import Company
 from app.models.kanban_models import KanbanStatus, PublicationStatus
 from app.models.publication_models import Publication
-from app.schemas.publication_out_schemas import PublicationOut
 from app.util.publication_utils.publication_converter import PublicationConverter
 
 

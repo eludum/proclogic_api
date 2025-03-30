@@ -1,4 +1,3 @@
-from io import BytesIO
 import logging
 import json
 import xml.etree.ElementTree as ET
@@ -265,6 +264,8 @@ def summarize_publication_without_files(
     
     Create a concise but complete summary that describes the most important aspects of this procurement.
     """
+
+    # TODO: add scrape for publication value here and function below
 
     completion = client.chat.completions.create(
         model="gpt-4o-mini",

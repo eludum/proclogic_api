@@ -18,7 +18,6 @@ from app.config.postgres import get_session
 from app.crud.mapper import convert_company_to_schema
 from app.models.publication_models import CompanyPublicationMatch, Publication
 from app.schemas.company_schemas import CompanyPublicationMatchSchema, CompanySchema
-from app.schemas.publication_schemas import PublicationSchema
 from app.util.clerk import AuthUser, get_auth_user
 from app.util.messages_helper import send_recommendation_notification
 from app.util.publication_utils.publication_converter import PublicationConverter
