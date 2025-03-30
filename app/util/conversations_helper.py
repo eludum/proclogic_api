@@ -104,6 +104,7 @@ async def process_ai_message(
 
 
 # TODO: fix streaming to be true streaming (see SDK)
+# TODO: delete all vector stores periodically
 async def stream_ai_response(
     conversation: Conversation,
     user_message: str,
