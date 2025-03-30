@@ -22,6 +22,7 @@ async def convert_publications_to_out_schema_list_free(
     publication: Publication,
 ) -> PublicationOut:
     """Convert a publication to the output schema without company-specific data"""
+    # TODO: only get the info you need, speed up the proces
     return PublicationConverter.to_output_schema(publication)
 
 
@@ -29,6 +30,7 @@ async def convert_publications_to_out_schema_list_paid(
     company: Company, publication: Publication
 ) -> PublicationOut:
     """Convert a publication to the output schema with company-specific data"""
+    # TODO: only get the info you need, speed up the proces
     return PublicationConverter.to_output_schema(publication, company)
 
 
@@ -36,6 +38,7 @@ async def convert_publication_to_out_schema_details_free(
     publication: Publication,
 ) -> PublicationOut:
     """Convert a publication with detailed info to output schema without company-specific data"""
+    # TODO: only get the info you need, speed up the proces
     return PublicationConverter.to_output_schema(publication)
 
 
