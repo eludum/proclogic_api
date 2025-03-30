@@ -2,13 +2,13 @@ import asyncio
 import logging
 import uuid
 import zipfile
-from datetime import date, timedelta
+from datetime import date
 from io import BytesIO
 from typing import List
+from os import path
 
 import httpx
 import numpy as np
-import pycron
 from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
@@ -35,6 +35,7 @@ settings = Settings()
 async def fetch_pubproc_data() -> None:
     while True:
         # TODO: scan all saved publications and check if they have changed documents or forum
+        # TODO: USE AP SCHEDULER NOT PYCRON
         try:
             async with httpx.AsyncClient() as client:
                 await retrieve_publications(client=client)
@@ -384,7 +385,7 @@ async def get_publication_workspace_documents(
             settings.pubproc_server
             + settings.path_dos_api
             + f"/publication-workspaces/{publication_workspace_id}/archive",
-            # TODO: /publication-workspaces/{publication-workspace-id}/urls	
+            # TODO: /publication-workspaces/{publication-workspace-id}/urls
             headers=headers,
             timeout=300,  # 5 minutes
         )
@@ -401,7 +402,7 @@ async def get_publication_workspace_documents(
                 file_content = primary_zip.read(file_name)
 
                 # Get just the base filename without folder path
-                base_file_name = os.path.basename(file_name)
+                base_file_name = path.basename(file_name)
 
                 # Skip if it's a directory (empty base name)
                 if not base_file_name:
@@ -413,7 +414,7 @@ async def get_publication_workspace_documents(
                         with zipfile.ZipFile(BytesIO(file_content)) as secondary_zip:
                             for inner_file_name in secondary_zip.namelist():
                                 # Get just the base filename for inner files too
-                                inner_base_name = os.path.basename(inner_file_name)
+                                inner_base_name = path.basename(inner_file_name)
 
                                 # Skip if it's a directory
                                 if not inner_base_name:

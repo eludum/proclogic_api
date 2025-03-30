@@ -16,7 +16,6 @@ alembic
 requests-oauthlib
 asyncpg
 numpy
-pycron
 python-dotenv
 nltk
 clerk-backend-api
