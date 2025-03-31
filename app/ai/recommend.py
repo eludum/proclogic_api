@@ -32,6 +32,7 @@ def extract_data_from_xml(xml_content: str) -> Dict[str, Any]:
     Extract key information from XML using Python's ElementTree before using AI.
     Returns a dictionary with extracted data or an empty dict if parsing fails.
     """
+    # TODO: add btw number
     try:
         # Parse XML content
         root = ET.fromstring(xml_content)
