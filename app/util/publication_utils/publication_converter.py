@@ -23,7 +23,7 @@ from app.util.publication_utils.nuts_codes import (
 )
 from app.util.publication_utils.cpv_codes import (
     check_if_publication_is_in_your_sector,
-    get_cpv_sector_and_description,
+    get_cpv_sector_name,
 )
 
 settings = Settings()
@@ -75,7 +75,7 @@ class PublicationData(BaseModel):
     @computed_field
     def sector(self) -> str:
         """Get sector description from CPV code"""
-        return get_cpv_sector_and_description(self.cpv_code, language="nl")
+        return get_cpv_sector_name(self.cpv_code, language="nl")
 
 
 class MatchData(BaseModel):
@@ -312,7 +312,7 @@ class PublicationConverter(BaseModel):
 
             # Get CPV code and sector
             cpv_code = publication_schema.cpv_main_code.code
-            sector = get_cpv_sector_and_description(cpv_code, language="nl")
+            sector = get_cpv_sector_name(cpv_code, language="nl")
 
             # Get additional CPV codes
             additional_cpv_codes = [

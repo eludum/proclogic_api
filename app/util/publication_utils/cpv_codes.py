@@ -149,7 +149,7 @@ fr_sectors = {
 }
 
 
-def get_cpv_sector_and_description(input_cpv: str, language: str) -> str:
+def get_cpv_sector_name(input_cpv: str, language: str) -> str:
     """Get sector description based on CPV code and language."""
     # Extract the main part of the CPV code before the hyphen
     sectors = {
@@ -168,9 +168,16 @@ def get_cpv_sector_and_description(input_cpv: str, language: str) -> str:
     return "N/A"
 
 
+def get_cpv_sector_code(code: str) -> str:
+    """Get the sector level code (first two digits + 000000) from a CPV code"""
+    if not code:
+        return None
+    return code[:2] + "000000"
+
+
 def check_if_publication_is_in_your_sector(interested_sectors: List[Sector], cpv_main_code: str) -> bool:
     """Check if a publication's CPV code matches any of the company's interested sectors."""
     for sector in interested_sectors:
-        if sector.sector == get_cpv_sector_and_description(cpv_main_code, "nl"):
+        if sector.sector == get_cpv_sector_name(cpv_main_code, "nl"):
             return True
     return False
