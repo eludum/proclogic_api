@@ -18,11 +18,11 @@ from app.schemas.publication_schemas import (
     PublicationSchema,
 )
 from app.util.publication_utils.nuts_codes import (
-    check_if_publication_is_in_your_region,
+    check_if_publication_is_in_region,
     get_nuts_code_as_str,
 )
 from app.util.publication_utils.cpv_codes import (
-    check_if_publication_is_in_your_sector,
+    check_if_publication_is_in_sector,
     get_cpv_sector_name,
 )
 
@@ -212,10 +212,10 @@ class PublicationConverter(BaseModel):
 
         # Calculate sector and region matches
         pub_data = cls.extract_data(publication)
-        match_data.publication_in_sector = check_if_publication_is_in_your_sector(
+        match_data.publication_in_sector = check_if_publication_is_in_sector(
             company.interested_sectors, pub_data.cpv_code
         )
-        match_data.publication_in_region = check_if_publication_is_in_your_region(
+        match_data.publication_in_region = check_if_publication_is_in_region(
             company.operating_regions, pub_data.nuts_codes
         )
 
@@ -226,7 +226,8 @@ class PublicationConverter(BaseModel):
         cls,
         publication: Publication,
         company: Optional[Company] = None,
-        documents: Optional[Dict[str, Any]] = None,
+        documents: Optional[List[str]] = None,
+        external_links: Optional[List[str]] = None,
         # forum: Optional[Dict[str, Any]] = None,
     ) -> PublicationOut:
         """Convert a publication to the PublicationOut schema"""
@@ -269,6 +270,9 @@ class PublicationConverter(BaseModel):
         # Add documents and forum data if provided
         if documents:
             output.documents = documents
+
+        if external_links:
+            output.external_links = external_links
 
         # if forum:
         #     output.forum = forum

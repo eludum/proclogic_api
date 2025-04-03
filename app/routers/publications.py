@@ -11,7 +11,6 @@ from app.crud.mapper import (
     convert_publication_to_out_schema_details_paid,
     convert_publications_to_out_schema_list_free,
     convert_publications_to_out_schema_list_paid,
-    fetch_publication_documents,
 )
 from app.schemas.publication_out_schemas import PublicationOut
 from app.util.clerk import AuthUser, get_auth_user
@@ -20,6 +19,8 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer
 from fastapi_pagination import Page, paginate
+from app.util.publication_utils.cpv_codes import check_if_publication_is_in_sector
+from app.util.publication_utils.nuts_codes import check_if_publication_is_in_region
 
 settings = Settings()
 publications_router = APIRouter()
@@ -297,7 +298,7 @@ async def search_publications_free(
             publications = [
                 pub
                 for pub in publications
-                if any(reg in pub.nuts_codes for reg in region)
+                if check_if_publication_is_in_region(region, pub.nuts_codes)
             ]
 
         # Apply sector filter if provided
@@ -306,7 +307,7 @@ async def search_publications_free(
             publications = [
                 pub
                 for pub in publications
-                if any(pub.cpv_main_code_code[:2] + "000000" == sec for sec in sector)
+                if check_if_publication_is_in_sector(sector, pub.cpv_main_code_code)
             ]
 
         return paginate(
@@ -482,36 +483,6 @@ async def mark_publication_viewed(
 
 
 @publications_router.get(
-    "/publications/publication/{publication_workspace_id}/documents",
-)
-async def get_publication_documents(
-    publication_workspace_id: str,
-    auth_user: AuthUser = Depends(get_auth_user),
-):
-    """Get document list for a specific publication."""
-    if not auth_user.email:
-        raise HTTPException(status_code=400, detail="User email not available")
-
-    with get_session() as session:
-        company = crud_company.get_company_by_email(
-            email=auth_user.email, session=session
-        )
-        if not company:
-            raise HTTPException(status_code=404, detail="Company not found")
-
-        # Check if publication exists
-        publication = crud_publication.get_publication_by_workspace_id(
-            publication_workspace_id=publication_workspace_id, session=session
-        )
-        if not publication:
-            raise HTTPException(status_code=404, detail="Publication not found")
-
-    documents = await fetch_publication_documents(publication_workspace_id)
-
-    return {"documents": documents}
-
-
-@publications_router.get(
     "/publications/publication/{publication_workspace_id}/document/{filename}",
 )
 async def get_publication_document(
@@ -540,7 +511,7 @@ async def get_publication_document(
     # Get the document
     async with httpx.AsyncClient() as client:
         documents = await get_publication_workspace_documents(
-            client, publication_workspace_id
+            client=client, publication_workspace_id=publication_workspace_id
         )
 
     if not documents or filename not in documents:

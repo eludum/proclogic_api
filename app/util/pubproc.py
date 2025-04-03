@@ -366,6 +366,60 @@ async def get_publication_workspace_data(
     return r.json()
 
 
+async def get_publication_workspace_document_list(
+    client: httpx.AsyncClient, publication_workspace_id: str
+) -> List[str]:
+    token = get_token()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "BelGov-Trace-Id": generate_uuid(),
+    }
+
+    # Add a 5-minute timeout for large files
+    r = await client.get(
+        settings.pubproc_server
+        + settings.path_dos_api
+        + f"/publication-workspaces/{publication_workspace_id}/documents",
+        # TODO: /publication-workspaces/{publication-workspace-id}/urls
+        headers=headers,
+    )
+
+    data = r.json()
+
+    documents = []
+    for file in data:
+        filename = file["versions"][0]["document"]["originalFileName"]
+        documents.append(filename)
+
+    return documents
+
+
+async def get_publication_workspace_document_external_urls(
+    client: httpx.AsyncClient, publication_workspace_id: str
+) -> List[str]:
+    token = get_token()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "BelGov-Trace-Id": generate_uuid(),
+    }
+
+    # Add a 5-minute timeout for large files
+    r = await client.get(
+        settings.pubproc_server
+        + settings.path_dos_api
+        + f"/publication-workspaces/{publication_workspace_id}/urls",
+        headers=headers,
+    )
+
+    data = r.json()
+
+    urls = []
+    for url in data:
+        urls.append(url["url"])
+
+    return urls
+
+
 @redis_cache("pubproc:documents")
 async def get_publication_workspace_documents(
     client: httpx.AsyncClient, publication_workspace_id: str
@@ -396,7 +450,6 @@ async def get_publication_workspace_documents(
         # Process the zip file
         file_map = {}
 
-        # First level zip extraction
         with zipfile.ZipFile(BytesIO(r.content)) as primary_zip:
             for file_name in primary_zip.namelist():
                 file_content = primary_zip.read(file_name)
@@ -408,32 +461,10 @@ async def get_publication_workspace_documents(
                 if not base_file_name:
                     continue
 
-                # Check if this is another zip file (second level)
-                if base_file_name.lower().endswith(".zip"):
-                    try:
-                        with zipfile.ZipFile(BytesIO(file_content)) as secondary_zip:
-                            for inner_file_name in secondary_zip.namelist():
-                                # Get just the base filename for inner files too
-                                inner_base_name = path.basename(inner_file_name)
-
-                                # Skip if it's a directory
-                                if not inner_base_name:
-                                    continue
-
-                                inner_content = secondary_zip.read(inner_file_name)
-                                inner_file = BytesIO(inner_content)
-                                inner_file.name = inner_base_name
-                                file_map[inner_base_name] = inner_file
-                    except zipfile.BadZipFile:
-                        # If it's not actually a valid zip, treat it as a regular file
-                        file_data = BytesIO(file_content)
-                        file_data.name = base_file_name
-                        file_map[base_file_name] = file_data
-                else:
-                    # Regular file, not a zip
-                    file_data = BytesIO(file_content)
-                    file_data.name = base_file_name
-                    file_map[base_file_name] = file_data
+                # Regular file, not a zip
+                file_data = BytesIO(file_content)
+                file_data.name = base_file_name
+                file_map[base_file_name] = file_data
 
         return file_map
 
@@ -442,9 +473,11 @@ async def get_publication_workspace_documents(
             f"Timeout while downloading archive for {publication_workspace_id}"
         )
         return {}
-    except zipfile.BadZipFile:
-        logging.error(f"Invalid zip file received for {publication_workspace_id}")
-        return {}
+    except zipfile.BadZipFile as e:
+        logging.error(
+            f"Invalid zip file received for {publication_workspace_id}: {str(e)}"
+        )
+        return {f"{publication_workspace_id}.zip" : BytesIO(r.content)}
     except Exception as e:
         logging.error(
             f"Error downloading documents for {publication_workspace_id}: {str(e)}"
@@ -452,7 +485,6 @@ async def get_publication_workspace_documents(
         return {}
 
 
-@redis_cache("pubproc:forum")
 async def get_publication_workspace_forum(
     client: httpx.AsyncClient, forum_id: str
 ) -> dict:

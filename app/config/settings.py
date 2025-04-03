@@ -1,4 +1,3 @@
-from functools import lru_cache
 from typing import List, Optional
 from pydantic_settings import BaseSettings
 
@@ -29,7 +28,6 @@ class Settings(BaseSettings):
     redis_host: str = "proclogic-redis"
     redis_port: int = 6379
     redis_db: int = 0
-    redis_agent_ttl: int = 86400  # Default TTL for agent data (24 hours)
 
     template_folder: str = "email_template"
     mail_username: Optional[str] = ""

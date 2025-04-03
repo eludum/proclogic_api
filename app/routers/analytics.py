@@ -30,7 +30,7 @@ class AwardSummary(BaseModel):
     avg_value: float = Field(..., description="Average value per contract")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "total_value": 5250000.0,
                 "total_count": 25,
@@ -47,7 +47,7 @@ class AwardTimeSeriesItem(BaseModel):
     total_value: float = Field(..., description="Total value in this period")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {"period": "2024-01", "count": 5, "total_value": 1250000.0}
         }
 
@@ -61,7 +61,7 @@ class AwardSectorItem(BaseModel):
     total_value: float = Field(..., description="Total value in this sector")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "sector": "Construction work",
                 "sector_code": "45000000",
@@ -80,7 +80,7 @@ class RegionItem(BaseModel):
     total_value: float = Field(..., description="Total value in this region")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "region_code": "BE1",
                 "region_name": "Région de Bruxelles-Capitale/Brussels Hoofdstedelijk Gewest",
@@ -101,7 +101,7 @@ class WinnerItem(BaseModel):
     )
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "winner": "ABC Construction",
                 "count": 3,
@@ -123,7 +123,7 @@ class SupplierItem(BaseModel):
     )
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "supplier_name": "ABC Construction",
                 "supplier_id": "BE0123456789",
@@ -150,7 +150,7 @@ class ContractItem(BaseModel):
     buyer: str = Field(..., description="Contracting authority")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "publication_id": "2024-S-001234-5678",
                 "title": "Highway maintenance services",

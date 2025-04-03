@@ -11,7 +11,7 @@ from app.util.redis_utils import (
 
 # Cache TTL in seconds (7 days default)
 # TODO: increase, check daily for saved publications?
-CACHE_TTL = 7 * 24 * 60 * 60
+CACHE_TTL = 24 * 60 * 60
 
 
 def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):

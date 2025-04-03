@@ -396,7 +396,7 @@ async def setup_assistant(
             async with httpx.AsyncClient() as http_client:
                 # Get publication documents
                 filesmap = await get_publication_workspace_documents(
-                    http_client, publication.publication_workspace_id
+                    client=http_client, publication_workspace_id=publication.publication_workspace_id
                 )
 
                 if filesmap:

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 import httpx
@@ -9,6 +10,8 @@ from app.schemas.publication_out_schemas import PublicationOut
 from app.schemas.publication_schemas import CompanyPublicationMatchSchema
 from app.util.publication_utils.publication_converter import PublicationConverter
 from app.util.pubproc import (
+    get_publication_workspace_document_external_urls,
+    get_publication_workspace_document_list,
     get_publication_workspace_documents,
     # get_publication_workspace_forum,
 )
@@ -49,44 +52,32 @@ async def convert_publication_to_out_schema_details_paid(
     Convert a publication with detailed info to output schema with company-specific data
     Returns the basic data immediately without waiting for documents
     """
+    # fire and forget, fetch the docs but keep it running
+    asyncio.create_task(
+        get_publication_workspace_documents(
+            client=httpx.AsyncClient(), publication_workspace_id=publication.publication_workspace_id
+    ))
+    documents = []
+    external_links = []
+    async with httpx.AsyncClient() as client:
+        documents = await get_publication_workspace_document_list(
+            client, publication.publication_workspace_id
+        )
+        external_links = await get_publication_workspace_document_external_urls(client, publication.publication_workspace_id)
+        # forum = await get_publication_workspace_forum(
+        #     client, publication.publication_workspace_id
+        # )
+
     # Create the basic output schema without documents
     output_schema = PublicationConverter.to_output_schema(
         publication=publication,
         company=company,
-        documents={},  # Empty documents dictionary for now
+        documents=documents,
+        external_links=external_links,
         # forum=get_publication_workspace_forum(publication.publication_workspace_id),
     )
 
-    # Add a flag to indicate documents are not yet loaded
-    output_schema.documents_loading = True
-
     return output_schema
-
-
-# New function to fetch documents for a publication
-async def fetch_publication_documents(publication_workspace_id: str) -> dict:
-    """
-    Fetch documents for a publication.
-    This can be called separately to avoid blocking the initial page load.
-    """
-    serializable_documents = {}
-    try:
-        async with httpx.AsyncClient() as client:
-            documents = await get_publication_workspace_documents(
-                client, publication_workspace_id
-            )
-            # forum = await get_publication_workspace_forum(
-            #     client, publication_workspace_id
-            # )
-
-            if documents:
-                for filename, _ in documents.items():
-                    serializable_documents[filename] = {"filename": filename}
-
-    except Exception as e:
-        logging.error(f"Error fetching documents: {e}")
-
-    return serializable_documents
 
 
 async def convert_company_to_schema(company: Company) -> CompanySchema:

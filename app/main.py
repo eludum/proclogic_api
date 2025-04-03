@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
         yield
 
 
-proclogic = FastAPI(docs_url=None, lifespan=lifespan, debug=settings.debug_mode)
+proclogic = FastAPI(docs_url=None if not settings.debug_mode else "/docs", lifespan=lifespan, debug=settings.debug_mode)
 
 security = HTTPBearer()
 
