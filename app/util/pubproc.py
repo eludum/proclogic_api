@@ -207,7 +207,6 @@ async def enrich_publication_with_ai(
             pub.estimated_value = int(estimated_value)
         except Exception as e:
             logging.error(f"Error in summarize_publication_with_files: {e}")
-            pub.ai_summary_with_documents = "Error processing documents."
     else:
         try:
             pub.ai_summary_without_documents = summarize_publication_without_files(
@@ -215,7 +214,6 @@ async def enrich_publication_with_ai(
             )
         except Exception as e:
             logging.error(f"Error in summarize_publication_without_files: {e}")
-            pub.ai_summary_without_documents = "Error generating summary."
 
 
 async def generate_company_recommendations(
@@ -477,7 +475,6 @@ async def get_publication_workspace_documents(
         logging.error(
             f"Invalid zip file received for {publication_workspace_id}: {str(e)}"
         )
-        return {f"{publication_workspace_id}.zip" : BytesIO(r.content)}
     except Exception as e:
         logging.error(
             f"Error downloading documents for {publication_workspace_id}: {str(e)}"
