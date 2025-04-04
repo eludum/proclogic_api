@@ -1,10 +1,11 @@
 import asyncio
 import logging
+import os
 import uuid
 import zipfile
 from datetime import date
 from io import BytesIO
-from typing import List
+from typing import Dict, List
 from os import path
 
 import httpx
@@ -51,7 +52,7 @@ async def update_pubproc_data() -> None:
     pass
     # with get_session() as session:
     #     for company in crud_company.get_all_companies(session=session):
-    #         await crud_publication.get_all_publications()
+    #         await crud_publication.get_all_publications() (only get active ones obviously make new crud if needed)
 
 
 async def gather_notifications() -> None:
@@ -373,12 +374,10 @@ async def get_publication_workspace_document_list(
         "BelGov-Trace-Id": generate_uuid(),
     }
 
-    # Add a 5-minute timeout for large files
     r = await client.get(
         settings.pubproc_server
         + settings.path_dos_api
         + f"/publication-workspaces/{publication_workspace_id}/documents",
-        # TODO: /publication-workspaces/{publication-workspace-id}/urls
         headers=headers,
     )
 
@@ -401,7 +400,6 @@ async def get_publication_workspace_document_external_urls(
         "BelGov-Trace-Id": generate_uuid(),
     }
 
-    # Add a 5-minute timeout for large files
     r = await client.get(
         settings.pubproc_server
         + settings.path_dos_api
@@ -417,6 +415,33 @@ async def get_publication_workspace_document_external_urls(
 
     return urls
 
+
+def unzip(zip_bytes: bytes, publication_workspace_id: str = "vector store") -> Dict[str, BytesIO]:
+    file_map = {}
+
+    try:
+        with zipfile.ZipFile(BytesIO(zip_bytes)) as zip_file:
+            for file_name in zip_file.namelist():
+                file_content = zip_file.read(file_name)
+
+                # Get just the base filename without folder path
+                base_file_name = path.basename(file_name)
+
+                # Skip if it's a directory (empty base name)
+                if not base_file_name:
+                    continue
+
+                # Regular file, not a zip
+                file_data = BytesIO(file_content)
+                file_data.name = base_file_name
+                file_map[base_file_name] = file_data
+
+            return file_map
+    except zipfile.BadZipFile as e:
+        logging.error(
+            f"Invalid zip file received for {publication_workspace_id}: {str(e)}"
+        )
+        return {}
 
 @redis_cache("pubproc:documents")
 async def get_publication_workspace_documents(
@@ -437,7 +462,6 @@ async def get_publication_workspace_documents(
             settings.pubproc_server
             + settings.path_dos_api
             + f"/publication-workspaces/{publication_workspace_id}/archive",
-            # TODO: /publication-workspaces/{publication-workspace-id}/urls
             headers=headers,
             timeout=300,  # 5 minutes
         )
@@ -446,35 +470,13 @@ async def get_publication_workspace_documents(
             return {}
 
         # Process the zip file
-        file_map = {}
-
-        with zipfile.ZipFile(BytesIO(r.content)) as primary_zip:
-            for file_name in primary_zip.namelist():
-                file_content = primary_zip.read(file_name)
-
-                # Get just the base filename without folder path
-                base_file_name = path.basename(file_name)
-
-                # Skip if it's a directory (empty base name)
-                if not base_file_name:
-                    continue
-
-                # Regular file, not a zip
-                file_data = BytesIO(file_content)
-                file_data.name = base_file_name
-                file_map[base_file_name] = file_data
-
-        return file_map
+        return unzip(zip_bytes=r.content, publication_workspace_id=publication_workspace_id)
 
     except asyncio.TimeoutError:
         logging.error(
             f"Timeout while downloading archive for {publication_workspace_id}"
         )
         return {}
-    except zipfile.BadZipFile as e:
-        logging.error(
-            f"Invalid zip file received for {publication_workspace_id}: {str(e)}"
-        )
     except Exception as e:
         logging.error(
             f"Error downloading documents for {publication_workspace_id}: {str(e)}"

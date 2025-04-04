@@ -68,7 +68,9 @@ async def process_ai_message(
 
     # Create a run
     run = client.beta.threads.runs.create_and_poll(
-        thread_id=thread_id, assistant_id=assistant_id
+        thread_id=thread_id,
+        assistant_id=assistant_id,
+        expires_after={"anchor": "last_active_at", "days": 7},
     )
 
     if run.status != "completed":
@@ -330,24 +332,24 @@ async def setup_assistant(
     """
     Set up an assistant for the conversation with company and publication data.
     Uses PublicationConverter for consistent data formatting.
-    
+
     Args:
         client: OpenAI client
         company: Company model instance
         publication: Publication model instance
-        
+
     Returns:
         str: The assistant ID
     """
     try:
         # Get properly formatted publication data using PublicationConverter
         pub_data = PublicationConverter.to_output_schema(publication, company)
-        
+
         # Use a more specific naming convention that includes the publication ID
         assistant_name = f"Assistant for {company.name} - {pub_data.workspace_id}"
-        
+
         logging.info(f"Creating assistant: {assistant_name}")
-        
+
         # Create detailed instructions using structured data
         instructions = f"""You are an AI assistant helping {company.name} with public procurement document analysis for tender {pub_data.title}.
 
@@ -378,7 +380,7 @@ async def setup_assistant(
         - Provide advice tailored to this company's profile and capabilities
         - If you reference documents, cite the source clearly
         """
-        
+
         # Create a new assistant with the structured instructions
         assistant = client.beta.assistants.create(
             name=assistant_name,
@@ -386,7 +388,7 @@ async def setup_assistant(
             model="gpt-4o-mini",
             tools=[{"type": "file_search"}],
         )
-        
+
         logging.info(f"Created assistant with ID: {assistant.id}")
 
         # Set up vector store with publication documents
@@ -396,7 +398,8 @@ async def setup_assistant(
             async with httpx.AsyncClient() as http_client:
                 # Get publication documents
                 filesmap = await get_publication_workspace_documents(
-                    client=http_client, publication_workspace_id=publication.publication_workspace_id
+                    client=http_client,
+                    publication_workspace_id=publication.publication_workspace_id,
                 )
 
                 if filesmap:
@@ -405,17 +408,18 @@ async def setup_assistant(
                         name=f"pub_{publication.publication_workspace_id}"
                     )
                     vector_store_id = vector_store.id
-                    
+
                     # Use the utility function to prepare files for the vector store
-                    file_objects = prepare_files_for_vector_store(filesmap)
+                    file_objects = prepare_files_for_vector_store(filesmap=filesmap)
 
                     # Upload files if we have any valid ones
                     if file_objects:
-                        logging.info(f"Uploading {len(file_objects)} files to vector store")
-                        
+                        logging.info(
+                            f"Uploading {len(file_objects)} files to vector store"
+                        )
+
                         file_batch = client.vector_stores.file_batches.upload_and_poll(
-                            vector_store_id=vector_store.id, 
-                            files=file_objects
+                            vector_store_id=vector_store.id, files=file_objects
                         )
 
                         if file_batch.status == "completed":
@@ -430,7 +434,9 @@ async def setup_assistant(
                                 },
                             )
                         else:
-                            logging.warning(f"File upload failed with status: {file_batch.status}")
+                            logging.warning(
+                                f"File upload failed with status: {file_batch.status}"
+                            )
         except Exception as e:
             logging.error(f"Error setting up vector store: {e}", exc_info=True)
             # Continue without vector store if there was an error
@@ -442,7 +448,9 @@ async def setup_assistant(
                         tool_resources={"file_search": {"vector_store_ids": []}},
                     )
                 except Exception as update_error:
-                    logging.error(f"Error updating assistant after vector store failure: {update_error}")
+                    logging.error(
+                        f"Error updating assistant after vector store failure: {update_error}"
+                    )
 
         return assistant.id
 
@@ -451,6 +459,7 @@ async def setup_assistant(
         raise HTTPException(
             status_code=500, detail=f"Failed to set up AI assistant: {str(e)}"
         )
+
 
 def get_publication_title(publication: Publication) -> str:
     """Extract publication title from publication object."""

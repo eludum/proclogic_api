@@ -4,6 +4,7 @@ from io import BytesIO
 from typing import Dict, List, Union
 
 from app.config.settings import Settings
+from app.util.pubproc import unzip
 
 settings = Settings()
 
@@ -51,12 +52,40 @@ def decode_base64_to_bytesio(base64_str: str, filename: str = None) -> BytesIO:
         return file_obj
     except Exception as e:
         logging.error(f"Error decoding base64 to file: {e}")
-        raise
 
 
-def prepare_files_for_vector_store(
-    filesmap: Dict[str, BytesIO], accepted_formats: List[str] = None
-) -> List[BytesIO]:
+def normalize_filename(file_obj: bytes, filename: str) -> str:
+    file_obj.seek(0)
+    content = file_obj.read()
+    byte_io = BytesIO(content)
+
+    # Set name with lowercase extension
+    if "." in filename:
+        name_parts = filename.rsplit(".", 1)
+        byte_io.name = f"{name_parts[0]}.{name_parts[1].lower()}"
+    else:
+        byte_io.name = filename
+
+
+def is_file_allowed_for_assistant_file_search(
+    filename: str, accepted_formats: List[str] = None
+) -> bool:
+    if accepted_formats is None:
+        accepted_formats = [
+            fmt.lstrip(".").lower()
+            for fmt in settings.openai_vector_store_accepted_formats
+        ]
+
+    # Extract the extension in lowercase for comparison
+    file_extension = ""
+    if "." in filename:
+        file_extension = filename.split(".")[-1].lower()
+
+    # Skip if extension not in accepted formats
+    return file_extension in accepted_formats
+
+
+def prepare_files_for_vector_store(filesmap: Dict[str, BytesIO]) -> List[BytesIO]:
     """
     Process files for uploading to OpenAI vector store.
 
@@ -67,43 +96,35 @@ def prepare_files_for_vector_store(
     Returns:
         List of BytesIO objects ready for upload to vector store
     """
-    # TODO: try to extract zips inside zips here, if it still doesnt work fuck it
-    
-    if accepted_formats is None:
-        accepted_formats = [
-            fmt.lstrip(".").lower()
-            for fmt in settings.openai_vector_store_accepted_formats
-        ]
 
     file_objects = []
 
-    for filename, file_obj in filesmap.items():
+    for file_name, file_data in filesmap.items():
         try:
             # Extract the extension in lowercase for comparison
-            file_extension = ""
-            if "." in filename:
-                file_extension = filename.split(".")[-1].lower()
-
-            # Skip if extension not in accepted formats
-            if file_extension not in accepted_formats:
+            if is_file_allowed_for_assistant_file_search(filename=file_name):
+                file_objects.append(
+                    normalize_filename(file_obj=file_data, filename=file_name)
+                )
                 continue
 
-            # Create a new BytesIO with the content
-            file_obj.seek(0)
-            content = file_obj.read()
-            byte_io = BytesIO(content)
+            if ".zip" in file_name:
+                unzipped_files = unzip(
+                    zip_bytes=file_data.read(), publication_workspace_id="filename"
+                )
 
-            # Set name with lowercase extension
-            if "." in filename:
-                name_parts = filename.rsplit(".", 1)
-                byte_io.name = f"{name_parts[0]}.{name_parts[1].lower()}"
-            else:
-                byte_io.name = filename
-
-            file_objects.append(byte_io)
+                for filename_unzipped, file_data_unzipped in unzipped_files.items():
+                    if is_file_allowed_for_assistant_file_search(
+                        filename=filename_unzipped
+                    ):
+                        file_objects.append(
+                            normalize_filename(
+                                file_obj=file_data_unzipped, filename=filename_unzipped
+                            )
+                        )
 
         except Exception as e:
-            logging.error(f"Error processing file {filename}: {e}")
+            logging.error(f"Error processing file {file_name}: {e}")
             continue
 
     return file_objects

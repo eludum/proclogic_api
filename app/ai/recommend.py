@@ -360,7 +360,7 @@ def summarize_publication_with_files(
     try:
         if filesmap:
             # Use the utility function to prepare files for the vector store
-            file_objects = prepare_files_for_vector_store(filesmap)
+            file_objects = prepare_files_for_vector_store(filesmap=filesmap)
 
             if file_objects:
                 vector_store = client.vector_stores.create(
@@ -407,7 +407,9 @@ def summarize_publication_with_files(
         )
 
         run = client.beta.threads.runs.create_and_poll(
-            thread_id=thread.id, assistant_id=assistant.id
+            thread_id=thread.id,
+            assistant_id=assistant.id,
+            expires_after={"anchor": "last_active_at", "days": 7},
         )
         messages = list(
             client.beta.threads.messages.list(thread_id=thread.id, run_id=run.id)
