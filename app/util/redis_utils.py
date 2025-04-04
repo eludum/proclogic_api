@@ -67,6 +67,7 @@ def prepare_files_for_vector_store(
     Returns:
         List of BytesIO objects ready for upload to vector store
     """
+    # TODO: try to extract zips inside zips here, if it still doenst work fuck it
     if accepted_formats is None:
         accepted_formats = [
             fmt.lstrip(".").lower()

@@ -15,9 +15,7 @@ class Settings(BaseSettings):
     pubproc_token_url: str
 
     clerk_secret_key: str
-    clerk_jwks_url: str = (
-        "https://clerk.proclogic.be/.well-known/jwks.json"
-    )
+    clerk_jwks_url: str = "https://clerk.proclogic.be/.well-known/jwks.json"
     pubproc_token: str = ""
     pubproc_token_exp: str = ""
     path_sea_api: str = "/api/eProcurementSea/v1"
@@ -33,39 +31,31 @@ class Settings(BaseSettings):
     mail_username: Optional[str] = ""
     mail_password: Optional[str] = ""
     mail_from: str = "info@proclogic.be"
-        
+
     prefered_languages_descriptions: List[str] = ["NL", "EN", "FR"]
     openai_vector_store_accepted_formats: List[str] = [
-        "c",
-        "cpp",
-        "css",
-        "csv",
-        "doc",
-        "docx",
-        "gif",
-        "go",
-        "html",
-        "java",
-        "jpeg",
-        "jpg",
-        "js",
-        "json",
-        "md",
-        "pdf",
-        "php",
-        "pkl",
-        "png",
-        "pptx",
-        "py",
-        "rb",
-        "tar",
-        "tex",
-        "ts",
-        "txt",
-        "webp",
-        # "xlsx",
-        "xml",
-        "zip",
+        ".c",
+        ".cpp",
+        ".cs",
+        ".css",
+        ".doc",
+        ".docx",
+        ".go",
+        ".html",
+        ".java",
+        ".js",
+        ".json",
+        ".md",
+        ".pdf",
+        ".php",
+        ".pptx",
+        ".py",
+        ".py",
+        ".rb",
+        ".sh",
+        ".tex",
+        ".ts",
+        ".txt",
     ]
 
     class Config:
