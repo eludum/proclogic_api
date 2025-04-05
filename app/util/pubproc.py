@@ -1,12 +1,8 @@
 import asyncio
 import logging
-import os
 import uuid
-import zipfile
 from datetime import date
-from io import BytesIO
-from typing import Dict, List
-from os import path
+from typing import List
 
 import httpx
 import numpy as np
@@ -26,9 +22,10 @@ from app.config.settings import Settings
 from app.schemas.company_schemas import CompanyPublicationMatchSchema
 from app.schemas.publication_schemas import CPVCodeSchema, PublicationSchema
 from app.util.messages_helper import send_recommendation_notification
+from app.util.publication_utils.publication_converter import PublicationConverter
 from app.util.pubproc_token import get_token
 from app.util.redis_cache import invalidate_publication_cache, redis_cache
-from app.util.publication_utils.publication_converter import PublicationConverter
+from app.util.zip import unzip
 
 settings = Settings()
 
@@ -304,7 +301,7 @@ async def get_daily_pubproc_search_data(
 
     # TODO: go page by page and stop if we hit already processed ones, to limit api usage
     data = {
-        "dispatch-date-from": f"{today.strftime('%Y-%m-%d')}",
+        "dispatch-date-from": "2025-04-04",
         "page": 1,
         "pageSize": page_size,
     }
@@ -416,33 +413,6 @@ async def get_publication_workspace_document_external_urls(
     return urls
 
 
-def unzip(zip_bytes: bytes, publication_workspace_id: str = "vector store") -> Dict[str, BytesIO]:
-    file_map = {}
-
-    try:
-        with zipfile.ZipFile(BytesIO(zip_bytes)) as zip_file:
-            for file_name in zip_file.namelist():
-                file_content = zip_file.read(file_name)
-
-                # Get just the base filename without folder path
-                base_file_name = path.basename(file_name)
-
-                # Skip if it's a directory (empty base name)
-                if not base_file_name:
-                    continue
-
-                # Regular file, not a zip
-                file_data = BytesIO(file_content)
-                file_data.name = base_file_name
-                file_map[base_file_name] = file_data
-
-            return file_map
-    except zipfile.BadZipFile as e:
-        logging.error(
-            f"Invalid zip file received for {publication_workspace_id}: {str(e)}"
-        )
-        return {}
-
 @redis_cache("pubproc:documents")
 async def get_publication_workspace_documents(
     client: httpx.AsyncClient, publication_workspace_id: str
@@ -470,7 +440,9 @@ async def get_publication_workspace_documents(
             return {}
 
         # Process the zip file
-        return unzip(zip_bytes=r.content, publication_workspace_id=publication_workspace_id)
+        return unzip(
+            zip_bytes=r.content, publication_workspace_id=publication_workspace_id
+        )
 
     except asyncio.TimeoutError:
         logging.error(

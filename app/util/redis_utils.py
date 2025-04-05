@@ -4,7 +4,7 @@ from io import BytesIO
 from typing import Dict, List, Union
 
 from app.config.settings import Settings
-from app.util.pubproc import unzip
+from app.util.zip import unzip
 
 settings = Settings()
 

@@ -1,10 +1,15 @@
-from typing import List, Optional
-from sqlalchemy import func
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy.sql import exists
 import logging
+from datetime import date
+from typing import List, Optional, Tuple
+from app.util.publication_utils.nuts_codes import check_if_publication_is_in_region
+
+from sqlalchemy import and_, case, desc, func, or_
+from sqlalchemy.orm import Session, aliased, joinedload
+from sqlalchemy.sql import exists
+from sqlalchemy.sql.expression import cast
 
 from app.models.publication_models import (
+    CompanyPublicationMatch,
     CPVCode,
     Description,
     Dossier,
@@ -13,7 +18,6 @@ from app.models.publication_models import (
     Organisation,
     OrganisationName,
     Publication,
-    CompanyPublicationMatch,
 )
 from app.schemas.publication_schemas import (
     CPVCodeSchema,
@@ -164,9 +168,11 @@ def get_or_create_dossier(dossier_schema: DossierSchema, session: Session) -> Do
         )
         session.add(dossier)
         session.flush()
-        
+
         dossier.enterprise_categories = create_enterprise_categories(
-            dossier_schema.enterprise_categories, dossier_schema.reference_number, session
+            dossier_schema.enterprise_categories,
+            dossier_schema.reference_number,
+            session,
         )
         session.flush()
 
@@ -242,9 +248,13 @@ def update_publication(
     publication.ted_published = publication_schema.ted_published
     publication.vault_submission_deadline = publication_schema.vault_submission_deadline
     if publication_schema.ai_summary_without_documents:
-        publication.ai_summary_without_documents = publication_schema.ai_summary_without_documents
+        publication.ai_summary_without_documents = (
+            publication_schema.ai_summary_without_documents
+        )
     if publication_schema.ai_summary_with_documents:
-        publication.ai_summary_with_documents = publication_schema.ai_summary_with_documents
+        publication.ai_summary_with_documents = (
+            publication_schema.ai_summary_with_documents
+        )
     if publication_schema.estimated_value:
         publication.estimated_value = publication_schema.estimated_value
     if publication_schema.extracted_keywords:
@@ -261,12 +271,15 @@ def update_publication(
     if publication_schema.company_matches:
         # Get existing matches to update them
         existing_matches = {
-            match.company_vat_number: match 
-            for match in session.query(CompanyPublicationMatch).filter(
-                CompanyPublicationMatch.publication_workspace_id == publication.publication_workspace_id
-            ).all()
+            match.company_vat_number: match
+            for match in session.query(CompanyPublicationMatch)
+            .filter(
+                CompanyPublicationMatch.publication_workspace_id
+                == publication.publication_workspace_id
+            )
+            .all()
         }
-        
+
         # Create or update matches
         for match_schema in publication_schema.company_matches:
             if match_schema.company_vat_number in existing_matches:
@@ -284,7 +297,7 @@ def update_publication(
                     match_percentage=match_schema.match_percentage,
                     is_recommended=match_schema.is_recommended,
                     is_saved=match_schema.is_saved,
-                    is_viewed=match_schema.is_viewed
+                    is_viewed=match_schema.is_viewed,
                 )
                 session.add(new_match)
 
@@ -363,7 +376,7 @@ def get_or_create_publication(
 
         session.add(publication)
         session.flush()
-        
+
         # Create company matches if they exist in the schema
         if publication_schema.company_matches:
             for match_schema in publication_schema.company_matches:
@@ -373,7 +386,7 @@ def get_or_create_publication(
                     match_percentage=match_schema.match_percentage,
                     is_recommended=match_schema.is_recommended,
                     is_saved=match_schema.is_saved,
-                    is_viewed=match_schema.is_viewed
+                    is_viewed=match_schema.is_viewed,
                 )
                 session.add(company_match)
             session.flush()
@@ -401,7 +414,9 @@ def get_publication_by_workspace_id(
                 joinedload(Publication.cpv_main_code),
                 joinedload(Publication.dossier).joinedload(Dossier.descriptions),
                 joinedload(Publication.dossier).joinedload(Dossier.titles),
-                joinedload(Publication.dossier).joinedload(Dossier.enterprise_categories),
+                joinedload(Publication.dossier).joinedload(
+                    Dossier.enterprise_categories
+                ),
                 joinedload(Publication.organisation).joinedload(
                     Organisation.organisation_names
                 ),
@@ -412,21 +427,20 @@ def get_publication_by_workspace_id(
             )
             .first()
         )
-        
+
         # Force loading of all relationships before closing session
         if publication:
             # Access relationships to load them
             _ = publication.company_matches
             _ = publication.cpv_additional_codes
             _ = publication.lots
-            
+
         return publication
     except Exception as e:
         logging.error("Error retrieving publication: %s", e)
         return None
     finally:
         session.close()
-
 
 
 def publication_exists(publication_workspace_id: str, session: Session) -> bool:
@@ -443,7 +457,7 @@ def delete_publication(publication_workspace_id: str, session: Session):
         session.query(CompanyPublicationMatch).filter(
             CompanyPublicationMatch.publication_workspace_id == publication_workspace_id
         ).delete(synchronize_session=False)
-        
+
         # Then delete the publication
         publication = (
             session.query(Publication)
@@ -465,106 +479,410 @@ def delete_publication(publication_workspace_id: str, session: Session):
         session.rollback()
         raise
 
-
-def get_all_publications(session: Session) -> List[Publication]:
-    """Retrieve all publications."""
-    return (
-        session.query(Publication)
-        # filter added here to only see active ones
-        # TODO use is active niffo instead of this
-        .filter(Publication.vault_submission_deadline.isnot(None))
-        .options(
-            joinedload(Publication.cpv_main_code),
-            joinedload(Publication.dossier).joinedload(Dossier.descriptions),
-            joinedload(Publication.dossier).joinedload(Dossier.titles),
-            joinedload(Publication.dossier).joinedload(Dossier.enterprise_categories),
-            joinedload(Publication.organisation).joinedload(
-                Organisation.organisation_names
-            ),
-            joinedload(Publication.cpv_additional_codes),
-            joinedload(Publication.lots).joinedload(Lot.descriptions),
-            joinedload(Publication.lots).joinedload(Lot.titles),
-            joinedload(Publication.company_matches),
-        )
-        .all()
-    )
-
-
-def search_publications(search_term: str, session: Session) -> List[Publication]:
-    """Search publications by lots titles, dossier titles, lots descriptions, dossier descriptions, and organisation names."""
-    search_pattern = f"%{search_term}%"
-
-    description_subquery = (
-        session.query(Description.id)
-        .filter(func.lower(Description.text).like(func.lower(search_pattern)))
-        .subquery()
-    )
-
-    organisation_name_subquery = (
-        session.query(OrganisationName.id)
-        .filter(func.lower(OrganisationName.text).like(func.lower(search_pattern)))
-        .subquery()
-    )
-
-    dossier_title_subquery = (
-        session.query(Description.id)
-        .filter(func.lower(Description.text).like(func.lower(search_pattern)))
-        .correlate(Dossier)
-        .subquery()
-    )
-
-    lot_title_subquery = (
-        session.query(Description.id)
-        .filter(func.lower(Description.text).like(func.lower(search_pattern)))
-        .correlate(Lot)
-        .subquery()
-    )
-
-    # Add search in extracted_keywords
-    publications_with_keywords = (
-        session.query(Publication)
-        .filter(
-            Publication.extracted_keywords.isnot(None),
-            func.array_to_string(Publication.extracted_keywords, ',', '').ilike(search_pattern)
+def get_paginated_publications_for_company(
+    session: Session,
+    company_vat_number: str,
+    page: int = 1,
+    size: int = 10,
+    recommended: Optional[bool] = None,
+    saved: Optional[bool] = None, 
+    viewed: Optional[bool] = None,
+    active: bool = True,
+    search_term: Optional[str] = None,
+    region_filter: Optional[List[str]] = None,
+    sector_filter: Optional[List[str]] = None,
+    cpv_code_filter: Optional[List[str]] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    sort_by: Optional[str] = None,
+    sort_order: str = "desc"
+) -> Tuple[List[Publication], int]:
+    """
+    Get publications for a specific company with pagination and filtering at the database level.
+    Returns both the publications for the current page and the total count.
+    """
+    # Start with a query that joins the company matches
+    Match = aliased(CompanyPublicationMatch)
+    
+    # Base query with initial join to CompanyPublicationMatch (left outer join)
+    query = session.query(Publication, Match).outerjoin(
+        Match, 
+        and_(
+            Match.publication_workspace_id == Publication.publication_workspace_id,
+            Match.company_vat_number == company_vat_number
         )
     )
-
-    return (
-        session.query(Publication)
-        .join(Publication.dossier)
-        .join(Publication.organisation)
-        .join(Publication.lots)
-        .filter(
-            Publication.dossier.has(
-                Dossier.descriptions.any(Description.id.in_(description_subquery))
+    
+    # Apply active filter
+    if active:
+        # Use vault_submission_deadline to determine active status
+        query = query.filter(
+            Publication.vault_submission_deadline.isnot(None),
+            Publication.vault_submission_deadline > func.now()
+        )
+    
+    # Apply company-specific filters
+    if recommended is not None:
+        if recommended:
+            # Must have a match with is_recommended=True
+            query = query.filter(
+                Match.company_vat_number == company_vat_number,
+                Match.is_recommended == True
             )
-            | Publication.organisation.has(
-                Organisation.organisation_names.any(
-                    OrganisationName.id.in_(organisation_name_subquery)
+        else:
+            # Either no match or is_recommended=False
+            query = query.filter(
+                or_(
+                    Match.company_vat_number.is_(None),
+                    and_(
+                        Match.company_vat_number == company_vat_number,
+                        Match.is_recommended == False
+                    )
                 )
             )
-            | Publication.dossier.has(
-                Dossier.titles.any(Description.id.in_(dossier_title_subquery))
+    
+    if saved is not None:
+        if saved:
+            # Must have a match with is_saved=True
+            query = query.filter(
+                Match.company_vat_number == company_vat_number,
+                Match.is_saved == True
             )
-            | Publication.lots.any(
-                Lot.descriptions.any(Description.id.in_(lot_title_subquery))
+        else:
+            # Either no match or is_saved=False
+            query = query.filter(
+                or_(
+                    Match.company_vat_number.is_(None),
+                    and_(
+                        Match.company_vat_number == company_vat_number,
+                        Match.is_saved == False
+                    )
+                )
             )
-            | Publication.publication_workspace_id.in_(
-                publications_with_keywords.with_entities(Publication.publication_workspace_id)
+    
+    if viewed is not None:
+        if viewed:
+            # Must have a match with is_viewed=True
+            query = query.filter(
+                Match.company_vat_number == company_vat_number,
+                Match.is_viewed == True
+            )
+        else:
+            # Either no match or is_viewed=False
+            query = query.filter(
+                or_(
+                    Match.company_vat_number.is_(None),
+                    and_(
+                        Match.company_vat_number == company_vat_number,
+                        Match.is_viewed == False
+                    )
+                )
+            )
+    
+    # Apply search term filter
+    if search_term and search_term.strip():
+        search_pattern = f"%{search_term.strip()}%"
+        
+        # Create subqueries for text search
+        description_subquery = (
+            session.query(Description.id)
+            .filter(func.lower(Description.text).like(func.lower(search_pattern)))
+            .subquery()
+        )
+        
+        organisation_name_subquery = (
+            session.query(OrganisationName.id)
+            .filter(func.lower(OrganisationName.text).like(func.lower(search_pattern)))
+            .subquery()
+        )
+        
+        # Apply search conditions
+        query = query.filter(
+            or_(
+                Publication.dossier.has(
+                    Dossier.descriptions.any(Description.id.in_(description_subquery))
+                ),
+                Publication.dossier.has(
+                    Dossier.titles.any(Description.id.in_(description_subquery))
+                ),
+                Publication.organisation.has(
+                    Organisation.organisation_names.any(OrganisationName.id.in_(organisation_name_subquery))
+                ),
+                Publication.lots.any(
+                    Lot.descriptions.any(Description.id.in_(description_subquery))
+                ),
+                Publication.lots.any(
+                    Lot.titles.any(Description.id.in_(description_subquery))
+                ),
+                # Search in extracted keywords if available
+                and_(
+                    Publication.extracted_keywords.isnot(None),
+                    func.array_to_string(Publication.extracted_keywords, ',', '').ilike(search_pattern)
+                )
             )
         )
-        .options(
+    
+    # Apply sector filter - FIXED VERSION
+    if sector_filter and len(sector_filter) > 0:
+        sector_conditions = []
+        for sector_code in sector_filter:
+            # For sector filtering, we use the first two digits which define the sector category
+            # For example, "45000000" should match all codes starting with "45"
+            if len(sector_code) >= 2:
+                sector_prefix = sector_code[:2]
+                sector_conditions.append(Publication.cpv_main_code_code.startswith(sector_prefix))
+        
+        if sector_conditions:
+            query = query.filter(or_(*sector_conditions))
+    
+    # Apply CPV code filter (for exact code matches)
+    if cpv_code_filter and len(cpv_code_filter) > 0:
+        # Use exact matches for CPV code filter, not just sector matches
+        cpv_conditions = [Publication.cpv_main_code_code.in_(cpv_code_filter)]
+        
+        # Add condition for additional CPV codes (this requires joining the additional codes)
+        # This is a complex case and might be more efficient to handle in Python
+        # for simpler database query
+        
+        if cpv_conditions:
+            query = query.filter(or_(*cpv_conditions))
+    
+    # Apply date range filters
+    if date_from:
+        query = query.filter(func.date(Publication.publication_date) >= date_from)
+    
+    if date_to:
+        query = query.filter(func.date(Publication.publication_date) <= date_to)
+    
+    # Get total count before pagination
+    count_query = query.with_entities(func.count())
+    total_count = count_query.scalar()
+    
+    # Apply sorting
+    # Create a case expression for match percentage to handle NULL values
+    # Fix for SQLAlchemy version: use individual when() clauses instead of a list
+    match_percentage = case(
+        (Match.match_percentage.is_(None), 0),
+        else_=Match.match_percentage
+    ).label("match_percentage")
+    
+    # Add sorting logic
+    if sort_by:
+        if sort_by == "match_percentage":
+            if sort_order.lower() == "desc":
+                query = query.order_by(desc(match_percentage))
+            else:
+                query = query.order_by(match_percentage)
+        elif sort_by == "publication_date":
+            if sort_order.lower() == "desc":
+                query = query.order_by(desc(Publication.publication_date))
+            else:
+                query = query.order_by(Publication.publication_date)
+        elif sort_by == "deadline":
+            # For deadline, sort NULLs last
+            if sort_order.lower() == "desc":
+                query = query.order_by(
+                    Publication.vault_submission_deadline.is_(None),
+                    desc(Publication.vault_submission_deadline)
+                )
+            else:
+                query = query.order_by(
+                    Publication.vault_submission_deadline.is_(None),
+                    Publication.vault_submission_deadline
+                )
+    else:
+        # Apply automatic sorting based on filters
+        if recommended is not None and recommended:
+            query = query.order_by(
+                desc(match_percentage), 
+                desc(Publication.publication_date)
+            )
+        elif saved is not None and saved:
+            # For saved publications, sort by updated_at
+            query = query.order_by(
+                Match.updated_at.is_(None),
+                desc(Match.updated_at)
+            )
+        elif viewed is not None and viewed:
+            # For viewed publications, sort by updated_at
+            query = query.order_by(
+                Match.updated_at.is_(None),
+                desc(Match.updated_at)
+            )
+        else:
+            # Default sort by publication date
+            query = query.order_by(desc(Publication.publication_date))
+    
+    # Apply pagination and eager loading
+    query = query.options(
+        joinedload(Publication.cpv_main_code),
+        joinedload(Publication.dossier).joinedload(Dossier.descriptions),
+        joinedload(Publication.dossier).joinedload(Dossier.titles),
+        joinedload(Publication.dossier).joinedload(Dossier.enterprise_categories),
+        joinedload(Publication.organisation).joinedload(Organisation.organisation_names),
+        joinedload(Publication.cpv_additional_codes),
+        joinedload(Publication.lots).joinedload(Lot.descriptions),
+        joinedload(Publication.lots).joinedload(Lot.titles),
+        joinedload(Publication.company_matches),
+    ).offset((page - 1) * size).limit(size)
+    
+    # Execute the query and process the results
+    results = query.all()
+    
+    # Extract publications and enrich them with match data
+    publications = []
+    for pub, match in results:
+        if match:
+            # Add match metadata to publication
+            pub.match_percentage = match.match_percentage
+            pub.saved_at = match.updated_at if match.is_saved else None
+            pub.viewed_at = match.updated_at if match.is_viewed else None
+        else:
+            pub.match_percentage = 0
+            pub.saved_at = None
+            pub.viewed_at = None
+        
+        publications.append(pub)
+    
+    # Apply region filtering using the specialized function if region_filter is provided
+    if region_filter and len(region_filter) > 0:        
+        filtered_pubs = []
+        for pub in publications:
+            if pub.nuts_codes and check_if_publication_is_in_region(region_filter, pub.nuts_codes):
+                filtered_pubs.append(pub)
+        
+        # Replace publications with the filtered list
+        publications = filtered_pubs
+    
+    return publications, total_count
+
+
+def get_paginated_publications_free(
+    session: Session,
+    page: int = 1,
+    size: int = 10,
+    search_term: Optional[str] = None,
+    sort_by: str = "publication_date",
+    sort_order: str = "desc",
+    region_filter: Optional[List[str]] = None,
+    sector_filter: Optional[List[str]] = None
+) -> Tuple[List[Publication], int]:
+    """
+    Retrieve publications with pagination, sorting, and filtering applied at the database level.
+    Handles both regular listing and search in a single function.
+    Returns both the publications for the current page and the total count.
+    """
+    # Base query with required joins
+    query = session.query(Publication).filter(Publication.vault_submission_deadline.isnot(None))
+    
+    # Apply search term if provided
+    if search_term and search_term.strip():
+        search_pattern = f"%{search_term.strip()}%"
+        
+        # Create subqueries for text search
+        description_subquery = (
+            session.query(Description.id)
+            .filter(func.lower(Description.text).like(func.lower(search_pattern)))
+            .subquery()
+        )
+        
+        organisation_name_subquery = (
+            session.query(OrganisationName.id)
+            .filter(func.lower(OrganisationName.text).like(func.lower(search_pattern)))
+            .subquery()
+        )
+        
+        # Apply search conditions
+        query = query.filter(
+            or_(
+                Publication.dossier.has(
+                    Dossier.descriptions.any(Description.id.in_(description_subquery))
+                ),
+                Publication.dossier.has(
+                    Dossier.titles.any(Description.id.in_(description_subquery))
+                ),
+                Publication.organisation.has(
+                    Organisation.organisation_names.any(OrganisationName.id.in_(organisation_name_subquery))
+                ),
+                Publication.lots.any(
+                    Lot.descriptions.any(Description.id.in_(description_subquery))
+                ),
+                Publication.lots.any(
+                    Lot.titles.any(Description.id.in_(description_subquery))
+                ),
+                # Search in extracted keywords if available
+                and_(
+                    Publication.extracted_keywords.isnot(None),
+                    func.array_to_string(Publication.extracted_keywords, ',', '').ilike(search_pattern)
+                )
+            )
+        )
+    
+    # Apply sector filter - FIXED VERSION
+    if sector_filter and len(sector_filter) > 0:
+        sector_conditions = []
+        for sector_code in sector_filter:
+            # For sector filtering, we use the first two digits which define the sector category
+            if len(sector_code) >= 2:
+                sector_prefix = sector_code[:2]
+                sector_conditions.append(Publication.cpv_main_code_code.startswith(sector_prefix))
+        
+        if sector_conditions:
+            query = query.filter(or_(*sector_conditions))
+    
+    # Get initial count before region filtering (we'll apply region filtering in Python)
+    total_count = query.count()
+    
+    # Apply sorting
+    if sort_by == "publication_date":
+        if sort_order.lower() == "desc":
+            query = query.order_by(desc(Publication.publication_date))
+        else:
+            query = query.order_by(Publication.publication_date)
+    # Add other sorting options as needed
+    
+    # If we're going to filter by region, we need to retrieve all matching publications
+    # before pagination, apply the filter, and then paginate in memory
+    if region_filter and len(region_filter) > 0:
+
+        # Retrieve all publications that match other criteria
+        all_matching_pubs = query.options(
             joinedload(Publication.cpv_main_code),
             joinedload(Publication.dossier).joinedload(Dossier.descriptions),
             joinedload(Publication.dossier).joinedload(Dossier.titles),
             joinedload(Publication.dossier).joinedload(Dossier.enterprise_categories),
-            joinedload(Publication.organisation).joinedload(
-                Organisation.organisation_names
-            ),
+            joinedload(Publication.organisation).joinedload(Organisation.organisation_names),
             joinedload(Publication.cpv_additional_codes),
             joinedload(Publication.lots).joinedload(Lot.descriptions),
             joinedload(Publication.lots).joinedload(Lot.titles),
             joinedload(Publication.company_matches),
-        )
-        .all()
-    )
+        ).all()
+        
+        # Apply region filtering
+        filtered_pubs = []
+        for pub in all_matching_pubs:
+            if pub.nuts_codes and check_if_publication_is_in_region(region_filter, pub.nuts_codes):
+                filtered_pubs.append(pub)
+        
+        # Update total count
+        total_count = len(filtered_pubs)
+        
+        # Apply pagination in memory
+        start_idx = (page - 1) * size
+        end_idx = start_idx + size
+        publications = filtered_pubs[start_idx:end_idx] if start_idx < len(filtered_pubs) else []
+    else:
+        # Apply pagination and eager loading directly in the database query
+        publications = query.options(
+            joinedload(Publication.cpv_main_code),
+            joinedload(Publication.dossier).joinedload(Dossier.descriptions),
+            joinedload(Publication.dossier).joinedload(Dossier.titles),
+            joinedload(Publication.dossier).joinedload(Dossier.enterprise_categories),
+            joinedload(Publication.organisation).joinedload(Organisation.organisation_names),
+            joinedload(Publication.cpv_additional_codes),
+            joinedload(Publication.lots).joinedload(Lot.descriptions),
+            joinedload(Publication.lots).joinedload(Lot.titles),
+            joinedload(Publication.company_matches),
+        ).offset((page - 1) * size).limit(size).all()
+    
+    return publications, total_count
