@@ -40,3 +40,23 @@ class CompanySchema(BaseModel):
     )
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class SectorUpdateSchema(BaseModel):
+    sector: str
+    cpv_codes: List[str]
+
+
+class CompanyUpdateSchema(BaseModel):
+    name: Optional[str] = None
+    emails: Optional[List[str]] = None
+    number_of_employees: Optional[int] = Field(None)
+    summary_activities: Optional[str] = None
+    interested_sectors: Optional[List[SectorUpdateSchema]] = None
+    accreditations: Optional[dict] = None
+    max_publication_value: Optional[int] = None
+    activity_keywords: Optional[List[str]] = None
+    operating_regions: Optional[List[str]] = None
+
+    class Config:
+        extra = "ignore"  # Ignore any extra fields

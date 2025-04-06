@@ -74,70 +74,82 @@ def create_company(
 
 
 def update_company(
-    company_schema: CompanySchema,
+    company_schema: dict,
     session: Session,
 ) -> Optional[Company]:
-    """Update the details of an existing company."""
+    """
+    Update the details of an existing company with partial data.
+    Only the fields provided in company_schema will be updated.
+    """
     try:
+        # Get the existing company
         company = (
             session.query(Company)
-            .filter(Company.vat_number == company_schema.vat_number)
+            .filter(Company.vat_number == company_schema["vat_number"])
             .first()
         )
 
         if not company:
             logging.error(
                 "Company with VAT number %s not found. Update failed.",
-                company_schema.vat_number,
+                company_schema["vat_number"],
             )
             return None
 
-        # Update basic fields
-        if company_schema.name:
-            company.name = company_schema.name
-        if company_schema.subscription:
-            company.subscription = company_schema.subscription
-        if company_schema.emails:
-            company.emails = company_schema.emails
-        if company_schema.number_of_employees:
-            company.number_of_employees = company_schema.number_of_employees
-        if company_schema.summary_activities:
-            company.summary_activities = company_schema.summary_activities
-        if company_schema.accreditations is not None:
-            company.accreditations = company_schema.accreditations
+        simple_fields = [
+            "name",
+            "subscription",
+            "emails",
+            "number_of_employees",
+            "accreditations",
+            "max_publication_value",
+            "operating_regions",
+            "summary_activities",
+            "activity_keywords",
+        ]
 
-        # Update new fields if present in schema
-        if company_schema.max_publication_value is not None:
-            company.max_publication_value = company_schema.max_publication_value
-        if company_schema.activity_keywords:
-            company.activity_keywords = company_schema.activity_keywords
-        elif company_schema.summary_activities:
-            # Auto-extract keywords from updated activities
+        for field in simple_fields:
+            if field in company_schema:
+                setattr(company, field, company_schema[field])
+
+        if (
+            "summary_activities" in company_schema
+            and "activity_keywords" not in company_schema
+        ):
             company.activity_keywords = PublicationConverter.extract_keywords(
-                company_schema.summary_activities
+                company_schema["summary_activities"]
             )
-        if company_schema.operating_regions is not None:
-            company.operating_regions = company_schema.operating_regions
 
-        # Update sectors only if provided
-        if company_schema.interested_sectors is not None:
-            # Delete existing sectors
+        if "interested_sectors" in company_schema:
             session.query(Sector).filter(
                 Sector.company_vat_number == company.vat_number
             ).delete(synchronize_session=False)
 
-            # Add new sectors
-            company.interested_sectors = [
-                Sector(
-                    sector=sector_schema.sector,
-                    cpv_codes=sector_schema.cpv_codes,
-                    company_vat_number=company.vat_number,
-                )
-                for sector_schema in company_schema.interested_sectors
-            ]
+            session.commit()
+
+            if company_schema["interested_sectors"]:
+                # Create new sector objects
+                new_sectors = []
+                for sector_data in company_schema["interested_sectors"]:
+                    if isinstance(sector_data, dict):
+                        sector = sector_data.get("sector")
+                        cpv_codes = sector_data.get("cpv_codes", [])
+                    else:
+                        sector = getattr(sector_data, "sector", None)
+                        cpv_codes = getattr(sector_data, "cpv_codes", [])
+
+                    if sector:
+                        new_sector = Sector(
+                            sector=sector,
+                            cpv_codes=cpv_codes,
+                            company_vat_number=company.vat_number,
+                        )
+                        new_sectors.append(new_sector)
+                        session.add(new_sector)
+
+                company.interested_sectors = new_sectors
 
         session.commit()
-
         session.refresh(company)
         return company
     except Exception as e:

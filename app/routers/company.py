@@ -17,7 +17,11 @@ from app.ai.scraper import scrape_company_website
 from app.config.postgres import get_session
 from app.crud.mapper import convert_company_to_schema
 from app.models.publication_models import CompanyPublicationMatch, Publication
-from app.schemas.company_schemas import CompanyPublicationMatchSchema, CompanySchema
+from app.schemas.company_schemas import (
+    CompanyPublicationMatchSchema,
+    CompanySchema,
+    CompanyUpdateSchema,
+)
 from app.util.clerk import AuthUser, get_auth_user
 from app.util.messages_helper import send_recommendation_notification
 from app.util.publication_utils.publication_converter import PublicationConverter
@@ -76,9 +80,9 @@ async def get_company_by_vat_number(
 
 @companies_router.post("/company/", response_model=CompanySchema)
 async def create_company(
-    company: CompanySchema, 
+    company: CompanySchema,
     background_tasks: BackgroundTasks,
-    auth_user: AuthUser = Depends(get_auth_user)
+    auth_user: AuthUser = Depends(get_auth_user),
 ) -> CompanySchema:
     """Create a new company. User must be authenticated."""
     if not auth_user.email:
@@ -96,10 +100,12 @@ async def create_company(
         if existing_company:
             raise HTTPException(status_code=400, detail="User already has a company")
 
-        created_company = crud_company.create_company(company_schema=company, session=session)
+        created_company = crud_company.create_company(
+            company_schema=company, session=session
+        )
         if not created_company:
             raise HTTPException(status_code=500, detail="Failed to create company")
-        
+
         # Add background task to generate recommendations
         # background_tasks.add_task(
         #     generate_recommendations_for_new_company,
@@ -108,33 +114,44 @@ async def create_company(
 
         return created_company
 
+
 async def generate_recommendations_for_new_company(company_vat_number: str):
     """
     Background task to generate recommendations for a newly created company
     for all active publications from the past week.
     """
-    logging.info(f"Starting background recommendation generation for company {company_vat_number}")
-    try:        
+    logging.info(
+        f"Starting background recommendation generation for company {company_vat_number}"
+    )
+    try:
         # Get publications from the past week
         one_week_ago = datetime.now() - timedelta(days=7)
-        
+
         with get_session() as session:
             company = crud_company.get_company_by_vat_number(
                 vat_number=company_vat_number, session=session
             )
-            
+
             if not company:
-                logging.error(f"Company {company_vat_number} not found for recommendation generation")
+                logging.error(
+                    f"Company {company_vat_number} not found for recommendation generation"
+                )
                 return
-                
+
             # Get active publications from the past week
-            publications = session.query(Publication).filter(
-                Publication.publication_date >= one_week_ago,
-                Publication.vault_submission_deadline > datetime.now()
-            ).all()
-            
-            logging.info(f"Found {len(publications)} recent publications for recommendation")
-            
+            publications = (
+                session.query(Publication)
+                .filter(
+                    Publication.publication_date >= one_week_ago,
+                    Publication.vault_submission_deadline > datetime.now(),
+                )
+                .all()
+            )
+
+            logging.info(
+                f"Found {len(publications)} recent publications for recommendation"
+            )
+
             # Process each publication for recommendations
             for publication in publications:
                 try:
@@ -143,7 +160,7 @@ async def generate_recommendations_for_new_company(company_vat_number: str):
                     match, match_percentage = get_recommendation(
                         publication=publication, company=company
                     )
-                    
+
                     if match:
                         # Create match record
                         match_schema = CompanyPublicationMatchSchema(
@@ -154,7 +171,7 @@ async def generate_recommendations_for_new_company(company_vat_number: str):
                             is_saved=False,
                             is_viewed=False,
                         )
-                        
+
                         # Add to database
                         company_match = CompanyPublicationMatch(
                             company_vat_number=match_schema.company_vat_number,
@@ -162,10 +179,10 @@ async def generate_recommendations_for_new_company(company_vat_number: str):
                             match_percentage=match_schema.match_percentage,
                             is_recommended=match_schema.is_recommended,
                             is_saved=match_schema.is_saved,
-                            is_viewed=match_schema.is_viewed
+                            is_viewed=match_schema.is_viewed,
                         )
                         session.add(company_match)
-                        
+
                         # Send notification asynchronously
                         asyncio.create_task(
                             send_recommendation_notification(
@@ -176,24 +193,28 @@ async def generate_recommendations_for_new_company(company_vat_number: str):
                                 ),
                             )
                         )
-                    
+
                 except Exception as e:
-                    logging.error(f"Error processing publication {publication.publication_workspace_id}: {e}")
+                    logging.error(
+                        f"Error processing publication {publication.publication_workspace_id}: {e}"
+                    )
                     continue
-            
+
             # Commit all changes
             session.commit()
-            
-        logging.info(f"Completed background recommendation generation for company {company_vat_number}")
+
+        logging.info(
+            f"Completed background recommendation generation for company {company_vat_number}"
+        )
     except Exception as e:
         logging.error(f"Error in background recommendation generation: {e}")
 
 
 @companies_router.patch("/company/", response_model=CompanySchema)
 async def update_current_company(
-    company: CompanySchema, auth_user: AuthUser = Depends(get_auth_user)
+    company_update: CompanyUpdateSchema, auth_user: AuthUser = Depends(get_auth_user)
 ) -> CompanySchema:
-    """Update the authenticated user's company."""
+    """Update the authenticated user's company with partial data."""
     if not auth_user.email:
         raise HTTPException(status_code=400, detail="User email not available")
 
@@ -205,17 +226,21 @@ async def update_current_company(
         if not existing_company:
             raise HTTPException(status_code=404, detail="Company not found")
 
-        # Ensure VAT number can't be changed
-        if company.vat_number != existing_company.vat_number:
-            raise HTTPException(
-                status_code=400, detail="Cannot change company VAT number"
-            )
+        # Get only the fields that were actually provided in the update request
+        update_data = company_update.dict(exclude_unset=True, exclude_none=True)
 
-        # Ensure the authenticated user's email stays in the emails list
-        if auth_user.email not in company.emails:
-            company.emails.append(auth_user.email)
+        # Add the VAT number for the database query
+        update_data["vat_number"] = existing_company.vat_number
 
-        updated_company = crud_company.update_company(company_schema=company, session=session)
+        # Ensure the authenticated user's email stays in the emails list if emails are being updated
+        if "emails" in update_data and auth_user.email not in update_data["emails"]:
+            update_data["emails"].append(auth_user.email)
+
+        # Update in database with only the changed fields
+        updated_company = crud_company.update_company(
+            company_schema=update_data, session=session
+        )
+
         if not updated_company:
             raise HTTPException(status_code=500, detail="Failed to update company")
 
