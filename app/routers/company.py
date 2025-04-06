@@ -219,36 +219,7 @@ async def update_current_company(
         if not updated_company:
             raise HTTPException(status_code=500, detail="Failed to update company")
 
-        # Convert to schema before the session is closed
-        # TODO just return true, so we dont reload the company
         return await convert_company_to_schema(updated_company)
-
-
-# TODO: just lock the user account in clerk
-@companies_router.delete("/company/", status_code=200)
-async def delete_current_company(
-    auth_user: AuthUser = Depends(get_auth_user),
-) -> JSONResponse:
-    """Delete the authenticated user's company."""
-    if not auth_user.email:
-        raise HTTPException(status_code=400, detail="User email not available")
-
-    with get_session() as session:
-        # Get the user's company to verify ownership
-        existing_company = crud_company.get_company_by_email(
-            email=auth_user.email, session=session
-        )
-        if not existing_company:
-            raise HTTPException(status_code=404, detail="Company not found")
-
-        # TODO: implement
-        success = crud_company.delete_company(
-            vat_number=existing_company.vat_number, session=session
-        )
-        if not success:
-            raise HTTPException(status_code=500, detail="Failed to delete company")
-
-        return JSONResponse(content={"message": "Company deleted successfully"})
 
 
 @companies_router.post("/company/scrape-website", response_model=dict)
