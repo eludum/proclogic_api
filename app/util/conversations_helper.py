@@ -70,7 +70,6 @@ async def process_ai_message(
     run = client.beta.threads.runs.create_and_poll(
         thread_id=thread_id,
         assistant_id=assistant_id,
-        expires_after={"anchor": "last_active_at", "days": 7},
     )
 
     if run.status != "completed":

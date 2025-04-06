@@ -54,18 +54,32 @@ def decode_base64_to_bytesio(base64_str: str, filename: str = None) -> BytesIO:
         logging.error(f"Error decoding base64 to file: {e}")
 
 
-def normalize_filename(file_obj: bytes, filename: str) -> str:
-    file_obj.seek(0)
-    content = file_obj.read()
-    byte_io = BytesIO(content)
 
+def normalize_filename(file_obj: BytesIO, filename: str) -> BytesIO:
+    """
+    Normalize a file object with a proper filename.
+    Returns the normalized BytesIO object.
+    """
+    # Save current position
+    current_pos = file_obj.tell()
+    # Reset file position
+    file_obj.seek(0)
+    # Get content
+    content = file_obj.read()
+    # Create new BytesIO with the content
+    byte_io = BytesIO(content)
+    
     # Set name with lowercase extension
     if "." in filename:
         name_parts = filename.rsplit(".", 1)
         byte_io.name = f"{name_parts[0]}.{name_parts[1].lower()}"
     else:
         byte_io.name = filename
-
+    
+    # Restore original file position
+    file_obj.seek(current_pos)
+    
+    return byte_io
 
 def is_file_allowed_for_assistant_file_search(
     filename: str, accepted_formats: List[str] = None
@@ -109,6 +123,8 @@ def prepare_files_for_vector_store(filesmap: Dict[str, BytesIO]) -> List[BytesIO
                 continue
 
             if ".zip" in file_name:
+                file_data.seek(0)
+
                 unzipped_files = unzip(
                     zip_bytes=file_data.read(), publication_workspace_id="filename"
                 )

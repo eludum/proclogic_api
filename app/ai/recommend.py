@@ -409,7 +409,6 @@ def summarize_publication_with_files(
         run = client.beta.threads.runs.create_and_poll(
             thread_id=thread.id,
             assistant_id=assistant.id,
-            expires_after={"anchor": "last_active_at", "days": 7},
         )
         messages = list(
             client.beta.threads.messages.list(thread_id=thread.id, run_id=run.id)
