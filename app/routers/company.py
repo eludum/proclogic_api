@@ -111,8 +111,9 @@ async def create_company(
         #     generate_recommendations_for_new_company,
         #     company_vat_number=created_company.vat_number
         # )
-
-        return created_company
+        
+        # Convert the model to a schema before returning
+        return await convert_company_to_schema(created_company)
 
 
 async def generate_recommendations_for_new_company(company_vat_number: str):
@@ -291,7 +292,7 @@ async def scrape_company_website_endpoint(
                     processed_sectors.append(
                         {
                             "sector": sector_data["sector"],
-                            "cpv_codes": [],  # We don't have CPV codes from scraping
+                            "cpv_codes": sector_data["cpv_codes"],  
                         }
                     )
 
