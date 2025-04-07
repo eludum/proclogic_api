@@ -1,9 +1,11 @@
 from datetime import date, datetime
+import logging
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, extract, func
+from sqlalchemy.orm import joinedload
 
 from app.config.postgres import get_session
 from app.models.publication_models import CPVCode, Publication
@@ -934,3 +936,67 @@ async def get_supplier_detail(
             sectors=[AwardSectorItem(**s) for s in sectors.values()],
             contracts=contracts,
         )
+
+@analytics_router.get("/awards/contracts", response_model=List[ContractItem])
+async def get_contracts(
+    year: Optional[int] = Query(None, description="Filter by year"),
+    quarter: Optional[int] = Query(None, description="Filter by quarter (1-4)"),
+    month: Optional[int] = Query(None, description="Filter by month (1-12)"),
+    sector_code: Optional[str] = Query(None, description="Filter by sector CPV code"),
+    winner: Optional[str] = Query(None, description="Filter by winner name"),
+    supplier: Optional[str] = Query(None, description="Filter by supplier name"),
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """
+    Get a list of awarded contracts with flexible filtering options.
+    """
+    with get_session() as session:
+        # Build query for publications with awards
+        query = session.query(Publication).filter(Publication.award.isnot(None))
+        
+        # Apply time period filter
+        time_filter = get_time_period_filter(year, quarter, month)
+        if time_filter:
+            query = query.filter(time_filter)
+            
+        # Apply sector filter
+        if sector_code:
+            sector_filter = get_sector_filter(sector_code)
+            if sector_filter:
+                query = query.join(Publication.cpv_main_code).filter(sector_filter)
+                
+        # Apply winner filter
+        if winner:
+            query = query.filter(Publication.award["winner"].astext.ilike(f"%{winner}%"))
+            
+        # Apply supplier filter
+        if supplier:
+            query = query.filter(Publication.award["suppliers"].astext.ilike(f"%{supplier}%"))
+            
+        # Execute query with all needed joins
+        publications = query.options(
+            joinedload(Publication.dossier),
+            joinedload(Publication.organisation),
+            joinedload(Publication.cpv_main_code),
+        ).all()
+        
+        # Convert to contract items
+        contracts = []
+        for pub in publications:
+            try:
+                contracts.append(ContractItem(
+                    publication_id=pub.publication_workspace_id,
+                    title=get_publication_title(pub),
+                    award_date=pub.publication_date,
+                    winner=pub.award.get("winner", "Unknown"),
+                    suppliers=get_suppliers_from_award(pub) or [],
+                    value=get_award_value(pub),
+                    sector=get_cpv_sector_name(get_cpv_sector_code(pub.cpv_main_code.code), "nl"),
+                    cpv_code=pub.cpv_main_code.code,
+                    buyer=get_buyer_name(pub),
+                ))
+            except Exception as e:
+                logging.error(f"Error converting publication to contract: {e}")
+                continue
+                
+        return contracts
