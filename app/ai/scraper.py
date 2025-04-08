@@ -317,7 +317,7 @@ async def scrape_company_website(
                         
                         Extract the following information:
                         - Company name
-                        - VAT number (clean this so the output looks like BE XXXXXXXXXX)
+                        - VAT number
                         - Summary of activities (Generate a concise and comprehensive summary of the company's activities based on the scraped website data. Ensure the summary accurately reflects all aspects of what the company does, without adding unrelated information. This summary will be used to generate relevant public tender recommendations, so it must be precise and directly aligned with the company's actual services and expertise.)
                         - Main sectors/industries they operate in
                         - Approximate number of employees (if mentioned)

@@ -1,12 +1,12 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path
+from pydantic import BaseModel, EmailStr
 
 import app.crud.company as crud_company
 import app.crud.company_user as crud_company_user
 from app.config.postgres import get_session
 from app.util.clerk import AuthUser, get_auth_user
-from pydantic import BaseModel, EmailStr
 
 users_router = APIRouter()
 
@@ -44,8 +44,7 @@ async def get_company_emails(auth_user: AuthUser = Depends(get_auth_user)):
 
 @users_router.post("/users/invite", status_code=201)
 async def invite_user_to_company(
-    user: AddUserRequest,
-    auth_user: AuthUser = Depends(get_auth_user)
+    user: AddUserRequest, auth_user: AuthUser = Depends(get_auth_user)
 ):
     """Invite a new user to the company by sending a Clerk invitation."""
     if not auth_user.email:
@@ -60,27 +59,29 @@ async def invite_user_to_company(
 
         # Add and invite user
         success = crud_company_user.add_user_to_company(
-            company_vat_number=company.vat_number,
-            email=user.email,
-            session=session
+            company_vat_number=company.vat_number, email=user.email, session=session
         )
 
         if not success:
-            raise HTTPException(status_code=500, detail="Failed to invite user to company")
+            raise HTTPException(
+                status_code=500, detail="Failed to invite user to company"
+            )
 
-        return {"message": f"User {user.email} invited successfully", "emails": company.emails}
+        return {
+            "message": f"User {user.email} invited successfully",
+            "emails": company.emails,
+        }
 
 
 @users_router.delete("/users/remove/{email}")
 async def remove_user_from_company(
     email: str = Path(..., description="Email to remove"),
-    user_id: Optional[str] = Query(None, description="Clerk user ID if available"),
-    auth_user: AuthUser = Depends(get_auth_user)
+    auth_user: AuthUser = Depends(get_auth_user),
 ):
     """Remove a user from the company and optionally delete their Clerk account."""
     if not auth_user.email:
         raise HTTPException(status_code=400, detail="User email not available")
-        
+
     # Prevent removing the authenticated user's email
     if email == auth_user.email:
         raise HTTPException(status_code=400, detail="Cannot remove your own account")
@@ -94,16 +95,13 @@ async def remove_user_from_company(
 
         # Remove user from company
         success = crud_company_user.remove_user_from_company(
-            company_vat_number=company.vat_number,
-            email=email,
-            user_id=user_id,
-            session=session
+            company_vat_number=company.vat_number, email=email, session=session
         )
 
         if not success:
             raise HTTPException(
-                status_code=400, 
-                detail="Failed to remove user. Make sure it's not the last user or doesn't exist."
+                status_code=400,
+                detail="Failed to remove user. Make sure it's not the last user or doesn't exist.",
             )
 
         return {"message": f"User {email} removed successfully"}
@@ -124,8 +122,7 @@ async def get_company_users(auth_user: AuthUser = Depends(get_auth_user)):
 
         # Get users with complete Clerk information
         users = crud_company_user.get_company_users(
-            company_vat_number=company.vat_number,
-            session=session
+            company_vat_number=company.vat_number, session=session
         )
 
         return users

@@ -158,6 +158,82 @@ def update_company(
         return None
 
 
+def append_emails_to_company(
+    vat_number: str, emails: List[str], session: Session
+) -> Optional[Company]:
+    """
+    Update the emails list for a company identified by VAT number.
+
+    Args:
+        vat_number: The VAT number of the company to update
+        emails: List of email addresses to set for the company
+        session: SQLAlchemy database session
+
+    Returns:
+        Updated Company object or None if the company wasn't found or update failed
+    """
+    try:
+        # Get the existing company
+        company = (
+            session.query(Company).filter(Company.vat_number == vat_number).first()
+        )
+
+        if not company:
+            logging.error(
+                "Company with VAT number %s not found. Email update failed.",
+                vat_number,
+            )
+            return None
+
+        # Update the emails
+        company.emails = company.emails + emails
+
+        session.commit()
+        session.refresh(company)
+        return company
+    except Exception as e:
+        session.rollback()
+        logging.error("Error updating company emails: %s", e)
+        return None
+
+def remove_email_from_company(
+    vat_number: str, delete_email: str, session: Session
+) -> Optional[Company]:
+    """
+    Update the emails list for a company identified by VAT number.
+
+    Args:
+        vat_number: The VAT number of the company to update
+        emails: List of email addresses to set for the company
+        session: SQLAlchemy database session
+
+    Returns:
+        Updated Company object or None if the company wasn't found or update failed
+    """
+    try:
+        # Get the existing company
+        company = (
+            session.query(Company).filter(Company.vat_number == vat_number).first()
+        )
+
+        if not company:
+            logging.error(
+                "Company with VAT number %s not found. Email update failed.",
+                vat_number,
+            )
+            return None
+
+        # Update the emails
+        company.emails = [email for email in company.emails if email != delete_email]
+
+        session.commit()
+        session.refresh(company)
+        return company
+    except Exception as e:
+        session.rollback()
+        logging.error("Error updating company emails: %s", e)
+        return None
+
 def get_company_by_vat_number(vat_number: str, session: Session) -> Optional[Company]:
     """Retrieve a company by its VAT number."""
     try:

@@ -94,6 +94,8 @@ async def process_publication(
 
         await create_new_publication(client=client, pub=pub, session=session)
     elif not existing_publication and pub.vault_submission_deadline is None:
+        # TODO: get the actual publication
+        # e.g.  https://www.publicprocurement.be/publication-workspaces/cde195bc-c647-4792-8859-19a853a0339b/general
         await process_award_publication(client=client, pub=pub, session=session)
 
 

@@ -1,20 +1,19 @@
+import asyncio
 import json
 import logging
-
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import AnyHttpUrl, BaseModel
-from starlette.responses import JSONResponse
 from datetime import datetime, timedelta
+import re
 
+from clerk_backend_api import Clerk
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import AnyHttpUrl, BaseModel
 
-import asyncio
-from fastapi import BackgroundTasks
-
-from app.ai.recommend import get_recommendation
 import app.crud.company as crud_company
 from app.ai.openai import get_openai_client
+from app.ai.recommend import get_recommendation
 from app.ai.scraper import scrape_company_website
 from app.config.postgres import get_session
+from app.config.settings import Settings
 from app.crud.mapper import convert_company_to_schema
 from app.models.publication_models import CompanyPublicationMatch, Publication
 from app.schemas.company_schemas import (
@@ -25,6 +24,8 @@ from app.schemas.company_schemas import (
 from app.util.clerk import AuthUser, get_auth_user
 from app.util.messages_helper import send_recommendation_notification
 from app.util.publication_utils.publication_converter import PublicationConverter
+
+settings = Settings()
 
 companies_router = APIRouter()
 
@@ -111,8 +112,7 @@ async def create_company(
         #     generate_recommendations_for_new_company,
         #     company_vat_number=created_company.vat_number
         # )
-        
-        # Convert the model to a schema before returning
+
         return await convert_company_to_schema(created_company)
 
 
@@ -228,7 +228,7 @@ async def update_current_company(
             raise HTTPException(status_code=404, detail="Company not found")
 
         # Get only the fields that were actually provided in the update request
-        update_data = company_update.dict(exclude_unset=True, exclude_none=True)
+        update_data = company_update.model_dump(exclude_unset=True, exclude_none=True)
 
         # Add the VAT number for the database query
         update_data["vat_number"] = existing_company.vat_number
@@ -244,7 +244,7 @@ async def update_current_company(
 
         if not updated_company:
             raise HTTPException(status_code=500, detail="Failed to update company")
-
+        
         return await convert_company_to_schema(updated_company)
 
 
@@ -292,13 +292,13 @@ async def scrape_company_website_endpoint(
                     processed_sectors.append(
                         {
                             "sector": sector_data["sector"],
-                            "cpv_codes": sector_data["cpv_codes"],  
+                            "cpv_codes": sector_data["cpv_codes"],
                         }
                     )
 
         # Construct response with fields suitable for onboarding
         response = {
-            "vat_number": scraped_data.get("vat_number"),
+            "vat_number": re.sub(r'[^a-zA-Z0-9]', '', scraped_data.get("vat_number")),
             "name": scraped_data.get("company_name"),
             "summary_activities": scraped_data.get("summary_activities"),
             "interested_sectors": processed_sectors,
