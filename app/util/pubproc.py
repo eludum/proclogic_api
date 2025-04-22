@@ -251,6 +251,7 @@ async def generate_company_recommendations(
                     publication_title=PublicationConverter.get_descr_as_str(
                         pub.dossier.titles
                     ),
+                    publication_submission_deadline=pub.vault_submission_deadline,
                 )
         except Exception as e:
             logging.error(

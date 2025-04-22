@@ -192,6 +192,7 @@ async def generate_recommendations_for_new_company(company_vat_number: str):
                                 publication_title=PublicationConverter.get_descr_as_str(
                                     publication.dossier.titles
                                 ),
+                                publication_submission_deadline=publication.vault_submission_deadline
                             )
                         )
 

@@ -1,9 +1,10 @@
+from datetime import datetime
 from app.config.postgres import get_session
 import app.crud.notification as crud_notification
 import app.crud.company as crud_company
 
 
-async def send_recommendation_notification(company_vat_number: str, publication_id: str, publication_title: str):
+async def send_recommendation_notification(company_vat_number: str, publication_id: str, publication_title: str, publication_submission_deadline: datetime):
     """Send a recommendation notification to a company."""
     with get_session() as session:
         company = crud_company.get_company_by_vat_number(company_vat_number, session)
@@ -11,8 +12,8 @@ async def send_recommendation_notification(company_vat_number: str, publication_
             return False
             
         notification = crud_notification.create_notification(
-            title="Nieuwe aanbevolen aanbesteding",
-            content=f"Een nieuwe aanbesteding '{publication_title}' is aanbevolen voor uw bedrijf.",
+            title=f"'{publication_title}' is aanbevolen voor jou door Procy",
+            content=f"Wees er snel bij, inschrijven kan nog tot {publication_submission_deadline}",
             notification_type="recommendation",
             company_vat_number=company_vat_number,
             link=f"/publications/detail/{publication_id}",
@@ -31,8 +32,8 @@ async def send_deadline_notification(company_vat_number: str, publication_id: st
             return False
             
         notification = crud_notification.create_notification(
-            title=f"Deadline nadert voor aanbesteding",
-            content=f"De deadline voor '{publication_title}' nadert. Je hebt nog {days_left} dag(en) om te reageren.",
+            title=f"Deadline nadert voor '{publication_title}'",
+            content=f"Je hebt nog {days_left} dag(en) om je inschrijving in te dienen.",
             notification_type="deadline",
             company_vat_number=company_vat_number,
             link=f"/publications/detail/{publication_id}",
