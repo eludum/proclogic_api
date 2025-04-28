@@ -23,3 +23,4 @@ python-jose
 fastapi-pagination
 beautifulsoup4
 html2text
+stripe
