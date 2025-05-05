@@ -79,5 +79,6 @@ async def fulfill_checkout(session_id: str):
 
         # TODO: send custom receipt emails
         # - Save payment details and line items to your database
+        # differentiate between subscription types
 
     return
