@@ -384,7 +384,7 @@ async def setup_assistant(
         assistant = client.beta.assistants.create(
             name=assistant_name,
             instructions=instructions,
-            model="gpt-4o-mini",
+            model=settings.openai_model,
             tools=[{"type": "file_search"}],
         )
 
