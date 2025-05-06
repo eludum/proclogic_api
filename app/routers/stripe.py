@@ -1,7 +1,7 @@
 import logging
 import stripe
 from app.config.settings import Settings
-from clerk_backend_api import Clerk, CreateInvitationRequestBody, CreateUserRequestBody
+from clerk_backend_api import Clerk, CreateInvitationRequestBody
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -59,8 +59,8 @@ async def fulfill_checkout(session_id: str):
         invitation = clerk.invitations.create(
             request=CreateInvitationRequestBody(
                 email_address=session.customer_email,
-                # TODO: add subscription
-                public_metadata={"onboardingComplete": False},
+                # TODO: add subscription, add stripe session somewhere to keep track he
+                public_metadata={"onboardingComplete": False, "stripeSessionId": session_id},
             )
         )
 
