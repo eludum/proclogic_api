@@ -54,13 +54,6 @@ async def fulfill_checkout(session_id: str):
     # to prevent duplicate processing
 
     with Clerk(bearer_auth=settings.clerk_secret_key) as clerk:
-        invitations = clerk.invitations.list(query=session.customer_email)
-
-        # Check if user has already been invited
-        if invitations is not []:
-            for invitation in invitations:
-                if invitation.email_address == session.customer_email:
-                    return
 
         # Create Clerk user
         invitation = clerk.invitations.create(
