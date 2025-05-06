@@ -9,7 +9,10 @@ from bs4 import BeautifulSoup
 from openai import OpenAI
 
 from app.ai.openai import get_openai_client
+from app.config.settings import Settings
 from app.util.publication_utils.cpv_codes import nl_sectors
+
+settings = Settings()
 
 
 async def extract_text_from_html(html_content: str) -> str:
@@ -306,7 +309,7 @@ async def scrape_company_website(
 
             # Use OpenAI to analyze the website content with multilingual support
             completion = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=settings.openai_model,
                 response_format={"type": "json_object"},
                 messages=[
                     {

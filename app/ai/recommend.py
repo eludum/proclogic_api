@@ -151,7 +151,7 @@ def summarize_publication_award(xml: str, client: OpenAI = None) -> dict:
     client = client or get_openai_client()
 
     completion = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=settings.openai_model,
         messages=[
             {
                 "role": "system",
@@ -231,7 +231,7 @@ def get_recommendation(
     """
 
     completion = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=settings.openai_model,
         messages=[
             {
                 "role": "system",
@@ -308,7 +308,7 @@ def summarize_publication_without_files(
     # TODO: add scrape for publication value here and function below
 
     completion = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=settings.openai_model,
         messages=[
             {
                 "role": "system",
