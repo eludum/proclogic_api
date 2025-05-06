@@ -6,7 +6,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from fastapi_pagination import add_pagination
-from fastapi_pagination.utils import disable_installed_extensions_check
 
 from app.config.settings import Settings
 from app.routers.analytics import analytics_router
@@ -18,6 +17,7 @@ from app.routers.kanban import kanban_router
 from app.routers.notifications import notifications_router
 from app.routers.publications import publications_router
 from app.routers.users import users_router
+from app.routers.stripe import stripe_router
 from app.util.alembic_runner import run_migration
 from app.util.pubproc import fetch_pubproc_data, update_pubproc_data, gather_notifications
 
@@ -32,7 +32,6 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    disable_installed_extensions_check()
     if settings.scraper_mode:
         # probably only done via terminal however do it here if we use HA psql
         # run_migration()
@@ -59,6 +58,7 @@ proclogic.include_router(analytics_router)
 proclogic.include_router(notifications_router)
 proclogic.include_router(email_router)
 proclogic.include_router(kanban_router)
+proclogic.include_router(stripe_router)
 
 # origins = [
 #     "http://localhost:3000",

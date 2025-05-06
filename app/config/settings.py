@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     pubproc_server: str
     pubproc_token_url: str
 
+    stripe_secret_key: str
+    stripe_webhook_secret: str
+
     clerk_secret_key: str
     clerk_jwks_url: str = "https://clerk.proclogic.be/.well-known/jwks.json"
     pubproc_token: str = ""
