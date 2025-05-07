@@ -1,5 +1,4 @@
 import asyncio
-import logging
 
 import httpx
 from app.config.settings import Settings

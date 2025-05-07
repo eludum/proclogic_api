@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from io import BytesIO
 from typing import Optional, Tuple
 
 import httpx
