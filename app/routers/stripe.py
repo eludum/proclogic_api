@@ -58,18 +58,14 @@ async def fulfill_checkout(session_id: str):
         # Create Clerk user
         invitation = clerk.invitations.create(
             request=CreateInvitationRequestBody(
-                email_address=session.customer_email,
                 # TODO: add subscription, add stripe session somewhere to keep track he
-                public_metadata={
-                    "onboardingComplete": False,
-                    "stripeSessionId": session_id,
-                },
+                email_address=session.customer_details.email, public_metadata={"onboardingComplete": False}
             )
         )
 
         if not invitation:
             logging.error(
-                f"Failed to create Clerk invitation for {session.customer_email}"
+                f"Failed to create Clerk invitation for {session.customer_details.email}"
             )
             return False
 
