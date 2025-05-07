@@ -82,28 +82,33 @@ def get_or_create_organisation_names(
 ) -> List[OrganisationName]:
     organisation_name_instances = []
     for org_name_schema in organisation_names_schema:
-        org_name = (
+        existing_org_name = (
             session.query(OrganisationName)
             .filter_by(
                 language=org_name_schema.language,
                 text=org_name_schema.text,
-                organisation_id=organisation_id,
             )
             .first()
         )
-        if not org_name:
-            org_name = OrganisationName(
+        
+        if existing_org_name:
+            if existing_org_name.organisation_id != organisation_id:
+                existing_org_name.organisation_id = organisation_id
+                session.add(existing_org_name)
+            
+            organisation_name_instances.append(existing_org_name)
+        else:
+            # Create new if it doesn't exist at all
+            new_org_name = OrganisationName(
                 language=org_name_schema.language,
                 text=org_name_schema.text,
                 organisation_id=organisation_id,
             )
-            session.add(org_name)
+            session.add(new_org_name)
             session.flush()
-
-        organisation_name_instances.append(org_name)
+            organisation_name_instances.append(new_org_name)
 
     return organisation_name_instances
-
 
 def get_or_create_organisation(
     organisation_schema: OrganisationSchema, session: Session
