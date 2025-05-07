@@ -102,7 +102,6 @@ async def get_publications(
             for publication in publications
         ]
 
-        print(total)
         # Create a Page response with the correct total
         params = Params(page=page, size=size)
         return Page.create(items=items, total=total, params=params)
