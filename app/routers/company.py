@@ -4,7 +4,6 @@ import logging
 from datetime import datetime, timedelta
 import re
 
-from clerk_backend_api import Clerk
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import AnyHttpUrl, BaseModel
 

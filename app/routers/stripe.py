@@ -21,10 +21,8 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
             payload=payload, sig_header=stripe_signature, secret=endpoint_secret
         )
     except ValueError:
-        print("Invalid payload")
         raise HTTPException(status_code=400, detail="Invalid payload")
     except stripe.error.SignatureVerificationError:
-        print("Invalid signature")
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     event_type = event["type"]
@@ -58,15 +56,15 @@ async def fulfill_checkout(session_id: str):
         # Create Clerk user
         invitation = clerk.invitations.create(
             request=CreateInvitationRequestBody(
-                email_address=session.customer_email,
                 # TODO: add subscription, add stripe session somewhere to keep track he
-                public_metadata={"onboardingComplete": False, "stripeSessionId": session_id},
+                email_address=session.customer_details.email,
+                public_metadata={"onboardingComplete": False},
             )
         )
 
         if not invitation:
             logging.error(
-                f"Failed to create Clerk invitation for {session.customer_email}"
+                f"Failed to create Clerk invitation for {session.customer_details.email}"
             )
             return False
 
@@ -75,3 +73,6 @@ async def fulfill_checkout(session_id: str):
         # differentiate between subscription types
 
     return
+
+
+# TODO: add webhooks that revoke access too, see events

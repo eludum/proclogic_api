@@ -1,8 +1,8 @@
 import logging
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import asc, func
-from sqlalchemy.orm import Session, aliased, joinedload
+from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.company_models import Company
 from app.models.kanban_models import KanbanStatus, PublicationStatus

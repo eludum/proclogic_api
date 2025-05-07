@@ -1,14 +1,9 @@
 from datetime import date
 from typing import List, Optional
 
-import httpx
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from fastapi.responses import StreamingResponse
-from fastapi.security import HTTPBearer
-from fastapi_pagination import Page, Params
-
 import app.crud.company as crud_company
 import app.crud.publication as crud_publication
+import httpx
 from app.config.postgres import get_session
 from app.config.settings import Settings
 from app.crud.mapper import (
@@ -19,8 +14,12 @@ from app.crud.mapper import (
 )
 from app.schemas.publication_out_schemas import PublicationOut
 from app.util.clerk import AuthUser, get_auth_user
-
+from app.util.kanban_integration import remove_unsaved_publication_from_kanban
 from app.util.pubproc import get_publication_workspace_documents
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPBearer
+from fastapi_pagination import Page, Params
 
 settings = Settings()
 publications_router = APIRouter()
@@ -102,7 +101,6 @@ async def get_publications(
             for publication in publications
         ]
 
-        print(total)
         # Create a Page response with the correct total
         params = Params(page=page, size=size)
         return Page.create(items=items, total=total, params=params)
@@ -298,8 +296,6 @@ async def unsave_publication(
             raise HTTPException(status_code=404, detail="Publication was not saved")
 
         # Remove from Kanban board
-        from app.util.kanban_integration import remove_unsaved_publication_from_kanban
-
         await remove_unsaved_publication_from_kanban(
             company_vat_number=company.vat_number,
             publication_workspace_id=publication_workspace_id,
