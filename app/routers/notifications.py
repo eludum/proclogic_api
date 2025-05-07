@@ -1,7 +1,5 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
-
 import app.crud.company as crud_company
 import app.crud.notification as crud_notification
 from app.config.postgres import get_session
@@ -10,8 +8,8 @@ from app.schemas.notification_schemas import (
     NotificationListResponse,
     NotificationResponse,
 )
-
 from app.util.clerk import AuthUser, get_auth_user
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 notifications_router = APIRouter()
 

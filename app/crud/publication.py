@@ -6,7 +6,6 @@ from app.util.publication_utils.nuts_codes import check_if_publication_is_in_reg
 from sqlalchemy import and_, case, desc, func, or_
 from sqlalchemy.orm import Session, aliased, joinedload
 from sqlalchemy.sql import exists
-from sqlalchemy.sql.expression import cast
 
 from app.models.publication_models import (
     CompanyPublicationMatch,

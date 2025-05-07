@@ -57,7 +57,8 @@ async def fulfill_checkout(session_id: str):
         invitation = clerk.invitations.create(
             request=CreateInvitationRequestBody(
                 # TODO: add subscription, add stripe session somewhere to keep track he
-                email_address=session.customer_details.email, public_metadata={"onboardingComplete": False}
+                email_address=session.customer_details.email,
+                public_metadata={"onboardingComplete": False},
             )
         )
 
