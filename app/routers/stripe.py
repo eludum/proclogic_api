@@ -60,7 +60,10 @@ async def fulfill_checkout(session_id: str):
             request=CreateInvitationRequestBody(
                 email_address=session.customer_email,
                 # TODO: add subscription, add stripe session somewhere to keep track he
-                public_metadata={"onboardingComplete": False, "stripeSessionId": session_id},
+                public_metadata={
+                    "onboardingComplete": False,
+                    "stripeSessionId": session_id,
+                },
             )
         )
 
@@ -75,3 +78,6 @@ async def fulfill_checkout(session_id: str):
         # differentiate between subscription types
 
     return
+
+
+# TODO: add webhooks that revoke access too, see events
