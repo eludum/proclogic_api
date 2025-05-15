@@ -161,6 +161,7 @@ def summarize_publication_award(xml: str, client: OpenAI = None) -> dict:
                     If multiple winners or values exist, choose the primary one.
                     Respond in JSON with these keys:
                     - winner (string): The name of the winning contractor if specified
+                    - winner_vat (string, optional): The VAT number of the winning contractor if available
                     - suppliers (array): List of all suppliers mentioned in the XML, each with a name and identifier if available
                     - value (integer): The contract value in euros as an integer (no decimal places)
                     - date (string, optional): The award date if available in YYYY-MM-DD format
@@ -355,7 +356,7 @@ def summarize_publication_with_files(
 
     Additional XML information: {xml}
     
-    Create a concise but complete summary that describes the most important aspects of this procurement.
+    Create a concise but complete summary that describes the most important aspects of this procurement. If a document contains an estimated value of the publication, make sure to populate the estimated_value field.
     """
     try:
         if filesmap:
