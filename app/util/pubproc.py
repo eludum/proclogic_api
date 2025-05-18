@@ -31,30 +31,57 @@ settings = Settings()
 
 
 async def fetch_pubproc_data() -> None:
+    logging.info("Starting publication data fetch service")
     while True:
-        # TODO: scan all saved publications and check if they have changed documents or forum
-        # TODO: USE AP SCHEDULER NOT PYCRON
         try:
-            async with httpx.AsyncClient() as client:
-                await retrieve_publications(client=client)
-        except Exception as e:
-            logging.error("error in fetching data: %s", e)
-        finally:
+            # TODO: scan all saved publications and check if they have changed documents or forum
+            # TODO: USE AP SCHEDULER NOT PYCRON
+            try:
+                async with httpx.AsyncClient() as client:
+                    await retrieve_publications(client=client)
+                    logging.info("Publication data fetch completed successfully")
+            except Exception as e:
+                logging.error("Error in fetching data: %s", e)
+
+            # Wait until next run
             await asyncio.sleep(600)  # 10 minutes in seconds
+
+        except asyncio.CancelledError:
+            logging.info("Publication data fetch service    is shutting down")
+            raise  # Re-raise to allow proper cleanup
 
 
 async def update_pubproc_data() -> None:
-    # TODO: update all saved publications data forums docs, daily send to ai and send notification
-    #       clean files from minio if not active anymore and implement minio
-    pass
-    # with get_session() as session:
-    #     for company in crud_company.get_all_companies(session=session):
-    #         await crud_publication.get_all_publications() (only get active ones obviously make new crud if needed)
+    logging.info("Starting publication data update service")
+    try:
+        # TODO: update all saved publications data forums docs, daily send to ai and send notification
+        #       clean files from minio if not active anymore and implement minio
+        while True:
+            try:
+                # Your update logic here
+                await asyncio.sleep(3600)  # 1 hour in seconds
+            except Exception as e:
+                logging.error("Error in updating pubproc data: %s", e)
+                await asyncio.sleep(300)  # 5 minutes before retry on error
+    except asyncio.CancelledError:
+        logging.info("Publication data update service is shutting down")
+        raise
 
 
 async def gather_notifications() -> None:
-    # TODO: scan for deadlines and send notifications
-    pass
+    logging.info("Starting notification gathering service")
+    try:
+        # TODO: scan for deadlines and send notifications
+        while True:
+            try:
+                # Your notification gathering logic here
+                await asyncio.sleep(3600)  # 1 hour in seconds
+            except Exception as e:
+                logging.error("Error in gathering notifications: %s", e)
+                await asyncio.sleep(300)  # 5 minutes before retry on error
+    except asyncio.CancelledError:
+        logging.info("Notification gathering service is shutting down")
+        raise
 
 
 async def retrieve_publications(client: httpx.AsyncClient) -> None:
