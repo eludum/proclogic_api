@@ -1,0 +1,133 @@
+{
+    "id": "c9dc8947-f63f-40b4-a689-eaffb5baf7e9",
+    "organisationId": 1585,
+    "organisationNames": [
+        {
+            "text": "Natuurpunt Beheer vzw",
+            "language": "EN"
+        },
+        {
+            "text": "Natuurpunt Beheer vzw",
+            "language": "FR"
+        },
+        {
+            "text": "Natuurpunt Beheer vzw",
+            "language": "NL"
+        },
+        {
+            "text": "Natuurpunt Beheer vzw",
+            "language": "DE"
+        }
+    ],
+    "noticeSubType": "E4",
+    "noticeType": "can-general",
+    "formType": "AWARD",
+    "versions": [
+        {
+            "id": "5c073230-8805-4c06-930a-6cea27a1b25c",
+            "dispatchDate": "2025-05-16",
+            "activationDate": "2025-05-16",
+            "createdAt": "2025-05-16T08:54:32.221983",
+            "sentAt": "2025-05-16T08:54:45.014988",
+            "publicationPolicy": "BDA_ONLY",
+            "version": 5,
+            "status": "PUBLISHED",
+            "notice": {
+                "id": "d00fce11-72ee-4d70-92fe-0c8b2d36e08f",
+                "xmlContent": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><ContractAwardNotice xmlns:ext=\"urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2\" xmlns=\"urn:oasis:names:specification:ubl:schema:xsd:ContractAwardNotice-2\" xmlns:ns8=\"urn:oasis:names:specification:ubl:schema:xsd:ContractNotice-2\" xmlns:cac=\"urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2\" xmlns:cbc=\"urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2\" xmlns:ns9=\"urn:oasis:names:specification:ubl:schema:xsd:PriorInformationNotice-2\" xmlns:efac=\"http://data.europa.eu/p27/eforms-ubl-extension-aggregate-components/1\" xmlns:efbc=\"http://data.europa.eu/p27/eforms-ubl-extension-basic-components/1\" xmlns:efext=\"http://data.europa.eu/p27/eforms-ubl-extensions/1\"><ext:UBLExtensions><ext:UBLExtension><ext:ExtensionContent><efext:EformsExtension><efbc:TransmissionDate>2025-05-16+02:00</efbc:TransmissionDate><efbc:TransmissionTime>00:00:00+02:00</efbc:TransmissionTime><efac:NoticeResult><cbc:TotalAmount currencyID=\"EUR\">111825.00</cbc:TotalAmount><efac:LotResult><cbc:ID schemeName=\"result\">RES-0001</cbc:ID><cbc:HigherTenderAmount currencyID=\"EUR\">140239.00</cbc:HigherTenderAmount><cbc:LowerTenderAmount currencyID=\"EUR\">111825.00</cbc:LowerTenderAmount><cbc:TenderResultCode listName=\"winner-selection-status\">selec-w</cbc:TenderResultCode><efac:LotTender><cbc:ID schemeName=\"tender\">TEN-0001</cbc:ID></efac:LotTender><efac:ReceivedSubmissionsStatistics><efbc:StatisticsCode listName=\"received-submission-type\">tenders</efbc:StatisticsCode><efbc:StatisticsNumeric>3</efbc:StatisticsNumeric></efac:ReceivedSubmissionsStatistics><efac:ReceivedSubmissionsStatistics><efbc:StatisticsCode listName=\"received-submission-type\">part-req</efbc:StatisticsCode><efbc:StatisticsNumeric>3</efbc:StatisticsNumeric></efac:ReceivedSubmissionsStatistics><efac:SettledContract><cbc:ID schemeName=\"contract\">CON-0001</cbc:ID></efac:SettledContract><efac:TenderLot><cbc:ID schemeName=\"Lot\">LOT-0001</cbc:ID></efac:TenderLot></efac:LotResult><efac:LotTender><cbc:ID schemeName=\"tender\">TEN-0001</cbc:ID><efbc:TenderRankedIndicator>false</efbc:TenderRankedIndicator><cac:LegalMonetaryTotal><cbc:PayableAmount currencyID=\"EUR\">111825.00</cbc:PayableAmount></cac:LegalMonetaryTotal><efac:SubcontractingTerm><efbc:TermCode listName=\"applicability\">no</efbc:TermCode></efac:SubcontractingTerm><efac:TenderingParty><cbc:ID schemeName=\"tendering-party\">TPA-0001</cbc:ID></efac:TenderingParty><efac:TenderLot><cbc:ID schemeName=\"Lot\">LOT-0001</cbc:ID></efac:TenderLot><efac:TenderReference><cbc:ID>Vandervelden_bv</cbc:ID></efac:TenderReference></efac:LotTender><efac:SettledContract><cbc:ID schemeName=\"contract\">CON-0001</cbc:ID><cbc:IssueDate>2025-05-16+02:00</cbc:IssueDate><cbc:Title languageID=\"NLD\">Herstel Hoogmoerheide Noord (Merksplas) Water Replenishment Turnhouts Vennengebied (Coca-Cola)</cbc:Title><cac:SignatoryParty><cac:PartyIdentification><cbc:ID schemeName=\"organization\">ORG-0001</cbc:ID></cac:PartyIdentification></cac:SignatoryParty><efac:ContractReference><cbc:ID>138-341</cbc:ID></efac:ContractReference><efac:LotTender><cbc:ID schemeName=\"tender\">TEN-0001</cbc:ID></efac:LotTender></efac:SettledContract><efac:TenderingParty><cbc:ID schemeName=\"tendering-party\">TPA-0001</cbc:ID><efac:Tenderer><cbc:ID schemeName=\"organization\">ORG-0004</cbc:ID></efac:Tenderer></efac:TenderingParty></efac:NoticeResult><efac:NoticeSubType><cbc:SubTypeCode listName=\"notice-subtype\">E4</cbc:SubTypeCode></efac:NoticeSubType><efac:Organizations><efac:Organization><efac:Company><cbc:WebsiteURI>http://www.natuurpunt.be/</cbc:WebsiteURI><cac:PartyIdentification><cbc:ID schemeName=\"organization\">ORG-0001</cbc:ID></cac:PartyIdentification><cac:PartyName><cbc:Name languageID=\"NLD\">Natuurpunt Beheer vzw</cbc:Name></cac:PartyName><cac:PostalAddress><cbc:StreetName>Coxiestraat 11</cbc:StreetName><cbc:CityName>Mechelen</cbc:CityName><cbc:PostalZone>2800</cbc:PostalZone><cbc:CountrySubentityCode listName=\"nuts\">BE211</cbc:CountrySubentityCode><cac:Country><cbc:IdentificationCode listName=\"country\">BEL</cbc:IdentificationCode></cac:Country></cac:PostalAddress><cac:PartyLegalEntity><cbc:CompanyID>BE0409 423 736</cbc:CompanyID></cac:PartyLegalEntity><cac:Contact><cbc:Name>Kristof Luysmans</cbc:Name><cbc:JobTitle>Coördinator aankoop &amp; aanbestedingen</cbc:JobTitle><cbc:Telephone>+32 474810526</cbc:Telephone><cbc:ElectronicMail>kristof.luysmans@natuurpunt.be</cbc:ElectronicMail></cac:Contact></efac:Company></efac:Organization><efac:Organization><efac:Company><cbc:WebsiteURI>https://www.tribunaux-rechtbanken.be/nl/rechtbank-eerste-aanleg-antwerpen-afdeling-mechelen/civil</cbc:WebsiteURI><cac:PartyIdentification><cbc:ID schemeName=\"organization\">ORG-0002</cbc:ID></cac:PartyIdentification><cac:PartyName><cbc:Name languageID=\"NLD\">Rechtbank van Eerste Aanleg Antwerpen afdeling Mechelen</cbc:Name></cac:PartyName><cac:PostalAddress><cbc:StreetName>keizerstraat 20</cbc:StreetName><cbc:CityName>Mechelen</cbc:CityName><cbc:PostalZone>2800</cbc:PostalZone><cbc:CountrySubentityCode listName=\"nuts\">BE212</cbc:CountrySubentityCode><cac:Country><cbc:IdentificationCode listName=\"country\">BEL</cbc:IdentificationCode></cac:Country></cac:PostalAddress><cac:PartyLegalEntity><cbc:CompanyID>0308357753</cbc:CompanyID></cac:PartyLegalEntity><cac:Contact><cbc:Telephone>+32 15288111</cbc:Telephone><cbc:ElectronicMail>afdelingsvoorzitter.rea.mechelen@just.fgov.be</cbc:ElectronicMail></cac:Contact></efac:Company></efac:Organization><efac:Organization><efac:Company><cac:PartyIdentification><cbc:ID schemeName=\"organization\">ORG-0003</cbc:ID></cac:PartyIdentification><cac:PartyName><cbc:Name languageID=\"NLD\">3P - Aanbieder van diensten / Prestataire de services</cbc:Name></cac:PartyName><cac:PostalAddress><cbc:CityName>Antwerpen / Anvers</cbc:CityName><cbc:PostalZone>2000</cbc:PostalZone><cbc:CountrySubentityCode listName=\"nuts\">BE211</cbc:CountrySubentityCode><cac:Country><cbc:IdentificationCode listName=\"country\">BEL</cbc:IdentificationCode></cac:Country></cac:PostalAddress><cac:PartyLegalEntity><cbc:CompanyID>BE 0475.480.736</cbc:CompanyID></cac:PartyLegalEntity><cac:Contact><cbc:Telephone>+32 3 294 30 51</cbc:Telephone><cbc:ElectronicMail>info@3p.eu</cbc:ElectronicMail></cac:Contact></efac:Company></efac:Organization><efac:Organization><efac:Company><cbc:WebsiteURI>https://www.vandervelden-bos.be/</cbc:WebsiteURI><efbc:CompanySizeCode listName=\"economic-operator-size\">large</efbc:CompanySizeCode><cac:PartyIdentification><cbc:ID schemeName=\"organization\">ORG-0004</cbc:ID></cac:PartyIdentification><cac:PartyName><cbc:Name languageID=\"NLD\">Vandervelden bv</cbc:Name></cac:PartyName><cac:PostalAddress><cbc:StreetName>Middenweg 15</cbc:StreetName><cbc:CityName>Hamont-Achel</cbc:CityName><cbc:PostalZone>3930</cbc:PostalZone><cbc:CountrySubentityCode listName=\"nuts\">BE225</cbc:CountrySubentityCode><cac:Country><cbc:IdentificationCode listName=\"country\">BEL</cbc:IdentificationCode></cac:Country></cac:PostalAddress><cac:PartyLegalEntity><cbc:CompanyID>BE 0476234564</cbc:CompanyID></cac:PartyLegalEntity><cac:Contact><cbc:Telephone>+32 11648633</cbc:Telephone><cbc:ElectronicMail>info@vandervelden-bos.be</cbc:ElectronicMail></cac:Contact></efac:Company></efac:Organization></efac:Organizations></efext:EformsExtension></ext:ExtensionContent></ext:UBLExtension></ext:UBLExtensions><cbc:UBLVersionID>2.3</cbc:UBLVersionID><cbc:CustomizationID>eforms-sdk-1.13</cbc:CustomizationID><cbc:ID schemeName=\"notice-id\">d00fce11-72ee-4d70-92fe-0c8b2d36e08f</cbc:ID><cbc:ContractFolderID>9ca69e5d-f259-4a53-8a53-e0a5e68c90fb</cbc:ContractFolderID><cbc:IssueDate>2025-05-16+02:00</cbc:IssueDate><cbc:IssueTime>00:00:00+02:00</cbc:IssueTime><cbc:VersionID>01</cbc:VersionID><cbc:RegulatoryDomain>32014L0024</cbc:RegulatoryDomain><cbc:NoticeTypeCode listName=\"result\">can-standard</cbc:NoticeTypeCode><cbc:NoticeLanguageCode listName=\"language\">NLD</cbc:NoticeLanguageCode><cac:ContractingParty><cac:Party><cac:PartyIdentification><cbc:ID schemeName=\"organization\">ORG-0001</cbc:ID></cac:PartyIdentification><cac:ServiceProviderParty><cbc:ServiceTypeCode listName=\"organization-role\">serv-prov</cbc:ServiceTypeCode><cac:Party><cac:PartyIdentification><cbc:ID schemeName=\"organization\">ORG-0003</cbc:ID></cac:PartyIdentification></cac:Party></cac:ServiceProviderParty></cac:Party></cac:ContractingParty><cac:TenderingProcess><cbc:ProcedureCode listName=\"procurement-procedure-type\">oth-single</cbc:ProcedureCode></cac:TenderingProcess><cac:ProcurementProject><cbc:ID schemeName=\"InternalID\">PPP23L-88/5257/NPB_CC_IW_HeideherstelHoogmoerheideNoord_2025_JH</cbc:ID><cbc:Name languageID=\"NLD\">Herstel Hoogmoerheide Noord (Merksplas) Water Replenishment Turnhouts Vennengebied (Coca-Cola)</cbc:Name><cbc:Description languageID=\"NLD\">Doel van de werken\n\nDe beoogde werken kaderen in herstel van het Europese beschermde habitats droge heide 4030 en natte heide 4010.\n\nPlaats van de uitvoering\n\nDe werken vinden plaats in de provincie Antwerpen in de gemeente Turnhout. De situering van de percelen waarop werken gepland zijn, worden weergegeven op de kaarten in bijlage.\n\nDe werken vinden plaats in een speciale beschermingszone (SBZ). Het gebied werd door de Europese Unie aangeduid als Habitatrichtlijngebied en maakt deel uit van het Natura 2000-netwerk.\nDaardoor zijn een aantal vegetaties en habitats beschermd naast een hele lijst aan zeldzame diersoorten (soorten en habitats van de Habitatrichtlijn). Deze werken zijn gericht op het herstel van deze Natura 2000 habitats.\n\nAard van de opdracht\n\nDe werken omvatten: \n-\tBomen kappen en hout afvoeren\n-\tStronken frezen\n-\tPlaggen en afvoeren\n-\tRabatten dichtsmeren\n</cbc:Description><cbc:ProcurementTypeCode listName=\"contract-nature\">services</cbc:ProcurementTypeCode><cac:MainCommodityClassification><cbc:ItemClassificationCode listName=\"cpv\">92533000</cbc:ItemClassificationCode></cac:MainCommodityClassification><cac:RealizedLocation><cac:Address><cbc:CountrySubentityCode listName=\"nuts\">BE213</cbc:CountrySubentityCode><cac:Country><cbc:IdentificationCode listName=\"country\">BEL</cbc:IdentificationCode></cac:Country></cac:Address></cac:RealizedLocation><cac:RealizedLocation><cac:Address><cbc:CountrySubentityCode listName=\"nuts\">BE213</cbc:CountrySubentityCode><cac:Country><cbc:IdentificationCode listName=\"country\">BEL</cbc:IdentificationCode></cac:Country></cac:Address></cac:RealizedLocation></cac:ProcurementProject><cac:ProcurementProjectLot><cbc:ID schemeName=\"Lot\">LOT-0001</cbc:ID><cac:TenderingTerms><cbc:FundingProgramCode listName=\"eu-funded\">no-eu-funds</cbc:FundingProgramCode><cac:AwardingTerms><cac:AwardingCriterion><cac:SubordinateAwardingCriterion><ext:UBLExtensions><ext:UBLExtension><ext:ExtensionContent><efext:EformsExtension><efac:AwardCriterionParameter><efbc:ParameterCode listName=\"number-weight\">poi-exa</efbc:ParameterCode><efbc:ParameterNumeric>50</efbc:ParameterNumeric></efac:AwardCriterionParameter></efext:EformsExtension></ext:ExtensionContent></ext:UBLExtension></ext:UBLExtensions><cbc:AwardingCriterionTypeCode listName=\"award-criterion-type\">cost</cbc:AwardingCriterionTypeCode><cbc:Description languageID=\"NLD\">Prijs</cbc:Description><cbc:CalculationExpression languageID=\"NLD\">Regel van drie; Score offerte = (prijs laagste offerte / prijs offerte) * gewicht van het criterium prijs</cbc:CalculationExpression></cac:SubordinateAwardingCriterion><cac:SubordinateAwardingCriterion><ext:UBLExtensions><ext:UBLExtension><ext:ExtensionContent><efext:EformsExtension><efac:AwardCriterionParameter><efbc:ParameterCode listName=\"number-weight\">poi-exa</efbc:ParameterCode><efbc:ParameterNumeric>50</efbc:ParameterNumeric></efac:AwardCriterionParameter></efext:EformsExtension></ext:ExtensionContent></ext:UBLExtension></ext:UBLExtensions><cbc:AwardingCriterionTypeCode listName=\"award-criterion-type\">quality</cbc:AwardingCriterionTypeCode><cbc:Description languageID=\"NLD\">Plan van aanpak</cbc:Description><cbc:CalculationExpression languageID=\"NLD\">De inschrijver voegt bij zijn offerte een plan van aanpak toe waaruit blijkt dat de inschrijver kan voldoen aan de minimale vereisten van het bestek, maar waarbij volgende elementen aanvullend worden toegelicht en in zijn globaliteit beoordeeld:\no Organisatie van de werf met oa veiligheid en markering.\no Toegepaste technieken voor uitvoering en gebruikte materialen (indien van toepassing)\no Ecologische aspecten die van belang zijn bij deze opdracht / maatregelen om milieu-impact te verminderen.\no Duidelijke planning en timing van de werf waarbij de vooropgestelde termijnen bewaakt worden.\no Overleg met de opdrachtgever in casu administratief en op het terrein. Hoe wordt gerapporteerd en kunnen administratieve vragen voldaan worden? De voertaal is Nederlands.\no Globaal veiligheidsplan wordt toegevoegd.\n\nBovenstaande elementen hebben een gelijk aandeel en worden als een geheel beoordeeld waarbij een score wordt toegekend volgens onderstaande beoordelingsmethodiek:\n- Uitstekend (het plan van aanpak voldoet volledig aan de verwachtingen en biedt veel bijkomende meerwaarde): 100% punten\n- Zeer goed (het plan van aanpak voldoet volledig aan de verwachtingen en biedt een meerwaarde): 85% punten\n- Goed (het plan van aanpak voldoet volledig aan de verwachtingen en biedt een beperkte meerwaarde): 70% punten\n- Voldoende (het plan van aanpak voldoet aan de verwachtingen maar biedt weinig of geen meerwaarde): 60% punten\n- Matig (het plan van aanpak voldoet net aan de verwachtingen maar biedt amper meerwaarde): 50% punten\n- Zeer matig (het plan van aanpak voldoet amper aan de verwachtingen en biedt geen meerwaarde): 35% punten\n- Onvoldoende (het plan van aanpak voldoet niet aan de verwachtingen en biedt geen meerwaarde): 15% punten\n- Zwaar onvoldoende (het plan van aanpak voldoet helemaal niet aan de verwachtingen en biedt geen enkele meerwaarde): 0% punten</cbc:CalculationExpression></cac:SubordinateAwardingCriterion></cac:AwardingCriterion></cac:AwardingTerms><cac:AdditionalInformationParty><cac:PartyIdentification><cbc:ID schemeName=\"organization\">ORG-0001</cbc:ID></cac:PartyIdentification></cac:AdditionalInformationParty><cac:AppealTerms><cac:AppealReceiverParty><cac:PartyIdentification><cbc:ID schemeName=\"organization\">ORG-0002</cbc:ID></cac:PartyIdentification></cac:AppealReceiverParty></cac:AppealTerms></cac:TenderingTerms><cac:TenderingProcess><cac:AuctionTerms><cbc:AuctionConstraintIndicator>false</cbc:AuctionConstraintIndicator></cac:AuctionTerms><cac:ContractingSystem><cbc:ContractingSystemTypeCode listName=\"dps-usage\">none</cbc:ContractingSystemTypeCode></cac:ContractingSystem><cac:ContractingSystem><cbc:ContractingSystemTypeCode listName=\"framework-agreement\">none</cbc:ContractingSystemTypeCode></cac:ContractingSystem></cac:TenderingProcess><cac:ProcurementProject><cbc:ID schemeName=\"InternalID\">NPB_CC_IW_HeideherstelHoogmoerheideNoord_2025_JH_1</cbc:ID><cbc:Name languageID=\"NLD\">Herstel Hoogmoerheide Noord (Merksplas) Water Replenishment Turnhouts Vennengebied (Coca-Cola)</cbc:Name><cbc:Description languageID=\"NLD\">Doel van de werken\n\nDe beoogde werken kaderen in herstel van het Europese beschermde habitats droge heide 4030 en natte heide 4010.\n\nPlaats van de uitvoering\n\nDe werken vinden plaats in de provincie Antwerpen in de gemeente Turnhout. De situering van de percelen waarop werken gepland zijn, worden weergegeven op de kaarten in bijlage.\n\nDe werken vinden plaats in een speciale beschermingszone (SBZ). Het gebied werd door de Europese Unie aangeduid als Habitatrichtlijngebied en maakt deel uit van het Natura 2000-netwerk.\nDaardoor zijn een aantal vegetaties en habitats beschermd naast een hele lijst aan zeldzame diersoorten (soorten en habitats van de Habitatrichtlijn). Deze werken zijn gericht op het herstel van deze Natura 2000 habitats.\n\nAard van de opdracht\n\nDe werken omvatten: \n-\tBomen kappen en hout afvoeren\n-\tStronken frezen\n-\tPlaggen en afvoeren\n-\tRabatten dichtsmeren\n</cbc:Description><cbc:ProcurementTypeCode listName=\"contract-nature\">services</cbc:ProcurementTypeCode><cac:MainCommodityClassification><cbc:ItemClassificationCode listName=\"cpv\">92533000</cbc:ItemClassificationCode></cac:MainCommodityClassification><cac:AdditionalCommodityClassification><cbc:ItemClassificationCode listName=\"cpv\">92533000</cbc:ItemClassificationCode></cac:AdditionalCommodityClassification><cac:RealizedLocation><cbc:Description languageID=\"NLD\">Turnhouts Vennengebied (Merksplas)</cbc:Description><cac:Address><cbc:CityName>Merksplas</cbc:CityName><cbc:PostalZone>2330</cbc:PostalZone><cbc:CountrySubentityCode listName=\"nuts\">BE213</cbc:CountrySubentityCode><cac:Country><cbc:IdentificationCode listName=\"country\">BEL</cbc:IdentificationCode></cac:Country></cac:Address></cac:RealizedLocation><cac:PlannedPeriod><cbc:StartDate>2025-07-01+02:00</cbc:StartDate><cbc:StartTime>00:00:00+02:00</cbc:StartTime><cbc:EndDate>2025-10-31+01:00</cbc:EndDate><cbc:EndTime>00:00:00+01:00</cbc:EndTime></cac:PlannedPeriod></cac:ProcurementProject></cac:ProcurementProjectLot><cac:TenderResult><cbc:AwardDate>2025-05-15+02:00</cbc:AwardDate></cac:TenderResult></ContractAwardNotice>",
+                "version": 4,
+                "noticeVersion": 1,
+                "createdAt": "2025-05-16T08:54:32.222027",
+                "sdkVersion": "1.13",
+                "validityReport": {
+                    "level": "VALID"
+                },
+                "subType": "E4"
+            },
+            "dossierSnapshot": {
+                "id": "2b6267d3-02bf-46b9-b1dc-b85605741b95",
+                "createdAt": "2025-05-16T08:54:45.028106",
+                "dossierId": 1024677,
+                "referenceNumber": "PPP23L-88/5164/NPB_CC_IW_HeideherstelHoogmoerheideNoord_2025_JH",
+                "titles": [
+                    {
+                        "text": "Herstel Hoogmoerheide Noord (Merksplas) Water Replenishment Turnhouts Vennengebied (Coca-Cola)",
+                        "language": "NL"
+                    }
+                ],
+                "descriptions": [
+                    {
+                        "text": "Doel van de werken  De beoogde werken kaderen in herstel van het Europese beschermde habitats droge heide 4030 en natte heide 4010.  Plaats van de uitvoering  De werken vinden plaats in de provincie Antwerpen in de gemeente Turnhout. De situering van de percelen waarop werken gepland zijn, worden weergegeven op de kaarten in bijlage.  De werken vinden plaats in een speciale beschermingszone (SBZ). Het gebied werd door de Europese Unie aangeduid als Habitatrichtlijngebied en maakt deel uit van het Natura 2000-netwerk. Daardoor zijn een aantal vegetaties en habitats beschermd naast een hele lijst aan zeldzame diersoorten (soorten en habitats van de Habitatrichtlijn). Deze werken zijn gericht op het herstel van deze Natura 2000 habitats.  Aard van de opdracht  De werken omvatten:  - Bomen kappen en hout afvoeren - Stronken frezen - Plaggen en afvoeren - Rabatten dichtsmeren ",
+                        "language": "NL"
+                    }
+                ],
+                "mainNature": 3,
+                "mainCpvId": 9362,
+                "legalBasis": "32014L0024",
+                "procurementProcedureType": "neg-wo-call-24",
+                "languages": [
+                    "NL"
+                ],
+                "procedureIdentifier": "9ca69e5d-f259-4a53-8a53-e0a5e68c90fb",
+                "lotSnapshots": [
+                    {
+                        "id": "b072a417-443d-4d28-848b-cd334c58f0d0",
+                        "lotId": 1293387,
+                        "lotNumber": 1,
+                        "lotIdentifier": "LOT-0001",
+                        "status": "ACTIVE",
+                        "titles": [
+                            {
+                                "text": "Herstel Hoogmoerheide Noord (Merksplas) Water Replenishment Turnhouts Vennengebied (Coca-Cola)",
+                                "language": "NL"
+                            }
+                        ],
+                        "descriptions": [
+                            {
+                                "text": "Doel van de werken  De beoogde werken kaderen in herstel van het Europese beschermde habitats droge heide 4030 en natte heide 4010.  Plaats van de uitvoering  De werken vinden plaats in de provincie Antwerpen in de gemeente Turnhout. De situering van de percelen waarop werken gepland zijn, worden weergegeven op de kaarten in bijlage.  De werken vinden plaats in een speciale beschermingszone (SBZ). Het gebied werd door de Europese Unie aangeduid als Habitatrichtlijngebied en maakt deel uit van het Natura 2000-netwerk. Daardoor zijn een aantal vegetaties en habitats beschermd naast een hele lijst aan zeldzame diersoorten (soorten en habitats van de Habitatrichtlijn). Deze werken zijn gericht op het herstel van deze Natura 2000 habitats.  Aard van de opdracht  De werken omvatten:  - Bomen kappen en hout afvoeren - Stronken frezen - Plaggen en afvoeren - Rabatten dichtsmeren ",
+                                "language": "NL"
+                            }
+                        ],
+                        "mainNature": 3,
+                        "mainCpvId": 9362,
+                        "additionalCpvIds": [
+                            9362
+                        ],
+                        "placesOfPerformance": [
+                            {
+                                "city": {
+                                    "name": "Merksplas"
+                                },
+                                "postalCode": {
+                                    "code": "2330"
+                                },
+                                "nutsId": 19,
+                                "countryId": 19,
+                                "additionalInformations": [
+                                    {
+                                        "text": "Turnhouts Vennengebied (Merksplas)",
+                                        "language": "NL"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    ],
+    "version": 2,
+    "referenceNumber": "002",
+    "dossierId": 1024677,
+    "dossierReferenceNumber": "PPP23L-88/5164/NPB_CC_IW_HeideherstelHoogmoerheideNoord_2025_JH",
+    "dossierStatus": "DRAFT",
+    "createdAt": "2025-05-16T08:54:32.221834",
+    "status": "PUBLISHED",
+    "activePolicyForms": [
+        {
+            "type": "SME_PARTICIPATION",
+            "isComplete": true
+        }
+    ],
+    "migrated": false
+}

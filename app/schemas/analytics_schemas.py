@@ -1,179 +1,305 @@
 from datetime import datetime
-from typing import Dict, List, Optional
-from pydantic import BaseModel, Field
+from typing import Optional, List
+from pydantic import BaseModel, Field, EmailStr, HttpUrl, validator
 
 
-class AwardSummary(BaseModel):
-    """Basic summary of award data"""
-
-    total_value: float = Field(..., description="Total value of awarded contracts")
-    total_count: int = Field(..., description="Total number of awarded contracts")
-    avg_value: float = Field(..., description="Average value per contract")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "total_value": 5250000.0,
-                "total_count": 25,
-                "avg_value": 210000.0,
-            }
-        }
-
-
-class AwardTimeSeriesItem(BaseModel):
-    """Data point for time series analysis"""
-
-    period: str = Field(..., description="Time period (month/quarter/year)")
-    count: int = Field(..., description="Number of awards in this period")
-    total_value: float = Field(..., description="Total value in this period")
+class AddressBase(BaseModel):
+    """Base model for address information"""
+    street: Optional[str] = None
+    city: Optional[str] = None
+    postal_code: Optional[str] = None
+    nuts_code: Optional[str] = None
+    country_code: Optional[str] = None
 
     class Config:
-        json_schema_extra = {
-            "example": {"period": "2024-01", "count": 5, "total_value": 1250000.0}
-        }
+        from_attributes = True
 
 
-class AwardSectorItem(BaseModel):
-    """Data for sector analysis"""
-
-    sector: str = Field(..., description="Sector name")
-    sector_code: str = Field(..., description="CPV sector code")
-    count: int = Field(..., description="Number of awards in this sector")
-    total_value: float = Field(..., description="Total value in this sector")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "sector": "Construction work",
-                "sector_code": "45000000",
-                "count": 7,
-                "total_value": 2500000.0,
-            }
-        }
+class AddressCreate(AddressBase):
+    """Schema for creating an address"""
+    pass
 
 
-class RegionItem(BaseModel):
-    """Data for regional analysis"""
+class AddressRead(AddressBase):
+    """Schema for reading an address"""
+    id: int
+    created_at: datetime
+    updated_at: datetime
 
-    region_code: str = Field(..., description="NUTS code for the region")
-    region_name: str = Field(..., description="Name of the region")
-    count: int = Field(..., description="Number of awards in this region")
-    total_value: float = Field(..., description="Total value in this region")
+
+class ContactBase(BaseModel):
+    """Base model for contact information"""
+    name: Optional[str] = None
+    job_title: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[EmailStr] = None
 
     class Config:
-        json_schema_extra = {
-            "example": {
-                "region_code": "BE1",
-                "region_name": "Région de Bruxelles-Capitale/Brussels Hoofdstedelijk Gewest",
-                "count": 15,
-                "total_value": 4750000.0,
-            }
-        }
+        from_attributes = True
 
 
-class WinnerItem(BaseModel):
-    """Data for winner analysis"""
-
-    winner: str = Field(..., description="Winner company name")
-    count: int = Field(..., description="Number of awards won")
-    total_value: float = Field(..., description="Total value won")
-    sectors: List[str] = Field(
-        default_factory=list, description="Sectors the winner operates in"
-    )
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "winner": "ABC Construction",
-                "count": 3,
-                "total_value": 750000.0,
-                "sectors": ["Construction work", "Architectural services"],
-            }
-        }
+class ContactCreate(ContactBase):
+    """Schema for creating a contact"""
+    pass
 
 
-class SupplierItem(BaseModel):
-    """Data for supplier analysis"""
+class ContactRead(ContactBase):
+    """Schema for reading a contact"""
+    id: int
+    created_at: datetime
+    updated_at: datetime
 
-    supplier_name: str = Field(..., description="Supplier company name")
-    supplier_id: Optional[str] = Field(None, description="Supplier ID (if available)")
-    count: int = Field(..., description="Number of awards involved in")
-    total_value: float = Field(..., description="Total value of awards involved in")
-    sectors: List[str] = Field(
-        default_factory=list, description="Sectors the supplier operates in"
-    )
+
+class AppealsBodyContactBase(BaseModel):
+    """Base model for appeals body contact information"""
+    phone: Optional[str] = None
+    email: Optional[EmailStr] = None
 
     class Config:
-        json_schema_extra = {
-            "example": {
-                "supplier_name": "ABC Construction",
-                "supplier_id": "BE0123456789",
-                "count": 3,
-                "total_value": 750000.0,
-                "sectors": ["Construction work", "Architectural services"],
-            }
-        }
+        from_attributes = True
 
 
-class ContractItem(BaseModel):
-    """Data for individual awarded contract"""
+class AppealsBodyContactCreate(AppealsBodyContactBase):
+    """Schema for creating an appeals body contact"""
+    pass
 
-    publication_id: str = Field(..., description="Publication workspace ID")
-    title: str = Field(..., description="Contract title")
-    award_date: Optional[datetime] = Field(None, description="Award date")
-    winner: str = Field(..., description="Winner company name")
-    suppliers: List[Dict[str, str]] = Field(
-        default_factory=list, description="Suppliers involved"
-    )
-    value: float = Field(..., description="Contract value")
-    sector: str = Field(..., description="Main sector")
-    cpv_code: str = Field(..., description="Main CPV code")
-    buyer: str = Field(..., description="Contracting authority")
+
+class AppealsBodyContactRead(AppealsBodyContactBase):
+    """Schema for reading an appeals body contact"""
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class AppealsBodyBase(BaseModel):
+    """Base model for appeals body information"""
+    name: Optional[str] = None
+    vat_number: Optional[str] = None
+    website: Optional[HttpUrl] = None
 
     class Config:
-        json_schema_extra = {
-            "example": {
-                "publication_id": "2024-S-001234-5678",
-                "title": "Highway maintenance services",
-                "award_date": "2024-01-15T00:00:00",
-                "winner": "Road Services Ltd",
-                "suppliers": [{"name": "Asphalt Inc.", "id": "BE0123456789"}],
-                "value": 250000.0,
-                "sector": "Maintenance services",
-                "cpv_code": "50000000",
-                "buyer": "Department of Transportation",
-            }
-        }
+        from_attributes = True
 
 
-class WinnerDetailResponse(BaseModel):
-    """Detailed response for a specific winner"""
-
-    winner: str = Field(..., description="Winner name")
-    summary: AwardSummary
-    time_series: List[AwardTimeSeriesItem] = Field(default_factory=list)
-    sectors: List[AwardSectorItem] = Field(default_factory=list)
-    contracts: List[ContractItem] = Field(default_factory=list)
+class AppealsBodyCreate(AppealsBodyBase):
+    """Schema for creating an appeals body"""
+    contact: Optional[AppealsBodyContactCreate] = None
+    address: Optional[AddressCreate] = None
 
 
-class SupplierDetailResponse(BaseModel):
-    """Detailed response for a specific supplier"""
-
-    supplier_name: str = Field(..., description="Supplier name")
-    supplier_id: Optional[str] = Field(None, description="Supplier ID (if available)")
-    summary: AwardSummary
-    time_series: List[AwardTimeSeriesItem] = Field(default_factory=list)
-    sectors: List[AwardSectorItem] = Field(default_factory=list)
-    contracts: List[ContractItem] = Field(default_factory=list)
+class AppealsBodyRead(AppealsBodyBase):
+    """Schema for reading an appeals body"""
+    id: int
+    contact: Optional[AppealsBodyContactRead] = None
+    address: Optional[AddressRead] = None
+    created_at: datetime
+    updated_at: datetime
 
 
-class SectorDetailResponse(BaseModel):
-    """Detailed response for a specific sector"""
+class OrganizationBase(BaseModel):
+    """Base model for organization information"""
+    name: Optional[str] = None
+    vat_number: Optional[str] = None
+    website: Optional[HttpUrl] = None
 
-    sector: str = Field(..., description="Sector name")
-    sector_code: str = Field(..., description="Sector CPV code")
-    summary: AwardSummary
-    time_series: List[AwardTimeSeriesItem] = Field(default_factory=list)
-    winners: List[WinnerItem] = Field(default_factory=list)
-    suppliers: List[SupplierItem] = Field(default_factory=list)
-    contracts: List[ContractItem] = Field(default_factory=list)
+    class Config:
+        from_attributes = True
+
+
+class OrganizationCreate(OrganizationBase):
+    """Schema for creating an organization"""
+    contact: Optional[ContactCreate] = None
+    address: Optional[AddressCreate] = None
+
+
+class OrganizationRead(OrganizationBase):
+    """Schema for reading an organization"""
+    id: int
+    contact: Optional[ContactRead] = None
+    address: Optional[AddressRead] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class WinnerBase(BaseModel):
+    """Base model for winning tenderer information"""
+    name: Optional[str] = None
+    vat_number: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    website: Optional[HttpUrl] = None
+    size: Optional[str] = None
+    tender_reference: Optional[str] = None
+    subcontracting: Optional[str] = None
+
+    # For validating URLs even when they're passed as strings
+    @validator('website', pre=True)
+    def validate_url(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, str) and not v.startswith(('http://', 'https://')):
+            return f'https://{v}'
+        return v
+
+    class Config:
+        from_attributes = True
+
+
+class WinnerCreate(WinnerBase):
+    """Schema for creating a winner"""
+    address: Optional[AddressCreate] = None
+
+
+class WinnerRead(WinnerBase):
+    """Schema for reading a winner"""
+    id: int
+    address: Optional[AddressRead] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AwardSupplierBase(BaseModel):
+    """Base model for suppliers"""
+    name: str
+    vat_number: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    website: Optional[HttpUrl] = None
+
+    # For validating URLs even when they're passed as strings
+    @validator('website', pre=True)
+    def validate_url(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, str) and not v.startswith(('http://', 'https://')):
+            return f'https://{v}'
+        return v
+
+    class Config:
+        from_attributes = True
+
+
+class AwardSupplierCreate(AwardSupplierBase):
+    """Schema for creating a supplier"""
+    address: Optional[AddressCreate] = None
+
+
+class AwardSupplierRead(AwardSupplierBase):
+    """Schema for reading a supplier"""
+    id: int
+    award_id: int
+    address: Optional[AddressRead] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AwardBase(BaseModel):
+    """Base model for award information"""
+    # Basic Information
+    notice_id: Optional[str] = None
+    contract_id: Optional[str] = None
+    internal_id: Optional[str] = None
+    issue_date: Optional[datetime] = None
+    notice_type: Optional[str] = None
+
+    # Award values
+    award_date: Optional[datetime] = None
+    award_value: Optional[float] = None
+    lowest_tender_amount: Optional[float] = None
+    highest_tender_amount: Optional[float] = None
+    currency: Optional[str] = Field(None, max_length=10)
+
+    # Tender process information
+    tenders_received: Optional[int] = None
+    participation_requests: Optional[int] = None
+    electronic_auction_used: Optional[bool] = None
+    dynamic_purchasing_system: Optional[str] = None
+    framework_agreement: Optional[str] = None
+
+    # Contract details
+    contract_reference: Optional[str] = None
+    contract_title: Optional[str] = None
+    contract_start_date: Optional[datetime] = None
+    contract_end_date: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AwardCreate(AwardBase):
+    """Schema for creating an award record"""
+    winner: Optional[WinnerCreate] = None
+    organization: Optional[OrganizationCreate] = None
+    appeals_body: Optional[AppealsBodyCreate] = None
+    suppliers: Optional[List[AwardSupplierCreate]] = []
+    # XML content for storage
+    xml_content: Optional[str] = None
+
+
+class AwardUpdate(BaseModel):
+    """Schema for updating an award record"""
+    # Basic Information
+    notice_id: Optional[str] = None
+    contract_id: Optional[str] = None
+    internal_id: Optional[str] = None
+    issue_date: Optional[datetime] = None
+    notice_type: Optional[str] = None
+
+    # Award values
+    award_date: Optional[datetime] = None
+    award_value: Optional[float] = None
+    lowest_tender_amount: Optional[float] = None
+    highest_tender_amount: Optional[float] = None
+    currency: Optional[str] = None
+
+    # Tender process information
+    tenders_received: Optional[int] = None
+    participation_requests: Optional[int] = None
+    electronic_auction_used: Optional[bool] = None
+    dynamic_purchasing_system: Optional[str] = None
+    framework_agreement: Optional[str] = None
+
+    # Contract details
+    contract_reference: Optional[str] = None
+    contract_title: Optional[str] = None
+    contract_start_date: Optional[datetime] = None
+    contract_end_date: Optional[datetime] = None
+
+    # Nested objects (with their own IDs if they exist already)
+    winner: Optional[WinnerCreate] = None
+    winner_id: Optional[int] = None
+    
+    organization: Optional[OrganizationCreate] = None
+    organization_id: Optional[int] = None
+    
+    appeals_body: Optional[AppealsBodyCreate] = None
+    appeals_body_id: Optional[int] = None
+    
+    suppliers: Optional[List[AwardSupplierCreate]] = None
+    
+    # XML content update
+    xml_content: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AwardRead(AwardBase):
+    """Schema for reading an award record"""
+    id: int
+    publication_workspace_id: str
+    winner: Optional[WinnerRead] = None
+    organization: Optional[OrganizationRead] = None
+    appeals_body: Optional[AppealsBodyRead] = None
+    suppliers: List[AwardSupplierRead] = []
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AwardInDB(AwardRead):
+    """Schema with additional database fields"""
+    xml_content: Optional[str] = None
+    

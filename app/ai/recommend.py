@@ -1,11 +1,23 @@
-import logging
 import json
+import logging
 import xml.etree.ElementTree as ET
-from typing import Dict, Any
+from datetime import datetime
+from typing import Any, Dict, Optional
 
 from openai import OpenAI
+
 from app.ai.openai import get_openai_client
 from app.config.settings import Settings
+from app.schemas.analytics_schemas import (
+    AddressCreate,
+    AppealsBodyContactCreate,
+    AppealsBodyCreate,
+    AwardCreate,
+    AwardSupplierCreate,
+    ContactCreate,
+    OrganizationCreate,
+    WinnerCreate,
+)
 from app.schemas.company_schemas import CompanySchema
 from app.schemas.publication_schemas import PublicationSchema
 from app.util.publication_utils.publication_converter import PublicationConverter
@@ -27,17 +39,42 @@ def handle_json_response_formats(response_text: str) -> dict:
         return json.loads(response_text)
 
 
-def extract_data_from_xml(xml_content: str) -> Dict[str, Any]:
+def parse_datetime(date_str: str) -> Optional[datetime]:
+    """Parse date string to datetime object"""
+    if not date_str:
+        return None
+
+    try:
+        # Handle various date formats
+        if "T" in date_str:
+            # ISO format with timezone
+            return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        elif "+" in date_str:
+            # Format like "2025-05-16+02:00"
+            parts = date_str.split("+")
+            date_part = parts[0]
+            return datetime.fromisoformat(date_part)
+        else:
+            # Simple date format
+            return datetime.strptime(date_str, "%Y-%m-%d")
+    except Exception as e:
+        logging.warning(f"Error parsing date {date_str}: {e}")
+        return None
+
+
+def extract_award_data_from_xml(xml_content: str) -> Dict[str, Any]:
     """
-    Extract key information from XML using Python's ElementTree before using AI.
-    Returns a dictionary with extracted data or an empty dict if parsing fails.
+    Extract award data from XML content using ElementTree.
+    Returns a dictionary with structured objects ready for database insertion.
     """
-    # TODO: add btw number
+    if not xml_content:
+        return {}
+
     try:
         # Parse XML content
         root = ET.fromstring(xml_content)
 
-        # Define namespaces (adjust based on your actual XML)
+        # Define namespaces (from the XML example)
         namespaces = {
             "cac": "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2",
             "cbc": "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2",
@@ -45,81 +82,638 @@ def extract_data_from_xml(xml_content: str) -> Dict[str, Any]:
             "efbc": "http://data.europa.eu/p27/eforms-ubl-extension-basic-components/1",
         }
 
-        # Extract award information
-        result = {}
+        # Initialize structured objects
+        award_data = {}
+        winner_data = {}
+        winner_address = {}
+        organization_data = {}
+        organization_address = {}
+        organization_contact = {}
+        appeals_body_data = {}
+        appeals_body_address = {}
+        appeals_body_contact = {}
+        suppliers_data = []
 
-        # Extract winner information
+        # Basic Information
         try:
-            # Look for winner organization in NoticeResult/LotTender/TenderingParty/Tenderer
-            winner_paths = [
-                ".//efac:NoticeResult/efac:LotTender/efac:TenderingParty/efac:Tenderer",
-                ".//efac:NoticeResult/efac:TenderingParty/efac:Tenderer",
-            ]
+            # Notice ID
+            notice_id_element = root.find(
+                ".//cbc:ID[@schemeName='notice-id']", namespaces
+            )
+            if notice_id_element is not None:
+                award_data["notice_id"] = notice_id_element.text
 
-            for path in winner_paths:
-                winner_elements = root.findall(path, namespaces)
-                if winner_elements:
-                    # Get organization ID reference
-                    org_id = winner_elements[0].find("cbc:ID", namespaces).text
+            # Contract ID
+            contract_id_element = root.find(".//cbc:ContractFolderID", namespaces)
+            if contract_id_element is not None:
+                award_data["contract_id"] = contract_id_element.text
 
-                    # Find organization with this ID
-                    org_element = root.find(
-                        f'.//efac:Organization/efac:Company/cac:PartyIdentification/cbc:ID[.="{org_id}"]/../..',
-                        namespaces,
-                    )
-                    if org_element:
-                        name_element = org_element.find(
-                            ".//cac:PartyName/cbc:Name", namespaces
-                        )
-                        if name_element is not None:
-                            result["winner"] = name_element.text
-                            break
+            # Internal ID
+            internal_id_element = root.find(
+                ".//cac:ProcurementProject/cbc:ID[@schemeName='InternalID']", namespaces
+            )
+            if internal_id_element is not None:
+                award_data["internal_id"] = internal_id_element.text
+
+            # Issue Date
+            issue_date_element = root.find(".//cbc:IssueDate", namespaces)
+            if issue_date_element is not None:
+                award_data["issue_date"] = parse_datetime(issue_date_element.text)
+
+            # Notice Type
+            notice_type_element = root.find(".//cbc:NoticeTypeCode", namespaces)
+            if notice_type_element is not None:
+                award_data["notice_type"] = notice_type_element.text
         except Exception as e:
-            logging.warning(f"Error extracting winner: {e}")
+            logging.warning(f"Error extracting basic information: {e}")
 
-        # Extract supplier information
+        # Extract award value
         try:
-            # Look for supplier organization in the Organizations section
-            supplier_elements = root.findall(
+            # Total Amount
+            amount_element = root.find(".//cbc:TotalAmount", namespaces)
+            if amount_element is not None:
+                award_data["award_value"] = float(amount_element.text)
+                if "currencyID" in amount_element.attrib:
+                    award_data["currency"] = amount_element.attrib["currencyID"]
+
+            # Lowest Tender Amount
+            lower_tender_element = root.find(".//cbc:LowerTenderAmount", namespaces)
+            if lower_tender_element is not None:
+                award_data["lowest_tender_amount"] = float(lower_tender_element.text)
+                if "currencyID" in lower_tender_element.attrib:
+                    award_data["currency"] = lower_tender_element.attrib["currencyID"]
+
+            # Highest Tender Amount
+            higher_tender_element = root.find(".//cbc:HigherTenderAmount", namespaces)
+            if higher_tender_element is not None:
+                award_data["highest_tender_amount"] = float(higher_tender_element.text)
+                if "currencyID" in higher_tender_element.attrib:
+                    award_data["currency"] = higher_tender_element.attrib["currencyID"]
+        except Exception as e:
+            logging.warning(f"Error extracting financial information: {e}")
+
+        # Extract award date
+        try:
+            award_date_element = root.find(".//cbc:AwardDate", namespaces)
+            if award_date_element is not None:
+                award_data["award_date"] = parse_datetime(award_date_element.text)
+        except Exception as e:
+            logging.warning(f"Error extracting award date: {e}")
+
+        # Extract Tender Process Information
+        try:
+            # Number of Tenders Received
+            stats_elements = root.findall(
+                ".//efac:ReceivedSubmissionsStatistics", namespaces
+            )
+            for stats_element in stats_elements:
+                stats_code = stats_element.find("./efbc:StatisticsCode", namespaces)
+                stats_num = stats_element.find("./efbc:StatisticsNumeric", namespaces)
+
+                if stats_code is not None and stats_num is not None:
+                    code_value = stats_code.text
+                    if code_value == "tenders":
+                        award_data["tenders_received"] = int(stats_num.text)
+                    elif code_value == "part-req":
+                        award_data["participation_requests"] = int(stats_num.text)
+
+            # Electronic Auction Used
+            auction_element = root.find(".//cbc:AuctionConstraintIndicator", namespaces)
+            if auction_element is not None:
+                award_data["electronic_auction_used"] = (
+                    auction_element.text.lower() == "true"
+                )
+
+            # Dynamic Purchasing System
+            dps_element = root.find(
+                ".//cbc:ContractingSystemTypeCode[@listName='dps-usage']", namespaces
+            )
+            if dps_element is not None:
+                award_data["dynamic_purchasing_system"] = dps_element.text
+
+            # Framework Agreement
+            framework_element = root.find(
+                ".//cbc:ContractingSystemTypeCode[@listName='framework-agreement']",
+                namespaces,
+            )
+            if framework_element is not None:
+                award_data["framework_agreement"] = framework_element.text
+        except Exception as e:
+            logging.warning(f"Error extracting tender process information: {e}")
+
+        # Extract contract details
+        try:
+            contract_element = root.find(".//efac:SettledContract", namespaces)
+            if contract_element is not None:
+                ref_element = contract_element.find(
+                    "./efac:ContractReference/cbc:ID", namespaces
+                )
+                if ref_element is not None:
+                    award_data["contract_reference"] = ref_element.text
+
+                title_element = contract_element.find("./cbc:Title", namespaces)
+                if title_element is not None:
+                    award_data["contract_title"] = title_element.text
+
+                issue_date_element = contract_element.find(
+                    "./cbc:IssueDate", namespaces
+                )
+                if issue_date_element is not None:
+                    award_data["contract_start_date"] = parse_datetime(
+                        issue_date_element.text
+                    )
+
+            # Extract contract period
+            period_element = root.find(".//cac:PlannedPeriod", namespaces)
+            if period_element is not None:
+                start_date_element = period_element.find("./cbc:StartDate", namespaces)
+                if start_date_element is not None:
+                    award_data["contract_start_date"] = parse_datetime(
+                        start_date_element.text
+                    )
+
+                end_date_element = period_element.find("./cbc:EndDate", namespaces)
+                if end_date_element is not None:
+                    award_data["contract_end_date"] = parse_datetime(
+                        end_date_element.text
+                    )
+        except Exception as e:
+            logging.warning(f"Error extracting contract details: {e}")
+
+        # Extract winner information with enhanced details
+        try:
+            # Find winning organization
+            tender_id = None
+            lot_tender_element = root.find(".//efac:LotTender", namespaces)
+            if lot_tender_element is not None:
+                tender_id_element = lot_tender_element.find("./cbc:ID", namespaces)
+                if tender_id_element is not None:
+                    tender_id = tender_id_element.text
+
+            if tender_id:
+                # Find the tendering party
+                tendering_party_element = root.find(
+                    f".//efac:TenderingParty[./cbc:ID[text()='{tender_id}']]",
+                    namespaces,
+                )
+                if not tendering_party_element:
+                    tendering_party_element = root.find(
+                        f".//efac:TenderingParty", namespaces
+                    )
+
+                if tendering_party_element:
+                    # Extract tender reference
+                    tender_ref_element = root.find(
+                        f".//efac:TenderReference/cbc:ID", namespaces
+                    )
+                    if tender_ref_element is not None:
+                        winner_data["tender_reference"] = tender_ref_element.text
+
+                    # Get tenderer organization reference
+                    tenderer_element = tendering_party_element.find(
+                        "./efac:Tenderer", namespaces
+                    )
+                    if tenderer_element:
+                        org_id_element = tenderer_element.find("./cbc:ID", namespaces)
+                        if org_id_element is not None:
+                            org_id = org_id_element.text
+
+                            # Find organization with this ID
+                            org_xpath = f".//efac:Organizations/efac:Organization/efac:Company[./cac:PartyIdentification/cbc:ID[text()='{org_id}']]"
+                            org_element = root.find(org_xpath, namespaces)
+
+                            if org_element:
+                                # Extract organization name
+                                name_element = org_element.find(
+                                    "./cac:PartyName/cbc:Name", namespaces
+                                )
+                                if name_element is not None:
+                                    winner_data["name"] = name_element.text
+
+                                # Extract VAT number
+                                vat_element = org_element.find(
+                                    "./cac:PartyLegalEntity/cbc:CompanyID", namespaces
+                                )
+                                if vat_element is not None:
+                                    winner_data["vat_number"] = (
+                                        vat_element.text.replace(" ", "")
+                                    )
+
+                                # Extract email
+                                email_element = org_element.find(
+                                    "./cac:Contact/cbc:ElectronicMail", namespaces
+                                )
+                                if email_element is not None:
+                                    winner_data["email"] = email_element.text
+
+                                # Extract phone
+                                phone_element = org_element.find(
+                                    "./cac:Contact/cbc:Telephone", namespaces
+                                )
+                                if phone_element is not None:
+                                    winner_data["phone"] = phone_element.text
+
+                                # Extract website
+                                website_element = org_element.find(
+                                    "./cbc:WebsiteURI", namespaces
+                                )
+                                if website_element is not None:
+                                    winner_data["website"] = website_element.text
+
+                                # Extract company size
+                                size_element = org_element.find(
+                                    "./efbc:CompanySizeCode", namespaces
+                                )
+                                if size_element is not None:
+                                    winner_data["size"] = size_element.text
+
+                                # Extract address
+                                address_element = org_element.find(
+                                    "./cac:PostalAddress", namespaces
+                                )
+                                if address_element is not None:
+                                    street_element = address_element.find(
+                                        "./cbc:StreetName", namespaces
+                                    )
+                                    if street_element is not None:
+                                        winner_address["street"] = street_element.text
+
+                                    city_element = address_element.find(
+                                        "./cbc:CityName", namespaces
+                                    )
+                                    if city_element is not None:
+                                        winner_address["city"] = city_element.text
+
+                                    postal_element = address_element.find(
+                                        "./cbc:PostalZone", namespaces
+                                    )
+                                    if postal_element is not None:
+                                        winner_address["postal_code"] = (
+                                            postal_element.text
+                                        )
+
+                                    nuts_element = address_element.find(
+                                        "./cbc:CountrySubentityCode", namespaces
+                                    )
+                                    if nuts_element is not None:
+                                        winner_address["nuts_code"] = nuts_element.text
+
+                                    country_element = address_element.find(
+                                        "./cac:Country/cbc:IdentificationCode",
+                                        namespaces,
+                                    )
+                                    if country_element is not None:
+                                        winner_address["country_code"] = (
+                                            country_element.text
+                                        )
+
+                            # Extract subcontracting information
+                            subcontract_element = root.find(
+                                ".//efac:SubcontractingTerm/efbc:TermCode", namespaces
+                            )
+                            if subcontract_element is not None:
+                                winner_data["subcontracting"] = subcontract_element.text
+        except Exception as e:
+            logging.warning(f"Error extracting winner information: {e}")
+
+        # Extract organization information (contracting authority)
+        try:
+            contracting_org_element = root.find(
+                ".//cac:ContractingParty/cac:Party/cac:PartyIdentification/cbc:ID",
+                namespaces,
+            )
+            if contracting_org_element is not None:
+                org_id = contracting_org_element.text
+
+                # Find organization with this ID
+                org_xpath = f".//efac:Organizations/efac:Organization/efac:Company[./cac:PartyIdentification/cbc:ID[text()='{org_id}']]"
+                org_element = root.find(org_xpath, namespaces)
+
+                if org_element:
+                    # Extract organization name
+                    name_element = org_element.find(
+                        "./cac:PartyName/cbc:Name", namespaces
+                    )
+                    if name_element is not None:
+                        organization_data["name"] = name_element.text
+
+                    # Extract VAT number
+                    vat_element = org_element.find(
+                        "./cac:PartyLegalEntity/cbc:CompanyID", namespaces
+                    )
+                    if vat_element is not None:
+                        organization_data["vat_number"] = vat_element.text.replace(
+                            " ", ""
+                        )
+
+                    # Extract website
+                    website_element = org_element.find("./cbc:WebsiteURI", namespaces)
+                    if website_element is not None:
+                        organization_data["website"] = website_element.text
+
+                    # Extract contact details
+                    contact_element = org_element.find("./cac:Contact", namespaces)
+                    if contact_element is not None:
+                        name_element = contact_element.find("./cbc:Name", namespaces)
+                        if name_element is not None:
+                            organization_contact["name"] = name_element.text
+
+                        job_title_element = contact_element.find(
+                            "./cbc:JobTitle", namespaces
+                        )
+                        if job_title_element is not None:
+                            organization_contact["job_title"] = job_title_element.text
+
+                        phone_element = contact_element.find(
+                            "./cbc:Telephone", namespaces
+                        )
+                        if phone_element is not None:
+                            organization_contact["phone"] = phone_element.text
+
+                        email_element = contact_element.find(
+                            "./cbc:ElectronicMail", namespaces
+                        )
+                        if email_element is not None:
+                            organization_contact["email"] = email_element.text
+
+                    # Extract address
+                    address_element = org_element.find(
+                        "./cac:PostalAddress", namespaces
+                    )
+                    if address_element is not None:
+                        street_element = address_element.find(
+                            "./cbc:StreetName", namespaces
+                        )
+                        if street_element is not None:
+                            organization_address["street"] = street_element.text
+
+                        city_element = address_element.find(
+                            "./cbc:CityName", namespaces
+                        )
+                        if city_element is not None:
+                            organization_address["city"] = city_element.text
+
+                        postal_element = address_element.find(
+                            "./cbc:PostalZone", namespaces
+                        )
+                        if postal_element is not None:
+                            organization_address["postal_code"] = postal_element.text
+
+                        nuts_element = address_element.find(
+                            "./cbc:CountrySubentityCode", namespaces
+                        )
+                        if nuts_element is not None:
+                            organization_address["nuts_code"] = nuts_element.text
+
+                        country_element = address_element.find(
+                            "./cac:Country/cbc:IdentificationCode", namespaces
+                        )
+                        if country_element is not None:
+                            organization_address["country_code"] = country_element.text
+        except Exception as e:
+            logging.warning(f"Error extracting organization information: {e}")
+
+        # Extract appeals body information
+        try:
+            appeals_org_element = root.find(
+                ".//cac:AppealTerms/cac:AppealReceiverParty/cac:PartyIdentification/cbc:ID",
+                namespaces,
+            )
+            if appeals_org_element is not None:
+                org_id = appeals_org_element.text
+
+                # Find organization with this ID
+                org_xpath = f".//efac:Organizations/efac:Organization/efac:Company[./cac:PartyIdentification/cbc:ID[text()='{org_id}']]"
+                org_element = root.find(org_xpath, namespaces)
+
+                if org_element:
+                    # Extract name
+                    name_element = org_element.find(
+                        "./cac:PartyName/cbc:Name", namespaces
+                    )
+                    if name_element is not None:
+                        appeals_body_data["name"] = name_element.text
+
+                    # Extract VAT number
+                    vat_element = org_element.find(
+                        "./cac:PartyLegalEntity/cbc:CompanyID", namespaces
+                    )
+                    if vat_element is not None:
+                        appeals_body_data["vat_number"] = vat_element.text.replace(
+                            " ", ""
+                        )
+
+                    # Extract website
+                    website_element = org_element.find("./cbc:WebsiteURI", namespaces)
+                    if website_element is not None:
+                        appeals_body_data["website"] = website_element.text
+
+                    # Extract contact details
+                    contact_element = org_element.find("./cac:Contact", namespaces)
+                    if contact_element is not None:
+                        phone_element = contact_element.find(
+                            "./cbc:Telephone", namespaces
+                        )
+                        if phone_element is not None:
+                            appeals_body_contact["phone"] = phone_element.text
+
+                        email_element = contact_element.find(
+                            "./cbc:ElectronicMail", namespaces
+                        )
+                        if email_element is not None:
+                            appeals_body_contact["email"] = email_element.text
+
+                    # Extract address
+                    address_element = org_element.find(
+                        "./cac:PostalAddress", namespaces
+                    )
+                    if address_element is not None:
+                        street_element = address_element.find(
+                            "./cbc:StreetName", namespaces
+                        )
+                        if street_element is not None:
+                            appeals_body_address["street"] = street_element.text
+
+                        city_element = address_element.find(
+                            "./cbc:CityName", namespaces
+                        )
+                        if city_element is not None:
+                            appeals_body_address["city"] = city_element.text
+
+                        postal_element = address_element.find(
+                            "./cbc:PostalZone", namespaces
+                        )
+                        if postal_element is not None:
+                            appeals_body_address["postal_code"] = postal_element.text
+
+                        nuts_element = address_element.find(
+                            "./cbc:CountrySubentityCode", namespaces
+                        )
+                        if nuts_element is not None:
+                            appeals_body_address["nuts_code"] = nuts_element.text
+
+                        country_element = address_element.find(
+                            "./cac:Country/cbc:IdentificationCode", namespaces
+                        )
+                        if country_element is not None:
+                            appeals_body_address["country_code"] = country_element.text
+        except Exception as e:
+            logging.warning(f"Error extracting appeals body information: {e}")
+
+        # Extract suppliers (other than winner)
+        try:
+            # Find all organizations
+            org_elements = root.findall(
                 ".//efac:Organizations/efac:Organization/efac:Company", namespaces
             )
 
-            suppliers = []
-            for org in supplier_elements:
-                party_name = org.find(".//cac:PartyName/cbc:Name", namespaces)
-                if party_name is not None:
-                    # Try to get company ID if available
-                    company_id = "Unknown"
-                    company_id_elem = org.find(
-                        ".//cac:PartyLegalEntity/cbc:CompanyID", namespaces
+            for org_element in org_elements:
+                # Skip if this is the winner
+                if winner_data and "name" in winner_data:
+                    name_element = org_element.find(
+                        "./cac:PartyName/cbc:Name", namespaces
                     )
-                    if company_id_elem is not None:
-                        company_id = company_id_elem.text
+                    if (
+                        name_element is not None
+                        and name_element.text == winner_data["name"]
+                    ):
+                        continue
 
-                    suppliers.append({"name": party_name.text, "id": company_id})
+                # Skip if this is the contracting authority
+                if organization_data and "name" in organization_data:
+                    name_element = org_element.find(
+                        "./cac:PartyName/cbc:Name", namespaces
+                    )
+                    if (
+                        name_element is not None
+                        and name_element.text == organization_data["name"]
+                    ):
+                        continue
 
-            if suppliers:
-                result["suppliers"] = suppliers
+                # Skip if this is the appeals body
+                if appeals_body_data and "name" in appeals_body_data:
+                    name_element = org_element.find(
+                        "./cac:PartyName/cbc:Name", namespaces
+                    )
+                    if (
+                        name_element is not None
+                        and name_element.text == appeals_body_data["name"]
+                    ):
+                        continue
+
+                supplier = {}
+                supplier_address = {}
+
+                # Extract name
+                name_element = org_element.find("./cac:PartyName/cbc:Name", namespaces)
+                if name_element is not None:
+                    supplier["name"] = name_element.text
+                else:
+                    # Skip if no name
+                    continue
+
+                # Extract VAT number
+                vat_element = org_element.find(
+                    "./cac:PartyLegalEntity/cbc:CompanyID", namespaces
+                )
+                if vat_element is not None:
+                    supplier["vat_number"] = vat_element.text.replace(" ", "")
+
+                # Extract email
+                email_element = org_element.find(
+                    "./cac:Contact/cbc:ElectronicMail", namespaces
+                )
+                if email_element is not None:
+                    supplier["email"] = email_element.text
+
+                # Extract phone
+                phone_element = org_element.find(
+                    "./cac:Contact/cbc:Telephone", namespaces
+                )
+                if phone_element is not None:
+                    supplier["phone"] = phone_element.text
+
+                # Extract website
+                website_element = org_element.find("./cbc:WebsiteURI", namespaces)
+                if website_element is not None:
+                    supplier["website"] = website_element.text
+
+                # Extract address
+                address_element = org_element.find("./cac:PostalAddress", namespaces)
+                if address_element is not None:
+                    street_element = address_element.find(
+                        "./cbc:StreetName", namespaces
+                    )
+                    if street_element is not None:
+                        supplier_address["street"] = street_element.text
+
+                    city_element = address_element.find("./cbc:CityName", namespaces)
+                    if city_element is not None:
+                        supplier_address["city"] = city_element.text
+
+                    postal_element = address_element.find(
+                        "./cbc:PostalZone", namespaces
+                    )
+                    if postal_element is not None:
+                        supplier_address["postal_code"] = postal_element.text
+
+                    nuts_element = address_element.find(
+                        "./cbc:CountrySubentityCode", namespaces
+                    )
+                    if nuts_element is not None:
+                        supplier_address["nuts_code"] = nuts_element.text
+
+                    country_element = address_element.find(
+                        "./cac:Country/cbc:IdentificationCode", namespaces
+                    )
+                    if country_element is not None:
+                        supplier_address["country_code"] = country_element.text
+
+                # Only add address if it has data
+                if supplier_address:
+                    supplier["address"] = AddressCreate(**supplier_address)
+
+                suppliers_data.append(supplier)
         except Exception as e:
             logging.warning(f"Error extracting suppliers: {e}")
 
-        # Extract contract value
-        try:
-            # Try different paths for total amount
-            amount_paths = [
-                ".//cbc:TotalAmount",
-                ".//cbc:PayableAmount",
-                ".//efac:NoticeResult/cbc:TotalAmount",
-            ]
+        # Build structured objects
+        result = {"award_data": award_data, "xml_content": xml_content}
 
-            for path in amount_paths:
-                amount_element = root.find(path, namespaces)
-                if amount_element is not None:
-                    result["value"] = float(amount_element.text)
-                    break
-        except Exception as e:
-            logging.warning(f"Error extracting value: {e}")
-            result["value"] = 0
+        # Add winner if we have data
+        if winner_data:
+            # Add address if we have it
+            if winner_address:
+                winner_data["address"] = AddressCreate(**winner_address)
+            result["winner"] = WinnerCreate(**winner_data)
+
+        # Add organization if we have data
+        if organization_data:
+            # Add address if we have it
+            if organization_address:
+                organization_data["address"] = AddressCreate(**organization_address)
+            # Add contact if we have it
+            if organization_contact:
+                organization_data["contact"] = ContactCreate(**organization_contact)
+            result["organization"] = OrganizationCreate(**organization_data)
+
+        # Add appeals body if we have data
+        if appeals_body_data:
+            # Add address if we have it
+            if appeals_body_address:
+                appeals_body_data["address"] = AddressCreate(**appeals_body_address)
+            # Add contact if we have it
+            if appeals_body_contact:
+                appeals_body_data["contact"] = AppealsBodyContactCreate(
+                    **appeals_body_contact
+                )
+            result["appeals_body"] = AppealsBodyCreate(**appeals_body_data)
+
+        # Add suppliers if we have any
+        if suppliers_data:
+            result["suppliers"] = [
+                AwardSupplierCreate(**supplier) for supplier in suppliers_data
+            ]
 
         return result
     except Exception as e:
@@ -127,73 +721,227 @@ def extract_data_from_xml(xml_content: str) -> Dict[str, Any]:
         return {}
 
 
-def summarize_publication_award(xml: str, client: OpenAI = None) -> dict:
+def summarize_publication_award(xml: str, client: OpenAI = None) -> Dict[str, Any]:
     """
-    Extract award information from publication XML.
-    First tries to parse with ElementTree, falls back to AI if needed.
+    Extract award information from publication XML using AI.
+    Used as a fallback when the XML parser fails.
 
-    Returns:
-        dict: Contains winner (str), suppliers (list), and value (int)
+    Returns structured data suitable for creating database records.
     """
-    # First try to extract data using Python's XML parser
-    extracted_data = extract_data_from_xml(xml)
-
-    if (
-        extracted_data
-        and "value" in extracted_data
-        and ("winner" in extracted_data or "suppliers" in extracted_data)
-    ):
-        logging.info("Successfully extracted award data using XML parser")
-        return extracted_data
-
-    # Fall back to using AI if Python parsing was unsuccessful
-    logging.info("Falling back to AI for award data extraction")
+    # Initialize the OpenAI client if not provided
     client = client or get_openai_client()
 
-    completion = client.chat.completions.create(
-        model=settings.openai_model,
-        messages=[
-            {
-                "role": "system",
-                "content": """
-                    You are a public procurement assistant tasked with summarizing the award of a publication.
-                    Extract the winner (contractor name), suppliers, and the contract value from the XML.
-                    If multiple winners or values exist, choose the primary one.
-                    Respond in JSON with these keys:
-                    - winner (string): The name of the winning contractor if specified
-                    - winner_vat (string, optional): The VAT number of the winning contractor if available
-                    - suppliers (array): List of all suppliers mentioned in the XML, each with a name and identifier if available
-                    - value (integer): The contract value in euros as an integer (no decimal places)
-                    - date (string, optional): The award date if available in YYYY-MM-DD format
-                    - contract_ref (string, optional): The contract reference number if available
-                """,
-            },
-            {
-                "role": "user",
-                "content": f"Extract the winner name, suppliers and contract value from this XML: {xml}",
-            },
-        ],
-        response_format={"type": "json_object"},
-        temperature=0.1,  # Lower temperature for more factual extraction
-    )
-
     try:
-        result = handle_json_response_formats(completion.choices[0].message.content)
+        completion = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": """
+                        You are a public procurement assistant tasked with summarizing the award of a publication.
+                        Extract detailed information from the XML.
+                        If multiple values exist, choose the primary one.
+                        
+                        Respond in JSON with nested structures for related entities like addresses, contacts, etc.
+                        
+                        The response should have this structure:
+                        {
+                          "award_data": {
+                            "notice_id": string,
+                            "contract_id": string,
+                            "internal_id": string,
+                            "issue_date": string,  // YYYY-MM-DD format
+                            "notice_type": string,
+                            
+                            "award_date": string,  // YYYY-MM-DD format
+                            "award_value": number,
+                            "lowest_tender_amount": number,
+                            "highest_tender_amount": number,
+                            "currency": string,
+                            
+                            "tenders_received": number,
+                            "participation_requests": number,
+                            "electronic_auction_used": boolean,
+                            "dynamic_purchasing_system": string,
+                            "framework_agreement": string,
+                            
+                            "contract_reference": string,
+                            "contract_title": string,
+                            "contract_start_date": string,  // YYYY-MM-DD format
+                            "contract_end_date": string  // YYYY-MM-DD format
+                          },
+                          
+                          "winner": {
+                            "name": string,
+                            "vat_number": string,
+                            "email": string,
+                            "phone": string,
+                            "website": string,
+                            "size": string,
+                            "tender_reference": string,
+                            "subcontracting": string,
+                            "address": {
+                              "street": string,
+                              "city": string,
+                              "postal_code": string,
+                              "nuts_code": string,
+                              "country_code": string
+                            }
+                          },
+                          
+                          "organization": {
+                            "name": string,
+                            "vat_number": string,
+                            "website": string,
+                            "contact": {
+                              "name": string,
+                              "job_title": string,
+                              "phone": string,
+                              "email": string
+                            },
+                            "address": {
+                              "street": string,
+                              "city": string,
+                              "postal_code": string,
+                              "nuts_code": string,
+                              "country_code": string
+                            }
+                          },
+                          
+                          "appeals_body": {
+                            "name": string,
+                            "vat_number": string,
+                            "website": string,
+                            "contact": {
+                              "phone": string,
+                              "email": string
+                            },
+                            "address": {
+                              "street": string,
+                              "city": string,
+                              "postal_code": string,
+                              "nuts_code": string,
+                              "country_code": string
+                            }
+                          },
+                          
+                          "suppliers": [
+                            {
+                              "name": string,
+                              "vat_number": string,
+                              "email": string,
+                              "phone": string,
+                              "website": string,
+                              "address": {
+                                "street": string,
+                                "city": string,
+                                "postal_code": string,
+                                "nuts_code": string,
+                                "country_code": string
+                              }
+                            }
+                          ]
+                        }
+                    """,
+                },
+                {
+                    "role": "user",
+                    "content": f"Extract the complete award information from this XML: {xml}",
+                },
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1,  # Lower temperature for more factual extraction
+        )
 
-        # Ensure required fields with proper types
-        if "winner" not in result:
-            result["winner"] = "Unknown"
+        # Parse the response
+        ai_response = handle_json_response_formats(
+            completion.choices[0].message.content
+        )
 
-        if "suppliers" not in result or not isinstance(result["suppliers"], list):
-            result["suppliers"] = []
+        # Convert the flat JSON response into our structured Pydantic models
+        result = {}
 
-        if "value" not in result or not isinstance(result["value"], (int, float)):
-            result["value"] = 0
+        # Process award data
+        if "award_data" in ai_response:
+            result["award_data"] = ai_response["award_data"]
+
+        # Process winner data
+        if "winner" in ai_response:
+            winner_data = ai_response["winner"]
+            address_data = None
+
+            if "address" in winner_data:
+                address_data = AddressCreate(**winner_data.pop("address"))
+
+            winner = WinnerCreate(**winner_data)
+            if address_data:
+                winner.address = address_data
+
+            result["winner"] = winner
+
+        # Process organization data
+        if "organization" in ai_response:
+            org_data = ai_response["organization"]
+            address_data = None
+            contact_data = None
+
+            if "address" in org_data:
+                address_data = AddressCreate(**org_data.pop("address"))
+
+            if "contact" in org_data:
+                contact_data = ContactCreate(**org_data.pop("contact"))
+
+            organization = OrganizationCreate(**org_data)
+            if address_data:
+                organization.address = address_data
+            if contact_data:
+                organization.contact = contact_data
+
+            result["organization"] = organization
+
+        # Process appeals body data
+        if "appeals_body" in ai_response:
+            appeals_data = ai_response["appeals_body"]
+            address_data = None
+            contact_data = None
+
+            if "address" in appeals_data:
+                address_data = AddressCreate(**appeals_data.pop("address"))
+
+            if "contact" in appeals_data:
+                contact_data = AppealsBodyContactCreate(**appeals_data.pop("contact"))
+
+            appeals_body = AppealsBodyCreate(**appeals_data)
+            if address_data:
+                appeals_body.address = address_data
+            if contact_data:
+                appeals_body.contact = contact_data
+
+            result["appeals_body"] = appeals_body
+
+        # Process suppliers data
+        if "suppliers" in ai_response and isinstance(ai_response["suppliers"], list):
+            suppliers = []
+
+            for supplier_data in ai_response["suppliers"]:
+                address_data = None
+
+                if "address" in supplier_data:
+                    address_data = AddressCreate(**supplier_data.pop("address"))
+
+                supplier = AwardSupplierCreate(**supplier_data)
+                if address_data:
+                    supplier.address = address_data
+
+                suppliers.append(supplier)
+
+            if suppliers:
+                result["suppliers"] = suppliers
 
         return result
     except (json.JSONDecodeError, KeyError) as e:
         logging.error(f"Error extracting award data via AI: {e}")
-        return {"winner": "Unknown", "suppliers": [], "value": 0}
+        return {}
 
 
 def get_recommendation(

@@ -1,350 +1,431 @@
-from typing import Dict, List, Optional
+from typing import Optional, 
 
-from sqlalchemy import and_, extract, func
 from sqlalchemy.orm import Session
 
-from app.models.publication_models import CPVCode, Publication
+from app.ai.recommend import extract_award_data_from_xml, summarize_publication_award
+from app.config.settings import Settings
+from app.models.analytics_models import (
+    Address,
+    AppealsBody,
+    AppealsBodyContact,
+    Award,
+    AwardSupplier,
+    Contact,
+    Organization,
+    Winner,
+)
+
+settings = Settings()
 
 
-def get_awards_summary(
-    session: Session,
-    year: Optional[int] = None,
-    quarter: Optional[int] = None,
-    month: Optional[int] = None,
-    sector_code: Optional[str] = None,
-    winner: Optional[str] = None,
-    supplier: Optional[str] = None,
-) -> Dict[str, float]:
+def create_award_from_xml(
+    db: Session, xml_content: str, publication_workspace_id: str
+) -> Optional[Award]:
     """
-    Get summary statistics about awarded contracts.
-    Returns dictionary with total_value, total_count, and avg_value.
+    Create an award record from XML content.
+    Extracts data and creates records in the database.
     """
-    query = session.query(Publication).filter(Publication.award.isnot(None))
+    extracted_data = extract_award_data_from_xml(xml_content)
 
-    # Apply time period filter
-    time_filter = get_time_period_filter(year, quarter, month)
-    if time_filter:
-        query = query.filter(time_filter)
+    if not extracted_data or "award_data" not in extracted_data:
+        # Try with AI fallback
+        extracted_data = summarize_publication_award(xml_content)
+        if not extracted_data:
+            return None
 
-    # Apply sector filter
-    if sector_code:
-        sector_filter = get_sector_filter(sector_code)
-        if sector_filter:
-            query = query.join(Publication.cpv_main_code).filter(sector_filter)
+    # Create nested objects first
 
-    # Apply winner filter
-    if winner:
-        query = query.filter(Publication.award["winner"].astext.ilike(f"%{winner}%"))
+    # 1. Winner and winner address
+    winner_id = None
+    if "winner" in extracted_data:
+        winner_data = extracted_data["winner"].dict(exclude_unset=True)
 
-    # Apply supplier filter
-    if supplier:
-        query = query.filter(
-            Publication.award["suppliers"].astext.ilike(f"%{supplier}%")
-        )
+        # Extract address data if present
+        address_id = None
+        if "address" in winner_data:
+            address_data = winner_data.pop("address")
+            address = Address(**address_data.dict(exclude_unset=True))
+            db.add(address)
+            db.flush()
+            address_id = address.id
 
-    publications = query.all()
+        # Create winner
+        winner = Winner(**winner_data)
+        if address_id:
+            winner.address_id = address_id
 
-    # Calculate statistics
-    count = len(publications)
-    total_value = sum(get_award_value(pub) for pub in publications)
-    avg_value = total_value / count if count > 0 else 0
+        db.add(winner)
+        db.flush()
+        winner_id = winner.id
 
-    return {"total_value": total_value, "total_count": count, "avg_value": avg_value}
+    # 2. Organization, contact, and address
+    organization_id = None
+    if "organization" in extracted_data:
+        org_data = extracted_data["organization"].dict(exclude_unset=True)
+
+        # Extract contact data if present
+        contact_id = None
+        if "contact" in org_data:
+            contact_data = org_data.pop("contact")
+            contact = Contact(**contact_data.dict(exclude_unset=True))
+            db.add(contact)
+            db.flush()
+            contact_id = contact.id
+
+        # Extract address data if present
+        address_id = None
+        if "address" in org_data:
+            address_data = org_data.pop("address")
+            address = Address(**address_data.dict(exclude_unset=True))
+            db.add(address)
+            db.flush()
+            address_id = address.id
+
+        # Create organization
+        organization = Organization(**org_data)
+        if contact_id:
+            organization.contact_id = contact_id
+        if address_id:
+            organization.address_id = address_id
+
+        db.add(organization)
+        db.flush()
+        organization_id = organization.id
+
+    # 3. Appeals body, contact, and address
+    appeals_body_id = None
+    if "appeals_body" in extracted_data:
+        appeals_data = extracted_data["appeals_body"].dict(exclude_unset=True)
+
+        # Extract contact data if present
+        contact_id = None
+        if "contact" in appeals_data:
+            contact_data = appeals_data.pop("contact")
+            contact = AppealsBodyContact(**contact_data.dict(exclude_unset=True))
+            db.add(contact)
+            db.flush()
+            contact_id = contact.id
+
+        # Extract address data if present
+        address_id = None
+        if "address" in appeals_data:
+            address_data = appeals_data.pop("address")
+            address = Address(**address_data.dict(exclude_unset=True))
+            db.add(address)
+            db.flush()
+            address_id = address.id
+
+        # Create appeals body
+        appeals_body = AppealsBody(**appeals_data)
+        if contact_id:
+            appeals_body.contact_id = contact_id
+        if address_id:
+            appeals_body.address_id = address_id
+
+        db.add(appeals_body)
+        db.flush()
+        appeals_body_id = appeals_body.id
+
+    # 4. Create the main award record
+    award_data = extracted_data.get("award_data", {})
+    award = Award(publication_workspace_id=publication_workspace_id, **award_data)
+
+    # Set foreign keys
+    if winner_id:
+        award.winner_id = winner_id
+    if organization_id:
+        award.organization_id = organization_id
+    if appeals_body_id:
+        award.appeals_body_id = appeals_body_id
+
+    # Add XML content
+    award.xml_content = xml_content
+
+    db.add(award)
+    db.flush()
+
+    # 5. Create suppliers
+    if "suppliers" in extracted_data and extracted_data["suppliers"]:
+        for supplier_data in extracted_data["suppliers"]:
+            supplier_dict = supplier_data.dict(exclude_unset=True)
+
+            # Extract address data if present
+            address_id = None
+            if "address" in supplier_dict:
+                address_data = supplier_dict.pop("address")
+                address = Address(**address_data.dict(exclude_unset=True))
+                db.add(address)
+                db.flush()
+                address_id = address.id
+
+            # Create supplier
+            supplier = AwardSupplier(award_id=award.id, **supplier_dict)
+            if address_id:
+                supplier.address_id = address_id
+
+            db.add(supplier)
+
+    db.commit()
+    return award
 
 
-def get_awards_timeseries(
-    session: Session,
-    period_type: str = "monthly",
-    year: Optional[int] = None,
-    sector_code: Optional[str] = None,
-    winner: Optional[str] = None,
-    supplier: Optional[str] = None,
-) -> List[Dict]:
+def update_award_from_xml(
+    db: Session, award_id: int, xml_content: str
+) -> Optional[Award]:
     """
-    Get time series data for awarded contracts.
+    Update an existing award record from XML content.
+    Preserves existing records where possible and updates with new information.
     """
-    # Base query to get all awarded publications with required data
-    query = session.query(Publication).filter(Publication.award.isnot(None))
-
-    # Apply year filter if provided
-    if year:
-        query = query.filter(extract("year", Publication.publication_date) == year)
-
-    # Apply sector filter if provided
-    if sector_code:
-        sector_filter = get_sector_filter(sector_code)
-        if sector_filter:
-            query = query.join(Publication.cpv_main_code).filter(sector_filter)
-
-    # Apply winner filter if provided
-    if winner:
-        query = query.filter(Publication.award["winner"].astext.ilike(f"%{winner}%"))
-
-    # Apply supplier filter if provided
-    if supplier:
-        query = query.filter(
-            Publication.award["suppliers"].astext.ilike(f"%{supplier}%")
-        )
-
-    publications = query.all()
-
-    # Convert to dictionaries for processing
-    data = [
-        {"date": pub.publication_date, "value": get_award_value(pub)}
-        for pub in publications
-    ]
-
-    return data
-
-
-def get_awards_by_sector(
-    session: Session,
-    year: Optional[int] = None,
-    quarter: Optional[int] = None,
-    month: Optional[int] = None,
-    winner: Optional[str] = None,
-    supplier: Optional[str] = None,
-) -> List[Dict]:
-    """
-    Get awarded contracts grouped by sector.
-    """
-    # Base query to get all awarded publications
-    query = session.query(Publication).filter(Publication.award.isnot(None))
-
-    # Apply time period filter
-    time_filter = get_time_period_filter(year, quarter, month)
-    if time_filter:
-        query = query.filter(time_filter)
-
-    # Apply winner filter
-    if winner:
-        query = query.filter(Publication.award["winner"].astext.ilike(f"%{winner}%"))
-
-    # Apply supplier filter
-    if supplier:
-        query = query.filter(
-            Publication.award["suppliers"].astext.ilike(f"%{supplier}%")
-        )
-
-    publications = query.all()
-    return publications
-
-
-def get_awards_by_region(
-    session: Session,
-    year: Optional[int] = None,
-    quarter: Optional[int] = None,
-    month: Optional[int] = None,
-    sector_code: Optional[str] = None,
-    winner: Optional[str] = None,
-    supplier: Optional[str] = None,
-) -> List[Publication]:
-    """
-    Get award counts and values grouped by geographic regions.
-    """
-    # Base query to get all awarded publications
-    query = session.query(Publication).filter(Publication.award.isnot(None))
-
-    # Apply time period filter
-    time_filter = get_time_period_filter(year, quarter, month)
-    if time_filter:
-        query = query.filter(time_filter)
-
-    # Apply sector filter
-    if sector_code:
-        sector_filter = get_sector_filter(sector_code)
-        if sector_filter:
-            query = query.join(Publication.cpv_main_code).filter(sector_filter)
-
-    # Apply winner filter
-    if winner:
-        query = query.filter(Publication.award["winner"].astext.ilike(f"%{winner}%"))
-
-    # Apply supplier filter
-    if supplier:
-        query = query.filter(
-            Publication.award["suppliers"].astext.ilike(f"%{supplier}%")
-        )
-
-    return query.all()
-
-
-def get_awards_by_winner(
-    session: Session,
-    year: Optional[int] = None,
-    quarter: Optional[int] = None,
-    month: Optional[int] = None,
-    sector_code: Optional[str] = None,
-    limit: int = 20,
-) -> List[Publication]:
-    """
-    Get awarded contracts grouped by winner.
-    """
-    # Base query to get all awarded publications
-    query = session.query(Publication).filter(Publication.award.isnot(None))
-
-    # Apply time period filter
-    time_filter = get_time_period_filter(year, quarter, month)
-    if time_filter:
-        query = query.filter(time_filter)
-
-    # Apply sector filter
-    if sector_code:
-        sector_filter = get_sector_filter(sector_code)
-        if sector_filter:
-            query = query.join(Publication.cpv_main_code).filter(sector_filter)
-
-    return query.all()
-
-
-def get_awards_by_supplier(
-    session: Session,
-    year: Optional[int] = None,
-    quarter: Optional[int] = None,
-    month: Optional[int] = None,
-    sector_code: Optional[str] = None,
-    limit: int = 20,
-) -> List[Publication]:
-    """
-    Get awarded contracts grouped by supplier.
-    """
-    # Base query to get all awarded publications
-    query = session.query(Publication).filter(Publication.award.isnot(None))
-
-    # Apply time period filter
-    time_filter = get_time_period_filter(year, quarter, month)
-    if time_filter:
-        query = query.filter(time_filter)
-
-    # Apply sector filter
-    if sector_code:
-        sector_filter = get_sector_filter(sector_code)
-        if sector_filter:
-            query = query.join(Publication.cpv_main_code).filter(sector_filter)
-
-    return query.all()
-
-
-def get_winner_detail(
-    session: Session,
-    winner_name: str,
-    year: Optional[int] = None,
-) -> List[Publication]:
-    """
-    Get detailed information about a specific winner.
-    """
-    # Get all publications awarded to this winner
-    query = session.query(Publication).filter(
-        Publication.award.isnot(None),
-        Publication.award["winner"].astext.ilike(f"%{winner_name}%"),
-    )
-
-    # Apply year filter if provided
-    if year:
-        query = query.filter(extract("year", Publication.publication_date) == year)
-
-    publications = query.all()
-    return publications
-
-
-def get_supplier_detail(
-    session: Session,
-    supplier_name: str,
-    supplier_id: Optional[str] = None,
-    year: Optional[int] = None,
-) -> List[Publication]:
-    """
-    Get detailed information about a specific supplier.
-    """
-    # Get all publications where this supplier is involved
-    query = session.query(Publication).filter(
-        Publication.award.isnot(None),
-        Publication.award["suppliers"].astext.ilike(f"%{supplier_name}%"),
-    )
-
-    # Apply year filter if provided
-    if year:
-        query = query.filter(extract("year", Publication.publication_date) == year)
-
-    return query.all()
-
-
-def get_contracts(
-    session: Session,
-    year: Optional[int] = None,
-    quarter: Optional[int] = None,
-    month: Optional[int] = None,
-    sector_code: Optional[str] = None,
-    winner: Optional[str] = None,
-    supplier: Optional[str] = None,
-) -> List[Publication]:
-    """
-    Get a list of awarded contracts with flexible filtering options.
-    """
-    # Build query for publications with awards
-    query = session.query(Publication).filter(Publication.award.isnot(None))
-
-    # Apply time period filter
-    time_filter = get_time_period_filter(year, quarter, month)
-    if time_filter:
-        query = query.filter(time_filter)
-
-    # Apply sector filter
-    if sector_code:
-        sector_filter = get_sector_filter(sector_code)
-        if sector_filter:
-            query = query.join(Publication.cpv_main_code).filter(sector_filter)
-
-    # Apply winner filter
-    if winner:
-        query = query.filter(Publication.award["winner"].astext.ilike(f"%{winner}%"))
-
-    # Apply supplier filter
-    if supplier:
-        query = query.filter(
-            Publication.award["suppliers"].astext.ilike(f"%{supplier}%")
-        )
-
-    return query.all()
-
-
-# Utility functions
-
-
-def get_time_period_filter(
-    year: Optional[int], quarter: Optional[int], month: Optional[int]
-):
-    """Generate a SQLAlchemy filter based on time period parameters"""
-    conditions = []
-
-    if year:
-        conditions.append(extract("year", Publication.publication_date) == year)
-
-    if quarter:
-        conditions.append(extract("quarter", Publication.publication_date) == quarter)
-
-    if month:
-        conditions.append(extract("month", Publication.publication_date) == month)
-
-    return and_(*conditions) if conditions else None
-
-
-def get_sector_filter(sector_code: Optional[str] = None):
-    """Generate a SQLAlchemy filter for CPV sector"""
-    if not sector_code:
+    # Get the existing award
+    award = db.query(Award).filter(Award.id == award_id).first()
+    if not award:
         return None
 
-    # If only the first two digits are provided (sector level)
-    if len(sector_code) == 2:
-        return func.substring(CPVCode.code, 1, 2) == sector_code
+    # Extract data from XML
+    extracted_data = extract_award_data_from_xml(xml_content)
+    if not extracted_data or "award_data" not in extracted_data:
+        # Try with AI fallback
+        extracted_data = summarize_publication_award(xml_content)
+        if not extracted_data:
+            return None
 
-    # For complete CPV codes
-    return CPVCode.code == sector_code
+    # Update nested objects first
 
+    # 1. Winner and address
+    if "winner" in extracted_data:
+        winner_data = extracted_data["winner"].dict(exclude_unset=True)
+        address_data = None
 
-def get_award_value(pub: Publication) -> float:
-    """Extract the award value from a publication"""
-    if not pub.award:
-        return 0
+        if "address" in winner_data:
+            address_data = winner_data.pop("address")
 
-    return pub.award.get("value", 0)
+        # Update or create winner
+        if award.winner_id:
+            # Update existing winner
+            winner = db.query(Winner).filter(Winner.id == award.winner_id).first()
+
+            # Update fields
+            for key, value in winner_data.items():
+                setattr(winner, key, value)
+
+            # Update address
+            if address_data and winner.address_id:
+                address = (
+                    db.query(Address).filter(Address.id == winner.address_id).first()
+                )
+                for key, value in address_data.dict(exclude_unset=True).items():
+                    setattr(address, key, value)
+            elif address_data:
+                # Create new address
+                address = Address(**address_data.dict(exclude_unset=True))
+                db.add(address)
+                db.flush()
+                winner.address_id = address.id
+        else:
+            # Create new winner
+            winner = Winner(**winner_data)
+
+            # Create address if needed
+            if address_data:
+                address = Address(**address_data.dict(exclude_unset=True))
+                db.add(address)
+                db.flush()
+                winner.address_id = address.id
+
+            db.add(winner)
+            db.flush()
+            award.winner_id = winner.id
+
+    # 2. Organization, contact, and address
+    if "organization" in extracted_data:
+        org_data = extracted_data["organization"].dict(exclude_unset=True)
+        contact_data = None
+        address_data = None
+
+        if "contact" in org_data:
+            contact_data = org_data.pop("contact")
+
+        if "address" in org_data:
+            address_data = org_data.pop("address")
+
+        # Update or create organization
+        if award.organization_id:
+            # Update existing organization
+            organization = (
+                db.query(Organization)
+                .filter(Organization.id == award.organization_id)
+                .first()
+            )
+
+            # Update fields
+            for key, value in org_data.items():
+                setattr(organization, key, value)
+
+            # Update contact
+            if contact_data and organization.contact_id:
+                contact = (
+                    db.query(Contact)
+                    .filter(Contact.id == organization.contact_id)
+                    .first()
+                )
+                for key, value in contact_data.dict(exclude_unset=True).items():
+                    setattr(contact, key, value)
+            elif contact_data:
+                # Create new contact
+                contact = Contact(**contact_data.dict(exclude_unset=True))
+                db.add(contact)
+                db.flush()
+                organization.contact_id = contact.id
+
+            # Update address
+            if address_data and organization.address_id:
+                address = (
+                    db.query(Address)
+                    .filter(Address.id == organization.address_id)
+                    .first()
+                )
+                for key, value in address_data.dict(exclude_unset=True).items():
+                    setattr(address, key, value)
+            elif address_data:
+                # Create new address
+                address = Address(**address_data.dict(exclude_unset=True))
+                db.add(address)
+                db.flush()
+                organization.address_id = address.id
+        else:
+            # Create new organization
+            organization = Organization(**org_data)
+
+            # Create contact if needed
+            if contact_data:
+                contact = Contact(**contact_data.dict(exclude_unset=True))
+                db.add(contact)
+                db.flush()
+                organization.contact_id = contact.id
+
+            # Create address if needed
+            if address_data:
+                address = Address(**address_data.dict(exclude_unset=True))
+                db.add(address)
+                db.flush()
+                organization.address_id = address.id
+
+            db.add(organization)
+            db.flush()
+            award.organization_id = organization.id
+
+    # 3. Appeals body, contact, and address
+    if "appeals_body" in extracted_data:
+        appeals_data = extracted_data["appeals_body"].dict(exclude_unset=True)
+        contact_data = None
+        address_data = None
+
+        if "contact" in appeals_data:
+            contact_data = appeals_data.pop("contact")
+
+        if "address" in appeals_data:
+            address_data = appeals_data.pop("address")
+
+        # Update or create appeals body
+        if award.appeals_body_id:
+            # Update existing appeals body
+            appeals_body = (
+                db.query(AppealsBody)
+                .filter(AppealsBody.id == award.appeals_body_id)
+                .first()
+            )
+
+            # Update fields
+            for key, value in appeals_data.items():
+                setattr(appeals_body, key, value)
+
+            # Update contact
+            if contact_data and appeals_body.contact_id:
+                contact = (
+                    db.query(AppealsBodyContact)
+                    .filter(AppealsBodyContact.id == appeals_body.contact_id)
+                    .first()
+                )
+                for key, value in contact_data.dict(exclude_unset=True).items():
+                    setattr(contact, key, value)
+            elif contact_data:
+                # Create new contact
+                contact = AppealsBodyContact(**contact_data.dict(exclude_unset=True))
+                db.add(contact)
+                db.flush()
+                appeals_body.contact_id = contact.id
+
+            # Update address
+            if address_data and appeals_body.address_id:
+                address = (
+                    db.query(Address)
+                    .filter(Address.id == appeals_body.address_id)
+                    .first()
+                )
+                for key, value in address_data.dict(exclude_unset=True).items():
+                    setattr(address, key, value)
+            elif address_data:
+                # Create new address
+                address = Address(**address_data.dict(exclude_unset=True))
+                db.add(address)
+                db.flush()
+                appeals_body.address_id = address.id
+        else:
+            # Create new appeals body
+            appeals_body = AppealsBody(**appeals_data)
+
+            # Create contact if needed
+            if contact_data:
+                contact = AppealsBodyContact(**contact_data.dict(exclude_unset=True))
+                db.add(contact)
+                db.flush()
+                appeals_body.contact_id = contact.id
+
+            # Create address if needed
+            if address_data:
+                address = Address(**address_data.dict(exclude_unset=True))
+                db.add(address)
+                db.flush()
+                appeals_body.address_id = address.id
+
+            db.add(appeals_body)
+            db.flush()
+            award.appeals_body_id = appeals_body.id
+
+    # 4. Update award record
+    if "award_data" in extracted_data:
+        for key, value in extracted_data["award_data"].items():
+            setattr(award, key, value)
+
+    # Update XML content
+    award.xml_content = xml_content
+
+    # 5. Update suppliers
+    if "suppliers" in extracted_data and extracted_data["suppliers"]:
+        # Remove existing suppliers
+        for supplier in award.suppliers:
+            db.delete(supplier)
+        db.flush()
+
+        # Create new suppliers
+        for supplier_data in extracted_data["suppliers"]:
+            supplier_dict = supplier_data.dict(exclude_unset=True)
+
+            # Extract address data if present
+            address_id = None
+            if "address" in supplier_dict:
+                address_data = supplier_dict.pop("address")
+                address = Address(**address_data.dict(exclude_unset=True))
+                db.add(address)
+                db.flush()
+                address_id = address.id
+
+            # Create supplier
+            supplier = AwardSupplier(award_id=award.id, **supplier_dict)
+            if address_id:
+                supplier.address_id = address_id
+
+            db.add(supplier)
+
+    db.commit()
+    return award

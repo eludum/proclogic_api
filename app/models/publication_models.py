@@ -230,7 +230,7 @@ class Publication(Base):
     ai_summary_with_documents: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True
     )
-    award: Mapped[Optional[dict]] = mapped_column(PickleType, nullable=True)
+    award = relationship("Award", back_populates="publication", uselist=False, cascade="all, delete-orphan")
 
     # Added fields for better matching
     estimated_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -294,3 +294,4 @@ Index("idx_match_recommended", CompanyPublicationMatch.is_recommended)
 
 from app.models.conversation_models import Conversation
 from app.models.kanban_models import PublicationStatus
+from app.models.analytics_models import Award
