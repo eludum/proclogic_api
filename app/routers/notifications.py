@@ -3,6 +3,7 @@ from typing import List
 import app.crud.company as crud_company
 import app.crud.notification as crud_notification
 from app.config.postgres import get_session
+from app.models.notification_models import Notification
 from app.schemas.notification_schemas import (
     NotificationCreate,
     NotificationListResponse,
@@ -10,6 +11,7 @@ from app.schemas.notification_schemas import (
 )
 from app.util.clerk import AuthUser, get_auth_user
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from sqlalchemy import and_, case, func
 
 notifications_router = APIRouter()
 
@@ -57,6 +59,409 @@ async def get_notifications(
 
         return NotificationListResponse(
             items=notification_responses, total=total, unread=unread
+        )
+
+
+@notifications_router.get("/notifications/combined")
+async def get_combined_notifications(
+    limit: int = Query(100, description="Maximum number of notifications to return"),
+    offset: int = Query(0, description="Skip this many notifications"),
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """
+    Get notifications and counts in a single request to optimize dashboard loading.
+    Returns both the notifications list and counts for all categories.
+    """
+    if not auth_user.email:
+        raise HTTPException(status_code=400, detail="User email not available")
+
+    with get_session() as session:
+        company = crud_company.get_company_by_email(
+            email=auth_user.email, session=session
+        )
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Get basic notifications
+        notifications = (
+            session.query(Notification)
+            .filter(Notification.company_vat_number == company.vat_number)
+            .order_by(Notification.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+        # Get counts in a single query
+        counts_query = session.query(
+            func.count().label("total"),
+            func.sum(case((Notification.is_read == False, 1), else_=0)).label("unread"),
+            func.sum(
+                case((Notification.notification_type == "recommendation", 1), else_=0)
+            ).label("recommendation"),
+            func.sum(
+                case((Notification.notification_type == "deadline", 1), else_=0)
+            ).label("deadline"),
+            func.sum(
+                case((Notification.notification_type == "system", 1), else_=0)
+            ).label("system"),
+            func.sum(
+                case((Notification.notification_type == "forum", 1), else_=0)
+            ).label("forum"),
+            func.sum(
+                case((Notification.notification_type == "account", 1), else_=0)
+            ).label("account"),
+            func.sum(
+                case(
+                    (
+                        and_(
+                            Notification.notification_type == "recommendation",
+                            Notification.is_read == False,
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("unread_recommendation"),
+            func.sum(
+                case(
+                    (
+                        and_(
+                            Notification.notification_type == "deadline",
+                            Notification.is_read == False,
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("unread_deadline"),
+            func.sum(
+                case(
+                    (
+                        and_(
+                            Notification.notification_type == "system",
+                            Notification.is_read == False,
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("unread_system"),
+            func.sum(
+                case(
+                    (
+                        and_(
+                            Notification.notification_type == "forum",
+                            Notification.is_read == False,
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("unread_forum"),
+            func.sum(
+                case(
+                    (
+                        and_(
+                            Notification.notification_type == "account",
+                            Notification.is_read == False,
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("unread_account"),
+        ).filter(Notification.company_vat_number == company.vat_number)
+
+        result = counts_query.one()
+
+        # Get the total count for pagination
+        total_count = result.total or 0
+        unread_count = result.unread or 0
+
+        # Prepare counts response
+        counts = {
+            "total": total_count,
+            "unread": unread_count,
+            "categories": {
+                "recommendation": result.recommendation or 0,
+                "deadline": result.deadline or 0,
+                "system": result.system or 0,
+                "forum": result.forum or 0,
+                "account": result.account or 0,
+            },
+            "unread_categories": {
+                "recommendation": result.unread_recommendation or 0,
+                "deadline": result.unread_deadline or 0,
+                "system": result.unread_system or 0,
+                "forum": result.unread_forum or 0,
+                "account": result.unread_account or 0,
+            },
+        }
+
+        # Convert notifications to response format
+        notification_responses = [
+            NotificationResponse.model_validate(notification)
+            for notification in notifications
+        ]
+
+        # Build combined response
+        return {
+            "notifications": {
+                "items": notification_responses,
+                "total": total_count,
+                "unread": unread_count,
+            },
+            "counts": counts,
+        }
+
+
+@notifications_router.get("/notifications/counts")
+async def get_notification_counts(auth_user: AuthUser = Depends(get_auth_user)):
+    """Get counts of notifications by category for the dashboard."""
+    if not auth_user.email:
+        raise HTTPException(status_code=400, detail="User email not available")
+
+    with get_session() as session:
+        company = crud_company.get_company_by_email(
+            email=auth_user.email, session=session
+        )
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Get basic counts from the database
+
+        query = session.query(
+            func.count().label("total"),
+            func.sum(case((Notification.is_read == False, 1), else_=0)).label("unread"),
+            func.sum(
+                case((Notification.notification_type == "recommendation", 1), else_=0)
+            ).label("recommendation"),
+            func.sum(
+                case((Notification.notification_type == "deadline", 1), else_=0)
+            ).label("deadline"),
+            func.sum(
+                case((Notification.notification_type == "system", 1), else_=0)
+            ).label("system"),
+            func.sum(
+                case((Notification.notification_type == "forum", 1), else_=0)
+            ).label("forum"),
+            func.sum(
+                case((Notification.notification_type == "account", 1), else_=0)
+            ).label("account"),
+            func.sum(
+                case(
+                    (
+                        and_(
+                            Notification.notification_type == "recommendation",
+                            Notification.is_read == False,
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("unread_recommendation"),
+            func.sum(
+                case(
+                    (
+                        and_(
+                            Notification.notification_type == "deadline",
+                            Notification.is_read == False,
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("unread_deadline"),
+            func.sum(
+                case(
+                    (
+                        and_(
+                            Notification.notification_type == "system",
+                            Notification.is_read == False,
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("unread_system"),
+            func.sum(
+                case(
+                    (
+                        and_(
+                            Notification.notification_type == "forum",
+                            Notification.is_read == False,
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("unread_forum"),
+            func.sum(
+                case(
+                    (
+                        and_(
+                            Notification.notification_type == "account",
+                            Notification.is_read == False,
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("unread_account"),
+        ).filter(Notification.company_vat_number == company.vat_number)
+
+        result = query.one()
+
+        counts = {
+            "total": result.total or 0,
+            "unread": result.unread or 0,
+            "categories": {
+                "recommendation": result.recommendation or 0,
+                "deadline": result.deadline or 0,
+                "system": result.system or 0,
+                "forum": result.forum or 0,
+                "account": result.account or 0,
+            },
+            "unread_categories": {
+                "recommendation": result.unread_recommendation or 0,
+                "deadline": result.unread_deadline or 0,
+                "system": result.unread_system or 0,
+                "forum": result.unread_forum or 0,
+                "account": result.unread_account or 0,
+            },
+        }
+
+        return counts
+
+
+@notifications_router.get(
+    "/notifications/unread", response_model=NotificationListResponse
+)
+async def get_unread_notifications(
+    limit: int = Query(100, description="Maximum number of notifications to return"),
+    offset: int = Query(0, description="Skip this many notifications"),
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """Get unread notifications for the authenticated user's company."""
+    if not auth_user.email:
+        raise HTTPException(status_code=400, detail="User email not available")
+
+    with get_session() as session:
+        company = crud_company.get_company_by_email(
+            email=auth_user.email, session=session
+        )
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Get unread notifications
+        notifications = (
+            session.query(Notification)
+            .filter(
+                Notification.company_vat_number == company.vat_number,
+                Notification.is_read == False,
+            )
+            .order_by(Notification.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+        # Get total count
+        total_count = (
+            session.query(func.count())
+            .filter(
+                Notification.company_vat_number == company.vat_number,
+                Notification.is_read == False,
+            )
+            .scalar()
+            or 0
+        )
+
+        # Convert to response schema
+        notification_responses = [
+            NotificationResponse.model_validate(notification)
+            for notification in notifications
+        ]
+
+        return NotificationListResponse(
+            items=notification_responses, total=total_count, unread=total_count
+        )
+
+
+@notifications_router.get(
+    "/notifications/by-type/{notification_type}",
+    response_model=NotificationListResponse,
+)
+async def get_notifications_by_type(
+    notification_type: str = Path(..., description="Type of notification to filter by"),
+    limit: int = Query(100, description="Maximum number of notifications to return"),
+    offset: int = Query(0, description="Skip this many notifications"),
+    unread_only: bool = Query(False, description="Show only unread notifications"),
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """Get notifications of a specific type for the authenticated user's company."""
+    if not auth_user.email:
+        raise HTTPException(status_code=400, detail="User email not available")
+
+    # Validate notification type
+    valid_types = ["recommendation", "deadline", "system", "forum", "account"]
+    if notification_type not in valid_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid notification type. Must be one of: {', '.join(valid_types)}",
+        )
+
+    with get_session() as session:
+        company = crud_company.get_company_by_email(
+            email=auth_user.email, session=session
+        )
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        from app.models.notification_models import Notification
+
+        # Base query for type filtering
+        query = session.query(Notification).filter(
+            Notification.company_vat_number == company.vat_number,
+            Notification.notification_type == notification_type,
+        )
+
+        # Add unread filter if requested
+        if unread_only:
+            query = query.filter(Notification.is_read == False)
+
+        # Get notifications with pagination
+        notifications = (
+            query.order_by(Notification.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+        # Get total count
+        total_count = query.with_entities(func.count()).scalar() or 0
+
+        # Get unread count
+        unread_count = (
+            session.query(func.count())
+            .filter(
+                Notification.company_vat_number == company.vat_number,
+                Notification.notification_type == notification_type,
+                Notification.is_read == False,
+            )
+            .scalar()
+            or 0
+        )
+
+        # Convert to response schema
+        notification_responses = [
+            NotificationResponse.model_validate(notification)
+            for notification in notifications
+        ]
+
+        return NotificationListResponse(
+            items=notification_responses, total=total_count, unread=unread_count
         )
 
 
