@@ -64,7 +64,7 @@ nuts_codes = {
 }
 
 def get_nuts_code_as_str(code: str):
-    return nuts_codes[code] if code in nuts_codes else None
+    return nuts_codes[code] if code in nuts_codes else str(code)
 
 def check_if_publication_is_in_region(company_regions: List[str], publication_regions: List[str]) -> bool:
     if not company_regions or not publication_regions:
