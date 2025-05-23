@@ -1,0 +1,63 @@
+Basic Information
+* Notice ID: d00fce11-72ee-4d70-92fe-0c8b2d36e08f
+* Contract ID: 9ca69e5d-f259-4a53-8a53-e0a5e68c90fb
+* Internal ID: PPP23L-88/5257/NPB_CC_IW_HeideherstelHoogmoerheideNoord_2025_JH
+* Issue Date: May 16, 2025
+* Notice Type: Contract Award Notice (standard)
+Financial Information
+* Total Contract Amount: €111,825.00 EUR
+* Lowest Tender Amount: €111,825.00 EUR
+* Highest Tender Amount: €140,239.00 EUR
+Tender Process
+* Number of Tenders Received: 3
+* Number of Participation Requests: 3
+* Electronic Auction Used: No
+* Dynamic Purchasing System: None
+* Framework Agreement: None
+Winning Tenderer
+* Company Name: Vandervelden bv
+* Tender Reference: Vandervelden_bv
+* Company Size: Large
+* Website: https://www.vandervelden-bos.be/
+* Business ID: BE 0476234564
+* Address:
+   * Middenweg 15
+   * Hamont-Achel, 3930
+   * Belgium (NUTS code: BE225)
+* Contact:
+   * Phone: +32 11648633
+   * Email: info@vandervelden-bos.be
+* Subcontracting: Not applicable
+Contracting Authority
+* Organization Name: Natuurpunt Beheer vzw
+* Business ID: BE0409 423 736
+* Website: http://www.natuurpunt.be/
+* Address:
+   * Coxiestraat 11
+   * Mechelen, 2800
+   * Belgium (NUTS code: BE211)
+* Contact Person:
+   * Name: Kristof Luysmans
+   * Job Title: Coördinator aankoop & aanbestedingen (Coordinator for purchases & tenders)
+   * Phone: +32 474810526
+   * Email: kristof.luysmans@natuurpunt.be
+Appeals Body
+* Organization Name: Rechtbank van Eerste Aanleg Antwerpen afdeling Mechelen (Court of First Instance Antwerp Mechelen Department)
+* Business ID: 0308357753
+* Website: https://www.tribunaux-rechtbanken.be/nl/rechtbank-eerste-aanleg-antwerpen-afdeling-mechelen/civil
+* Address:
+   * Keizerstraat 20
+   * Mechelen, 2800
+   * Belgium (NUTS code: BE212)
+* Contact:
+   * Phone: +32 15288111
+   * Email: afdelingsvoorzitter.rea.mechelen@just.fgov.be
+Service Provider
+* Organization Name: 3P - Aanbieder van diensten / Prestataire de services
+* Business ID: BE 0475.480.736
+* Address:
+   * Antwerpen / Anvers, 2000
+   * Belgium (NUTS code: BE211)
+* Contact:
+   * Phone: +32 3 294 30 51
+   * Email: info@3p.eu
