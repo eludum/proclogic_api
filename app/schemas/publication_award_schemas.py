@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr, HttpUrl, Field
 from typing import Optional, List
 from datetime import date
 
+
 class Address(BaseModel):
     street: Optional[str] = None
     city: Optional[str] = None
@@ -9,11 +10,13 @@ class Address(BaseModel):
     country: Optional[str] = None
     nuts_code: Optional[str] = None
 
+
 class ContactPerson(BaseModel):
     name: Optional[str] = None
     job_title: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[EmailStr] = None
+
 
 class Organization(BaseModel):
     name: str
@@ -21,14 +24,11 @@ class Organization(BaseModel):
     website: Optional[HttpUrl] = None
     phone: Optional[str] = None
     email: Optional[EmailStr] = None
-    organization_type: Optional[str] = None
     address: Optional[Address] = None
     contact_persons: Optional[List[ContactPerson]] = []
-
-class TenderDetails(BaseModel):
-    tender_reference: Optional[str] = None
     company_size: Optional[str] = None
     subcontracting: Optional[str] = None
+
 
 class Contract(BaseModel):
     notice_id: str
@@ -36,25 +36,22 @@ class Contract(BaseModel):
     internal_id: Optional[str] = None
     issue_date: Optional[date] = None
     notice_type: Optional[str] = None
-    
+
     # Financial Information
     total_contract_amount: Optional[float] = None
     currency: Optional[str] = Field(default="EUR", max_length=3)
-    lowest_tender_amount: Optional[float] = None
-    highest_tender_amount: Optional[float] = None
-    
-    # Tender Process Information
-    number_of_tenders_received: Optional[int] = None
+    lowest_publication_amount: Optional[float] = None
+    highest_publication_amount: Optional[float] = None
+
+    # Publication Process Information
+    number_of_publications_received: Optional[int] = None
     number_of_participation_requests: Optional[int] = None
     electronic_auction_used: Optional[bool] = None
     dynamic_purchasing_system: Optional[str] = None
     framework_agreement: Optional[str] = None
-    
+
     # Related Organizations
     contracting_authority: Optional[Organization] = None
-    winning_tenderer: Optional[Organization] = None
+    winning_publisher: Optional[Organization] = None
     appeals_body: Optional[Organization] = None
     service_provider: Optional[Organization] = None
-    
-    # Tender Details
-    tender_details: Optional[TenderDetails] = None

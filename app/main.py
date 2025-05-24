@@ -33,11 +33,26 @@ logging.basicConfig(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if settings.scraper_mode:
-        # probably only done via terminal however do it here if we use HA psql
+        # Create a list to track your background tasks
         # run_migration()
-        task = asyncio.gather(fetch_pubproc_data(), update_pubproc_data(), gather_notifications())
-        yield
-        task.cancel()
+        background_tasks = []
+        try:
+            # Create individual tasks and track them in the list
+            background_tasks.append(asyncio.create_task(fetch_pubproc_data()))
+            background_tasks.append(asyncio.create_task(update_pubproc_data()))
+            background_tasks.append(asyncio.create_task(gather_notifications()))
+
+            # Yield control back to the application
+            yield
+        finally:
+            # On shutdown, cancel all tasks and properly wait for them to complete
+            for task in background_tasks:
+                if not task.done():
+                    task.cancel()
+
+            # Wait for all tasks to be cancelled properly
+            if background_tasks:
+                await asyncio.gather(*background_tasks, return_exceptions=True)
     else:
         # Make sure we always yield
         yield
@@ -60,6 +75,7 @@ proclogic.include_router(email_router)
 proclogic.include_router(kanban_router)
 proclogic.include_router(stripe_router)
 
+# TODO: fix cors
 # origins = [
 #     "http://localhost:3000",
 #     settings.frontend_url,

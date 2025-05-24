@@ -6,7 +6,7 @@ import app.crud.publication as crud_publication
 import httpx
 from app.config.postgres import get_session
 from app.config.settings import Settings
-from app.crud.mapper import (
+from app.crud.publication_mapper import (
     convert_publication_to_out_schema_details_free,
     convert_publication_to_out_schema_details_paid,
     convert_publications_to_out_schema_list_free,
