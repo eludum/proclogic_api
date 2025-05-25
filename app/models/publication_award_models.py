@@ -1,5 +1,4 @@
 from sqlalchemy import (
-    create_engine,
     Column,
     String,
     Integer,
@@ -12,6 +11,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
 Base = declarative_base()
+
+# TODO: refactor to new sqlalchemy syntax fucking AI
 
 
 class Address(Base):
@@ -85,7 +86,8 @@ class ContactPerson(Base):
 
 
 class Contract(Base):
-    __tablename__ = "contracts"
+    # TODO: while at it also refactor to better tablenames like below
+    __tablename__ = "publication_award_contracts"
 
     id = Column(Integer, primary_key=True)
     notice_id = Column(String(100), unique=True, nullable=False)

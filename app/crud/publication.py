@@ -263,8 +263,8 @@ def update_publication(
         publication.estimated_value = publication_schema.estimated_value
     if publication_schema.extracted_keywords:
         publication.extracted_keywords = publication_schema.extracted_keywords
-    if publication_schema.award:
-        publication.award = publication_schema.award
+    if publication_schema.contract:
+        publication.contract = publication_schema.contract
 
     publication.cpv_main_code = cpv_main_code
     publication.dossier = dossier
@@ -370,7 +370,7 @@ def get_or_create_publication(
             ai_summary_with_documents=publication_schema.ai_summary_with_documents,
             estimated_value=publication_schema.estimated_value,
             extracted_keywords=publication_schema.extracted_keywords,
-            award=publication_schema.award,
+            contract=publication_schema.contract,
             cpv_main_code=cpv_main_code,
             dossier=dossier,
             organisation=organisation,

@@ -214,7 +214,7 @@ async def process_award_publication(
         publication_workspace_id=pub.publication_workspace_id,
     )
 
-    pub.award = summarize_publication_award(xml=xml_content)
+    pub.contract = summarize_publication_award(xml=xml_content)
 
     crud_publication.get_or_create_publication(publication_schema=pub, session=session)
 
