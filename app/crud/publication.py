@@ -2,7 +2,7 @@ import logging
 from datetime import date
 from typing import List, Optional, Tuple
 
-from sqlalchemy import and_, case, desc, func, or_, select
+from sqlalchemy import and_, case, desc, func, literal_column, or_, select
 from sqlalchemy.orm import Session, aliased, joinedload
 from sqlalchemy.sql import exists
 
@@ -506,34 +506,37 @@ def build_region_filter_conditions(region_filter: List[str]):
     conditions = []
 
     for requested_region in region_filter:
-        # 1. Exact match
+        # Condition 1: Exact match
         exact_match = Publication.nuts_codes.any(requested_region)
 
-        # 2. Child regions: codes that start with the requested region but are longer
-        # Use PostgreSQL's ANY operator and LIKE
-        # Translate to: EXISTS (SELECT 1 FROM unnest(nuts_codes) AS code WHERE code LIKE 'BE21%')
-        child_match = func.exists(
-            select([1]).where(
-                func.unnest(Publication.nuts_codes).like(f"{requested_region}%")
-            )
+        # Condition 2: Publication has child regions of requested region
+        # If we're looking for BE21, we want to match BE211, BE212, etc.
+        child_pattern = f"{requested_region}%"
+        child_match = (
+            select(literal_column("1"))
+            .select_from(func.unnest(Publication.nuts_codes).alias("code"))
+            .where(literal_column("code").like(child_pattern))
+            .correlate(Publication)
+            .exists()
         )
 
-        # However, SQLAlchemy doesn't allow this inline. Instead, we'll use `any_` with `like`
-        # Rewrite with `or_`: any code LIKE 'BE21%' AND code != 'BE21' (optional)
-        child_match = or_(
-            Publication.nuts_codes.any(f"{requested_region}%")  # Used with LIKE in `ilike`
-        )
+        # Condition 3: Publication has parent regions of requested region
+        # If we're looking for BE211, we want to match BE21, BE2, BE
+        parent_conditions = []
+        for i in range(1, len(requested_region)):
+            parent_region = requested_region[:i]
+            parent_conditions.append(Publication.nuts_codes.any(parent_region))
 
-        # 3. Parent regions: loop over substrings
-        parent_conditions = [
-            Publication.nuts_codes.any(requested_region[:i])
-            for i in range(1, len(requested_region))
-        ]
+        # Combine all conditions for this region
+        region_conditions = [exact_match, child_match]
+        if parent_conditions:
+            region_conditions.extend(parent_conditions)
 
-        region_conditions = [exact_match, child_match] + parent_conditions
         conditions.append(or_(*region_conditions))
 
-    return or_(*conditions)
+    # Return OR of all region conditions
+    return or_(*conditions) if conditions else None
+
 
 def get_paginated_publications_for_company(
     session: Session,
