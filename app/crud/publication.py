@@ -6,6 +6,7 @@ from sqlalchemy import and_, case, desc, func, literal_column, or_, select
 from sqlalchemy.orm import Session, aliased, joinedload
 from sqlalchemy.sql import exists
 
+from app.models.publication_award_models import Contract, ContractAddress, ContractContactPerson, ContractOrganization
 from app.models.publication_models import (
     CompanyPublicationMatch,
     CPVCode,
@@ -16,6 +17,12 @@ from app.models.publication_models import (
     Organisation,
     OrganisationName,
     Publication,
+)
+from app.schemas.publication_award_schemas import (
+    ContractAddressSchema,
+    ContractContactPersonSchema,
+    ContractOrganizationSchema,
+    ContractSchema,
 )
 from app.schemas.publication_schemas import (
     CPVCodeSchema,
@@ -199,6 +206,92 @@ def create_lot(lot_schema: LotSchema, session: Session) -> Lot:
     session.flush()
 
     return lot
+
+
+def create_contract_address(
+    address_schema: ContractAddressSchema, session: Session
+) -> ContractAddress:
+    address = ContractAddress(
+        street=address_schema.street,
+        city=address_schema.city,
+        postal_code=address_schema.postal_code,
+        country=address_schema.country,
+        nuts_code=address_schema.nuts_code,
+    )
+
+    session.add(address)
+    session.flush()
+
+    return address
+
+
+def create_contract_organization(
+    org_schema: ContractOrganizationSchema, session: Session
+) -> ContractOrganization:
+    organization = ContractOrganization(
+        name=org_schema.name,
+        business_id=org_schema.business_id,
+        website=org_schema.website,
+        phone=org_schema.phone,
+        email=org_schema.email,
+        company_size=org_schema.company_size,
+        subcontracting=org_schema.subcontracting,
+        address_id=org_schema.address_id,
+    )
+
+    session.add(organization)
+    session.flush()
+
+    return organization
+
+
+def create_contract_contact_person(
+    person_schema: ContractContactPersonSchema, session: Session
+) -> ContractContactPerson:
+    person = ContractContactPerson(
+        name=person_schema.name,
+        job_title=person_schema.job_title,
+        phone=person_schema.phone,
+        email=person_schema.email,
+        organization_id=person_schema.organization_id,
+    )
+
+    session.add(person)
+    session.flush()
+
+    return person
+
+
+def create_contract(contract_schema: ContractSchema, session: Session) -> Contract:
+
+    contract = Contract(
+        notice_id=contract_schema.notice_id,
+        contract_id=contract_schema.contract_id,
+        internal_id=contract_schema.internal_id,
+        issue_date=contract_schema.issue_date,
+        notice_type=contract_schema.notice_type,
+        # Financial Information
+        total_contract_amount=contract_schema.total_contract_amount,
+        currency=contract_schema.currency,
+        lowest_publication_amount=contract_schema.lowest_publication_amount,
+        highest_publication_amount=contract_schema.highest_publication_amount,
+        # Publication Process Information
+        number_of_publications_received=contract_schema.number_of_publications_received,
+        number_of_participation_requests=contract_schema.number_of_participation_requests,
+        electronic_auction_used=contract_schema.electronic_auction_used,
+        dynamic_purchasing_system=contract_schema.dynamic_purchasing_system,
+        framework_agreement=contract_schema.framework_agreement,
+        # Foreign Keys
+        contracting_authority=contract_schema.contracting_authority,
+        winning_publisher=contract_schema.winning_publisher,
+        appeals_body=contract_schema.appeals_body,
+        service_provider=contract_schema.service_provider,
+    )
+
+    session.add(contract)
+    session.flush()
+
+    return contract
 
 
 def update_publication(

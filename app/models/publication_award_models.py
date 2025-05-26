@@ -1,5 +1,4 @@
 from sqlalchemy import (
-    Column,
     String,
     Integer,
     Float,
@@ -7,132 +6,126 @@ from sqlalchemy import (
     Date,
     ForeignKey,
 )
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship,
+)
+from app.models.base import Base
 
-Base = declarative_base()
+class ContractAddress(Base):
+    __tablename__ = "contract_addresses"
 
-# TODO: refactor to new sqlalchemy syntax fucking AI
-
-
-class Address(Base):
-    __tablename__ = "addresses"
-
-    id = Column(Integer, primary_key=True)
-    street = Column(String(255))
-    city = Column(String(100))
-    postal_code = Column(String(20))
-    country = Column(String(100))
-    nuts_code = Column(String(10))
-
-    # Relationships
-    organizations = relationship("Organization", back_populates="address")
-
-
-class Organization(Base):
-    __tablename__ = "organizations"
-
-    id = Column(Integer, primary_key=True)
-    name = Column(String(255), nullable=False)
-    business_id = Column(String(50), unique=True)
-    website = Column(String(255))
-    phone = Column(String(50))
-    email = Column(String(255))
-    company_size = Column(String(50))
-    subcontracting = Column(String(100))
-
-    # Foreign Keys
-    address_id = Column(Integer, ForeignKey("addresses.id"))
+    id: Mapped[int] = mapped_column(primary_key=True)
+    street: Mapped[str] = mapped_column(String(255))
+    city: Mapped[str] = mapped_column(String(100))
+    postal_code: Mapped[str] = mapped_column(String(20))
+    country: Mapped[str] = mapped_column(String(100))
+    nuts_code: Mapped[str] = mapped_column(String(10))
 
     # Relationships
-    address = relationship("Address", back_populates="organizations")
-    contracts_as_authority = relationship(
-        "Contract",
-        foreign_keys="Contract.contracting_authority_id",
+    organizations: Mapped[list["ContractOrganization"]] = relationship(
+        back_populates="address"
+    )
+
+
+class ContractOrganization(Base):
+    __tablename__ = "contract_organizations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    business_id: Mapped[str] = mapped_column(String(50), unique=True)
+    website: Mapped[str] = mapped_column(String(255))
+    phone: Mapped[str] = mapped_column(String(50))
+    email: Mapped[str] = mapped_column(String(255))
+    company_size: Mapped[str] = mapped_column(String(50))
+    subcontracting: Mapped[str] = mapped_column(String(100))
+
+    address_id: Mapped[int] = mapped_column(ForeignKey("contract_addresses.id"))
+
+    # Relationships
+    address: Mapped["ContractAddress"] = relationship(back_populates="organizations")
+    contracts_as_authority: Mapped[list["Contract"]] = relationship(
         back_populates="contracting_authority",
+        foreign_keys="Contract.contracting_authority_id",
     )
-    contracts_as_winner = relationship(
-        "Contract",
-        foreign_keys="Contract.winning_tenderer_id",
-        back_populates="winning_tenderer",
+    contracts_as_winner: Mapped[list["Contract"]] = relationship(
+        back_populates="winning_publisher",
+        foreign_keys="Contract.winning_publisher_id",
     )
-    contracts_as_appeals_body = relationship(
-        "Contract",
-        foreign_keys="Contract.appeals_body_id",
+    contracts_as_appeals_body: Mapped[list["Contract"]] = relationship(
         back_populates="appeals_body",
+        foreign_keys="Contract.appeals_body_id",
     )
-    contracts_as_service_provider = relationship(
-        "Contract",
-        foreign_keys="Contract.service_provider_id",
+    contracts_as_service_provider: Mapped[list["Contract"]] = relationship(
         back_populates="service_provider",
+        foreign_keys="Contract.service_provider_id",
     )
-    contact_persons = relationship("ContactPerson", back_populates="organization")
+    contact_persons: Mapped[list["ContractContactPerson"]] = relationship(
+        back_populates="organization"
+    )
 
 
-class ContactPerson(Base):
-    __tablename__ = "contact_persons"
+class ContractContactPerson(Base):
+    __tablename__ = "contract_contact_persons"
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String(255))
-    job_title = Column(String(255))
-    phone = Column(String(50))
-    email = Column(String(255))
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    job_title: Mapped[str] = mapped_column(String(255))
+    phone: Mapped[str] = mapped_column(String(50))
+    email: Mapped[str] = mapped_column(String(255))
 
-    # Foreign Keys
-    organization_id = Column(Integer, ForeignKey("organizations.id"))
+    organization_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
 
     # Relationships
-    organization = relationship("Organization", back_populates="contact_persons")
+    organization: Mapped["ContractOrganization"] = relationship(
+        back_populates="contact_persons"
+    )
 
 
 class Contract(Base):
-    # TODO: while at it also refactor to better tablenames like below
-    __tablename__ = "publication_award_contracts"
+    __tablename__ = "contracts"
 
-    id = Column(Integer, primary_key=True)
-    notice_id = Column(String(100), unique=True, nullable=False)
-    contract_id = Column(String(100), unique=True, nullable=False)
-    internal_id = Column(String(255), unique=True)
-    issue_date = Column(Date)
-    notice_type = Column(String(100))
+    notice_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    contract_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, primary_key=True)
+    internal_id: Mapped[str] = mapped_column(String(255), unique=True)
+    issue_date: Mapped[Date]
+    notice_type: Mapped[str] = mapped_column(String(100))
 
     # Financial Information
-    total_contract_amount = Column(Float)
-    currency = Column(String(3))
-    lowest_publication_amount = Column(Float)
-    highest_publication_amount = Column(Float)
+    total_contract_amount: Mapped[float]
+    currency: Mapped[str] = mapped_column(String(3))
+    lowest_publication_amount: Mapped[float]
+    highest_publication_amount: Mapped[float]
 
     # Publication Process Information
-    number_of_publications_received = Column(Integer)
-    number_of_participation_requests = Column(Integer)
-    electronic_auction_used = Column(Boolean)
-    dynamic_purchasing_system = Column(String(50))
-    framework_agreement = Column(String(50))
+    number_of_publications_received: Mapped[int]
+    number_of_participation_requests: Mapped[int]
+    electronic_auction_used: Mapped[bool]
+    dynamic_purchasing_system: Mapped[str] = mapped_column(String(50))
+    framework_agreement: Mapped[str] = mapped_column(String(50))
 
     # Foreign Keys
-    contracting_authority_id = Column(Integer, ForeignKey("organizations.id"))
-    winning_publisher_id = Column(Integer, ForeignKey("organizations.id"))
-    appeals_body_id = Column(Integer, ForeignKey("organizations.id"))
-    service_provider_id = Column(Integer, ForeignKey("organizations.id"))
+    contracting_authority_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
+    winning_publisher_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
+    appeals_body_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
+    service_provider_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
 
     # Relationships
-    contracting_authority = relationship(
-        "Organization",
+    contracting_authority: Mapped["ContractOrganization"] = relationship(
         foreign_keys=[contracting_authority_id],
         back_populates="contracts_as_authority",
     )
-    winning_publisher = relationship(
-        "Organization",
+    winning_publisher: Mapped["ContractOrganization"] = relationship(
         foreign_keys=[winning_publisher_id],
         back_populates="contracts_as_winner",
     )
-    appeals_body = relationship(
-        "Organization",
+    appeals_body: Mapped["ContractOrganization"] = relationship(
         foreign_keys=[appeals_body_id],
         back_populates="contracts_as_appeals_body",
     )
-    service_provider = relationship(
-        "Organization",
+    service_provider: Mapped["ContractOrganization"] = relationship(
         foreign_keys=[service_provider_id],
         back_populates="contracts_as_service_provider",
     )

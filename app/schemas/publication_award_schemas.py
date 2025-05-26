@@ -3,7 +3,7 @@ from typing import Dict, Optional, List
 from datetime import date, datetime
 
 
-class Address(BaseModel):
+class ContractAddressSchema(BaseModel):
     street: Optional[str] = None
     city: Optional[str] = None
     postal_code: Optional[str] = None
@@ -11,26 +11,26 @@ class Address(BaseModel):
     nuts_code: Optional[str] = None
 
 
-class ContactPerson(BaseModel):
+class ContractContactPersonSchema(BaseModel):
     name: Optional[str] = None
     job_title: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[EmailStr] = None
 
 
-class Organization(BaseModel):
+class ContractOrganizationSchema(BaseModel):
     name: str
     business_id: Optional[str] = None
     website: Optional[HttpUrl] = None
     phone: Optional[str] = None
     email: Optional[EmailStr] = None
-    address: Optional[Address] = None
-    contact_persons: Optional[List[ContactPerson]] = []
+    address: Optional[ContractAddressSchema] = None
+    contact_persons: Optional[List[ContractContactPersonSchema]] = []
     company_size: Optional[str] = None
     subcontracting: Optional[str] = None
 
 
-class Contract(BaseModel):
+class ContractSchema(BaseModel):
     notice_id: str
     contract_id: str
     internal_id: Optional[str] = None
@@ -51,10 +51,10 @@ class Contract(BaseModel):
     framework_agreement: Optional[str] = None
 
     # Related Organizations
-    contracting_authority: Optional[Organization] = None
-    winning_publisher: Optional[Organization] = None
-    appeals_body: Optional[Organization] = None
-    service_provider: Optional[Organization] = None
+    contracting_authority: Optional[ContractOrganizationSchema] = None
+    winning_publisher: Optional[ContractOrganizationSchema] = None
+    appeals_body: Optional[ContractOrganizationSchema] = None
+    service_provider: Optional[ContractOrganizationSchema] = None
 
 
 class AwardSummary(BaseModel):
