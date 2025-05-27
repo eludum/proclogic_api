@@ -13,10 +13,10 @@ from app.schemas.publication_schemas import PublicationSchema
 from app.util.publication_utils.publication_converter import PublicationConverter
 from app.util.redis_utils import prepare_files_for_vector_store
 from app.schemas.publication_award_schemas import (
-    Address,
-    ContactPerson,
-    Contract,
-    Organization,
+    ContractAddressSchema,
+    ContractContactPersonSchema,
+    ContractOrganizationSchema,
+    ContractSchema,
 )
 
 settings = Settings()
@@ -42,7 +42,7 @@ def find_text(element, path, namespaces, default=None):
     return found.text if found is not None else default
 
 
-def parse_organization(org_data: dict) -> Optional[Organization]:
+def parse_organization(org_data: dict) -> Optional[ContractOrganizationSchema]:
     if not org_data or not isinstance(org_data, dict):
         return None
 
@@ -50,7 +50,7 @@ def parse_organization(org_data: dict) -> Optional[Organization]:
         # Parse address if present
         address = None
         if "address" in org_data and isinstance(org_data["address"], dict):
-            address = Address(**org_data["address"])
+            address = ContractAddressSchema(**org_data["address"])
 
         # Parse contact persons if present
         contact_persons = []
@@ -59,7 +59,7 @@ def parse_organization(org_data: dict) -> Optional[Organization]:
         ):
             for cp_data in org_data["contact_persons"]:
                 if isinstance(cp_data, dict):
-                    contact_persons.append(ContactPerson(**cp_data))
+                    contact_persons.append(ContractContactPersonSchema(**cp_data))
 
         # Create organization
         org_dict = {
@@ -74,13 +74,13 @@ def parse_organization(org_data: dict) -> Optional[Organization]:
             "contact_persons": contact_persons,
         }
 
-        return Organization(**org_dict)
+        return ContractOrganizationSchema(**org_dict)
     except Exception as e:
         logging.warning(f"Failed to parse organization: {e}")
         return None
 
 
-def extract_data_from_xml(xml_content: str) -> Optional[Contract]:
+def extract_data_from_xml(xml_content: str) -> Optional[ContractSchema]:
     """
     Extract contract award information from XML and return a Contract Pydantic model.
     Returns None if parsing fails.
@@ -237,7 +237,7 @@ def extract_data_from_xml(xml_content: str) -> Optional[Contract]:
                     # Extract contact person
                     contact_elem = company.find(".//cac:Contact", namespaces)
                     if contact_elem and find_text(contact_elem, "cbc:Name", namespaces):
-                        contact = ContactPerson(
+                        contact = ContractContactPersonSchema(
                             name=find_text(contact_elem, "cbc:Name", namespaces),
                             job_title=find_text(
                                 contact_elem, "cbc:JobTitle", namespaces
@@ -249,7 +249,7 @@ def extract_data_from_xml(xml_content: str) -> Optional[Contract]:
                         )
                         org_data["contact_persons"] = [contact]
 
-                    organizations_dict[org_id] = Organization(**org_data)
+                    organizations_dict[org_id] = ContractOrganizationSchema(**org_data)
 
         # Identify organization roles
         contracting_authority = None
@@ -307,7 +307,7 @@ def extract_data_from_xml(xml_content: str) -> Optional[Contract]:
                     )
 
         # Create the Contract model
-        contract = Contract(
+        contract = ContractSchema(
             notice_id=notice_id,
             contract_id=contract_folder_id,
             internal_id=internal_id,
@@ -335,7 +335,7 @@ def extract_data_from_xml(xml_content: str) -> Optional[Contract]:
         return None
 
 
-def summarize_publication_award(xml: str, client: OpenAI = None) -> Optional[Contract]:
+def summarize_publication_award(xml: str, client: OpenAI = None) -> Optional[ContractSchema]:
     """
     Extract award information from publication XML.
     First tries to parse with ElementTree and Pydantic models, falls back to AI if needed.
@@ -484,19 +484,13 @@ def summarize_publication_award(xml: str, client: OpenAI = None) -> Optional[Con
             "service_provider": parse_organization(result.get("service_provider", {})),
         }
 
-        contract = Contract(**contract_data)
+        contract = ContractSchema(**contract_data)
         logging.info("Successfully extracted award data via AI")
         return contract
 
     except (json.JSONDecodeError, ValidationError, KeyError) as e:
+        # TODO: fix so it returns at least somethign
         logging.error(f"Error extracting award data via AI: {e}")
-        # Return a minimal Contract object with default values
-        try:
-            return Contract(
-                notice_id="EXTRACTION-FAILED", contract_id="EXTRACTION-FAILED"
-            )
-        except Exception:
-            return None
 
 
 def get_recommendation(

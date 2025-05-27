@@ -4,7 +4,7 @@ from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 from app.schemas.company_schemas import CompanyPublicationMatchSchema
-from app.schemas.publication_award_schemas import Contract
+from app.schemas.publication_award_schemas import ContractSchema
 
 
 class DescriptionSchema(BaseModel):
@@ -96,7 +96,7 @@ class PublicationSchema(BaseModel):
     # forum: Optional[dict] = None
     ai_summary_without_documents: Optional[str] = None
     ai_summary_with_documents: Optional[str] = None
-    contract: Optional[Contract] = None
+    contract: Optional[ContractSchema] = None
 
     estimated_value: Optional[int] = None
     extracted_keywords: Optional[List[str]] = Field(default_factory=list)

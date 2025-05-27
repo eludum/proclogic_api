@@ -1,13 +1,10 @@
+from datetime import datetime
 from sqlalchemy import (
+    DateTime,
     String,
-    Integer,
-    Float,
-    Boolean,
-    Date,
     ForeignKey,
 )
 from sqlalchemy.orm import (
-    DeclarativeBase,
     Mapped,
     mapped_column,
     relationship,
@@ -90,7 +87,7 @@ class Contract(Base):
     notice_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     contract_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, primary_key=True)
     internal_id: Mapped[str] = mapped_column(String(255), unique=True)
-    issue_date: Mapped[Date]
+    issue_date: Mapped[datetime] = mapped_column(DateTime)
     notice_type: Mapped[str] = mapped_column(String(100))
 
     # Financial Information
