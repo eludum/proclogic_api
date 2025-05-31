@@ -11,7 +11,6 @@ from app.config.settings import Settings
 from app.routers.analytics import analytics_router
 from app.routers.company import companies_router
 from app.routers.conversations import conversations_router
-from app.routers.email import email_router
 from app.routers.health import health_router
 from app.routers.kanban import kanban_router
 from app.routers.notifications import notifications_router
@@ -71,7 +70,6 @@ proclogic.include_router(companies_router)
 proclogic.include_router(users_router)
 proclogic.include_router(analytics_router)
 proclogic.include_router(notifications_router)
-proclogic.include_router(email_router)
 proclogic.include_router(kanban_router)
 proclogic.include_router(stripe_router)
 
