@@ -18,7 +18,11 @@ from app.routers.publications import publications_router
 from app.routers.users import users_router
 from app.routers.stripe import stripe_router
 from app.util.alembic_runner import run_migration
-from app.util.pubproc import fetch_pubproc_data, update_pubproc_data, gather_notifications
+from app.util.pubproc import (
+    fetch_pubproc_data,
+    update_pubproc_data,
+    gather_notifications,
+)
 
 settings = Settings()
 
@@ -57,7 +61,11 @@ async def lifespan(app: FastAPI):
         yield
 
 
-proclogic = FastAPI(docs_url=None if not settings.debug_mode else "/docs", lifespan=lifespan, debug=settings.debug_mode)
+proclogic = FastAPI(
+    docs_url=None if not settings.debug_mode else "/docs",
+    lifespan=lifespan,
+    debug=settings.debug_mode,
+)
 
 security = HTTPBearer()
 
