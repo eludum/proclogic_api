@@ -216,7 +216,7 @@ def extract_data_from_xml(xml_content: str) -> Optional[ContractSchema]:
                     # Extract address
                     address_elem = company.find(".//cac:PostalAddress", namespaces)
                     if address_elem:
-                        org_data["address"] = Address(
+                        org_data["address"] = ContractAddressSchema(
                             street=find_text(
                                 address_elem, "cbc:StreetName", namespaces
                             ),
