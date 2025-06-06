@@ -55,3 +55,51 @@ class ContractSchema(BaseModel):
     winning_publisher: Optional[ContractOrganizationSchema] = None
     appeals_body: Optional[ContractOrganizationSchema] = None
     service_provider: Optional[ContractOrganizationSchema] = None
+
+
+class AwardSummary(BaseModel):
+    """Basic summary of award data"""
+
+    total_value: float = Field(..., description="Total value of awarded contracts")
+    total_count: int = Field(..., description="Total number of awarded contracts")
+    avg_value: float = Field(..., description="Average value per contract")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "total_value": 5250000.0,
+                "total_count": 25,
+                "avg_value": 210000.0,
+            }
+        }
+
+
+class ContractItem(BaseModel):
+    """Data for individual awarded contract"""
+
+    publication_id: str = Field(..., description="Publication workspace ID")
+    title: str = Field(..., description="Contract title")
+    award_date: Optional[datetime] = Field(None, description="Award date")
+    winner: str = Field(..., description="Winner company name")
+    suppliers: List[Dict[str, str]] = Field(
+        default_factory=list, description="Suppliers involved"
+    )
+    value: float = Field(..., description="Contract value")
+    sector: str = Field(..., description="Main sector")
+    cpv_code: str = Field(..., description="Main CPV code")
+    buyer: str = Field(..., description="Contracting authority")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "publication_id": "2024-S-001234-5678",
+                "title": "Highway maintenance services",
+                "award_date": "2024-01-15T00:00:00",
+                "winner": "Road Services Ltd",
+                "suppliers": [{"name": "Asphalt Inc.", "id": "BE0123456789"}],
+                "value": 250000.0,
+                "sector": "Maintenance services",
+                "cpv_code": "50000000",
+                "buyer": "Department of Transportation",
+            }
+        }

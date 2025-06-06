@@ -15,30 +15,27 @@ def build_search_filter(search_term: str):
 
     search_pattern = f"%{search_term.strip()}%"
 
-    # Search in publication title, organization name, winner, and buyer
+    # Import the Contract model for proper joins
+    from app.models.publication_award_models import Contract, ContractOrganization
+
+    # Search in winner name, buyer name, and service provider name
     return or_(
-        # Search in winner name
+        # Search in winner name (through contract -> winning_publisher)
         Publication.contract.has(
-            Publication.contract.winning_publisher.has(
-                func.lower(Publication.contract.winning_publisher.name).like(
-                    func.lower(search_pattern)
-                )
+            Contract.winning_publisher.has(
+                func.lower(ContractOrganization.name).like(func.lower(search_pattern))
             )
         ),
-        # Search in buyer name
+        # Search in buyer name (through contract -> contracting_authority)
         Publication.contract.has(
-            Publication.contract.contracting_authority.has(
-                func.lower(Publication.contract.contracting_authority.name).like(
-                    func.lower(search_pattern)
-                )
+            Contract.contracting_authority.has(
+                func.lower(ContractOrganization.name).like(func.lower(search_pattern))
             )
         ),
         # Search in service provider name
         Publication.contract.has(
-            Publication.contract.service_provider.has(
-                func.lower(Publication.contract.service_provider.name).like(
-                    func.lower(search_pattern)
-                )
+            Contract.service_provider.has(
+                func.lower(ContractOrganization.name).like(func.lower(search_pattern))
             )
         ),
     )
@@ -80,12 +77,12 @@ def build_winner_filter(winner: Optional[str]):
     if not winner or not winner.strip():
         return None
 
+    from app.models.publication_award_models import Contract, ContractOrganization
+
     winner_pattern = f"%{winner.strip()}%"
     return Publication.contract.has(
-        Publication.contract.winning_publisher.has(
-            func.lower(Publication.contract.winning_publisher.name).like(
-                func.lower(winner_pattern)
-            )
+        Contract.winning_publisher.has(
+            func.lower(ContractOrganization.name).like(func.lower(winner_pattern))
         )
     )
 
@@ -95,12 +92,12 @@ def build_supplier_filter(supplier: Optional[str]):
     if not supplier or not supplier.strip():
         return None
 
+    from app.models.publication_award_models import Contract, ContractOrganization
+
     supplier_pattern = f"%{supplier.strip()}%"
     return Publication.contract.has(
-        Publication.contract.service_provider.has(
-            func.lower(Publication.contract.service_provider.name).like(
-                func.lower(supplier_pattern)
-            )
+        Contract.service_provider.has(
+            func.lower(ContractOrganization.name).like(func.lower(supplier_pattern))
         )
     )
 
@@ -146,6 +143,8 @@ def get_paginated_contracts(
         Tuple[List[Publication], int]: Publications for current page and total count
     """
     try:
+        from app.models.publication_award_models import Contract, ContractOrganization
+
         # Base query: only publications with contracts (awards)
         query = session.query(Publication).filter(Publication.contract_id.isnot(None))
 
@@ -177,65 +176,51 @@ def get_paginated_contracts(
         # Get total count before pagination
         total_count = query.count()
 
-        # Apply sorting
+        # Apply sorting with proper joins
         if sort_by == "value":
+            query = query.join(
+                Contract, Publication.contract_id == Contract.contract_id
+            )
             if sort_order.lower() == "desc":
-                query = query.join(Publication.contract).order_by(
-                    Publication.contract.total_contract_amount.desc()
-                )
+                query = query.order_by(Contract.total_contract_amount.desc())
             else:
-                query = query.join(Publication.contract).order_by(
-                    Publication.contract.total_contract_amount.asc()
-                )
+                query = query.order_by(Contract.total_contract_amount.asc())
         elif sort_by == "winner":
+            query = query.join(
+                Contract, Publication.contract_id == Contract.contract_id
+            ).join(
+                ContractOrganization,
+                Contract.winning_publisher_id == ContractOrganization.id,
+            )
             if sort_order.lower() == "desc":
-                query = (
-                    query.join(Publication.contract)
-                    .join(Publication.contract.winning_publisher)
-                    .order_by(Publication.contract.winning_publisher.name.desc())
-                )
+                query = query.order_by(ContractOrganization.name.desc())
             else:
-                query = (
-                    query.join(Publication.contract)
-                    .join(Publication.contract.winning_publisher)
-                    .order_by(Publication.contract.winning_publisher.name.asc())
-                )
+                query = query.order_by(ContractOrganization.name.asc())
         elif sort_by == "buyer":
+            query = query.join(
+                Contract, Publication.contract_id == Contract.contract_id
+            ).join(
+                ContractOrganization,
+                Contract.contracting_authority_id == ContractOrganization.id,
+            )
             if sort_order.lower() == "desc":
-                query = (
-                    query.join(Publication.contract)
-                    .join(Publication.contract.contracting_authority)
-                    .order_by(Publication.contract.contracting_authority.name.desc())
-                )
+                query = query.order_by(ContractOrganization.name.desc())
             else:
-                query = (
-                    query.join(Publication.contract)
-                    .join(Publication.contract.contracting_authority)
-                    .order_by(Publication.contract.contracting_authority.name.asc())
-                )
+                query = query.order_by(ContractOrganization.name.asc())
         else:  # default to publication_date
             if sort_order.lower() == "desc":
                 query = query.order_by(Publication.publication_date.desc())
             else:
                 query = query.order_by(Publication.publication_date.asc())
 
-        # Apply pagination and eager loading
+        # Apply pagination with basic eager loading
+        # Note: Complex relationships will be loaded lazily when accessed
         publications = (
             query.options(
-                joinedload(Publication.dossier).joinedload(Publication.dossier.titles),
-                joinedload(Publication.organisation).joinedload(
-                    Publication.organisation.organisation_names
-                ),
+                joinedload(Publication.dossier),
+                joinedload(Publication.organisation),
                 joinedload(Publication.cpv_main_code),
-                joinedload(Publication.contract).joinedload(
-                    Publication.contract.winning_publisher
-                ),
-                joinedload(Publication.contract).joinedload(
-                    Publication.contract.contracting_authority
-                ),
-                joinedload(Publication.contract).joinedload(
-                    Publication.contract.service_provider
-                ),
+                joinedload(Publication.contract),
             )
             .offset((page - 1) * size)
             .limit(size)
@@ -266,6 +251,8 @@ def get_contracts_summary(
         Tuple[int, float, float]: (total_count, total_value, avg_value)
     """
     try:
+        from app.models.publication_award_models import Contract
+
         # Build the same query as the main endpoint but for aggregation
         query = session.query(Publication).filter(Publication.contract_id.isnot(None))
 
@@ -290,15 +277,13 @@ def get_contracts_summary(
         if supplier_filter is not None:
             query = query.filter(supplier_filter)
 
-        # Get aggregated results
+        # Get aggregated results with proper join
         result = (
-            query.join(Publication.contract)
+            query.join(Contract, Publication.contract_id == Contract.contract_id)
             .with_entities(
                 func.count(Publication.publication_workspace_id).label("total_count"),
-                func.sum(Publication.contract.total_contract_amount).label(
-                    "total_value"
-                ),
-                func.avg(Publication.contract.total_contract_amount).label("avg_value"),
+                func.sum(Contract.total_contract_amount).label("total_value"),
+                func.avg(Contract.total_contract_amount).label("avg_value"),
             )
             .first()
         )

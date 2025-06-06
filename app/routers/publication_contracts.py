@@ -5,7 +5,7 @@ from fastapi_pagination import Page, Params
 
 from app.config.postgres import get_session
 from app.crud.publication_contract import get_contracts_summary, get_paginated_contracts
-from app.schemas.publication_award_schemas import AwardSummary, ContractItem
+from app.schemas.publication_contract_schemas import AwardSummary, ContractItem
 from app.util.publication_utils.contract import (
     convert_publications_to_contract_items,
     format_validation_errors,
@@ -16,7 +16,7 @@ from app.util.clerk import AuthUser, get_auth_user
 contracts_router = APIRouter()
 
 
-@contracts_router.get("/analytics/contracts", response_model=Page[ContractItem])
+@contracts_router.get("/contracts", response_model=Page[ContractItem])
 async def get_contracts(
     # Pagination
     page: int = Query(1, ge=1, description="Page number"),
@@ -98,7 +98,7 @@ async def get_contracts(
         return Page.create(items=contracts, total=total_count, params=params)
 
 
-@contracts_router.get("/analytics/summary", response_model=AwardSummary)
+@contracts_router.get("/contracts/summary", response_model=AwardSummary)
 async def get_contracts_summary_endpoint(
     # Search
     search: Optional[str] = Query(

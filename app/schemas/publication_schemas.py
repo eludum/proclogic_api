@@ -4,7 +4,7 @@ from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 from app.schemas.company_schemas import CompanyPublicationMatchSchema
-from app.schemas.publication_award_schemas import ContractSchema
+from app.schemas.publication_contract_schemas import ContractSchema
 
 
 class DescriptionSchema(BaseModel):

@@ -23,7 +23,7 @@ from app.models.publication_models import (
     OrganisationName,
     Publication,
 )
-from app.schemas.publication_award_schemas import (
+from app.schemas.publication_contract_schemas import (
     ContractAddressSchema,
     ContractContactPersonSchema,
     ContractOrganizationSchema,

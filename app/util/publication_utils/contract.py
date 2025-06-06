@@ -2,7 +2,7 @@ import logging
 from typing import Dict, List
 
 from app.models.publication_models import Publication
-from app.schemas.publication_award_schemas import ContractItem
+from app.schemas.publication_contract_schemas import ContractItem
 from app.util.publication_utils.cpv_codes import get_cpv_sector_name
 from app.util.publication_utils.publication_converter import PublicationConverter
 
