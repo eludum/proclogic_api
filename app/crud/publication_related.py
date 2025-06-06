@@ -6,6 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 
+# TODO: use mcp to actually find really related stuff
 def calculate_similarity_score(
     source_pub: Publication, target_pub: Publication
 ) -> Tuple[float, str]:
