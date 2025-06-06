@@ -251,10 +251,10 @@ class Publication(Base):
     )
     dossier: Mapped["Dossier"] = relationship()
 
-    contract_id: Mapped[int] = mapped_column(
-        ForeignKey("contracts.contract_id")
+    contract_id: Mapped[str] = mapped_column(
+        ForeignKey("contracts.contract_id"), nullable=True
     )
-    contract: Mapped["Contract"] = relationship(back_populates="publications")
+    contract: Mapped["Contract"] = relationship()
 
     # Many-to-Many relationships
     cpv_additional_codes: Mapped[List["CPVCode"]] = relationship(
