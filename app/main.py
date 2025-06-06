@@ -8,7 +8,7 @@ from fastapi.security import HTTPBearer
 from fastapi_pagination import add_pagination
 
 from app.config.settings import Settings
-from app.routers.analytics import analytics_router
+from app.routers.publication_contracts import contracts_router
 from app.routers.company import companies_router
 from app.routers.conversations import conversations_router
 from app.routers.health import health_router
@@ -76,7 +76,7 @@ proclogic.include_router(publications_router)
 proclogic.include_router(conversations_router)
 proclogic.include_router(companies_router)
 proclogic.include_router(users_router)
-proclogic.include_router(analytics_router)
+proclogic.include_router(contracts_router)
 proclogic.include_router(notifications_router)
 proclogic.include_router(kanban_router)
 proclogic.include_router(stripe_router)
