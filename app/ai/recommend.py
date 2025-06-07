@@ -79,7 +79,7 @@ def parse_organization(org_data: dict) -> Optional[ContractOrganizationSchema]:
         logging.warning(f"Failed to parse organization: {e}")
         return None
 
-
+# TODO: make sure all lots are represented in the schames and not only the first one in the gunnning
 def extract_data_from_xml(xml_content: str) -> Optional[ContractSchema]:
     """
     Extract contract award information from XML and return a Contract Pydantic model.

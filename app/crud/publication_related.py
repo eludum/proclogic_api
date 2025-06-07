@@ -29,30 +29,9 @@ def get_related_publications(
         List of (publication, similarity_score, similarity_reason) tuples
     """
     # Build similarity score calculation at database level
+    # Prioritized scoring: Keywords and Organization are main factors, then CPV and Value
     similarity_score = (
-        # CPV code similarity (40 points max)
-        case(
-            (Publication.cpv_main_code_code == publication.cpv_main_code.code, 40),
-            (
-                func.substring(Publication.cpv_main_code_code, 1, 4)
-                == publication.cpv_main_code.code[:4],
-                30,
-            ),
-            (
-                func.substring(Publication.cpv_main_code_code, 1, 2)
-                == publication.cpv_main_code.code[:2],
-                25,
-            ),
-            else_=0,
-        )
-        +
-        # Same organization (20 points)
-        case((Publication.organisation_id == publication.organisation_id, 20), else_=0)
-        +
-        # Geographic overlap (15 points) - using array overlap operator
-        case((Publication.nuts_codes.op("&&")(publication.nuts_codes), 15), else_=0)
-        +
-        # Keyword similarity (15 points max) - using array overlap
+        # Keyword similarity (35 points max) - HIGHEST PRIORITY
         case(
             (
                 and_(
@@ -61,30 +40,54 @@ def get_related_publications(
                         publication.extracted_keywords or []
                     ),
                 ),
+                35,
+            ),
+            else_=0,
+        )
+        +
+        # Same organization (30 points) - HIGHEST PRIORITY
+        case((Publication.organisation_id == publication.organisation_id, 30), else_=0)
+        +
+        # CPV code similarity (25 points max) - SECOND PRIORITY
+        case(
+            (Publication.cpv_main_code_code == publication.cpv_main_code.code, 25),
+            (
+                func.substring(Publication.cpv_main_code_code, 1, 4)
+                == publication.cpv_main_code.code[:4],
+                20,
+            ),
+            (
+                func.substring(Publication.cpv_main_code_code, 1, 2)
+                == publication.cpv_main_code.code[:2],
                 15,
             ),
             else_=0,
         )
         +
-        # Value similarity (10 points max) - within 50% range
-        case(
+        # Geographic overlap (5 points) - LOWEST PRIORITY
+        case((Publication.nuts_codes.op("&&")(publication.nuts_codes), 5), else_=0)
+    )
+    
+    # Add value similarity only if the publication has a valid estimated value (15 points max) - SECOND PRIORITY
+    if publication.estimated_value is not None and publication.estimated_value > 0:
+        value_similarity = case(
             (
                 and_(
                     Publication.estimated_value.isnot(None),
                     Publication.estimated_value > 0,
-                    publication.estimated_value is not None,
-                    publication.estimated_value > 0,
                     func.least(Publication.estimated_value, publication.estimated_value)
                     / func.greatest(
                         Publication.estimated_value, publication.estimated_value
                     )
                     > 0.5,
                 ),
-                10,
+                15,
             ),
             else_=0,
         )
-    ).label("similarity_score")
+        similarity_score = similarity_score + value_similarity
+    
+    similarity_score = similarity_score.label("similarity_score")
 
     # Base query with calculated similarity
     base_query = (
@@ -132,17 +135,17 @@ def get_related_publications(
 
         # Check which factors contributed to the score
         if pub.cpv_main_code.code == publication.cpv_main_code.code:
-            reasons.append("Identical CPV code")
+            reasons.append("Identieke CPV-code")
         elif pub.cpv_main_code.code[:4] == publication.cpv_main_code.code[:4]:
-            reasons.append("Same CPV division")
+            reasons.append("Zelfde CPV-divisie")
         elif pub.cpv_main_code.code[:2] == publication.cpv_main_code.code[:2]:
-            reasons.append("Same sector")
+            reasons.append("Zelfde sector")
 
         if pub.organisation_id == publication.organisation_id:
-            reasons.append("Same contracting authority")
+            reasons.append("Zelfde aanbestedende dienst")
 
         if set(pub.nuts_codes or []) & set(publication.nuts_codes or []):
-            reasons.append("Same region")
+            reasons.append("Zelfde regio")
 
         if (
             pub.extracted_keywords
@@ -150,20 +153,21 @@ def get_related_publications(
             and set(pub.extracted_keywords) & set(publication.extracted_keywords)
         ):
             common = set(pub.extracted_keywords) & set(publication.extracted_keywords)
-            reasons.append(f"Common keywords: {', '.join(list(common)[:3])}")
+            reasons.append(f"Gemeenschappelijke trefwoorden: {', '.join(list(common)[:3])}")
 
+        # Fixed the estimated value comparison to handle None values properly
         if (
-            pub.estimated_value
-            and publication.estimated_value
+            pub.estimated_value is not None
+            and publication.estimated_value is not None
             and pub.estimated_value > 0
             and publication.estimated_value > 0
             and min(pub.estimated_value, publication.estimated_value)
             / max(pub.estimated_value, publication.estimated_value)
             > 0.5
         ):
-            reasons.append("Similar estimated value")
+            reasons.append("Vergelijkbare geschatte waarde")
 
-        reason = "; ".join(reasons) if reasons else "Limited similarity"
+        reason = "; ".join(reasons) if reasons else "Beperkte overeenkomst"
         final_results.append((pub, float(score), reason))
 
     return final_results
