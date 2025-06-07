@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.publication_models import Publication
 
 
+# TODO: optimize with AI
 def get_related_publications(
     publication: Publication,
     session: Session,

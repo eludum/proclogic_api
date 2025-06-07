@@ -44,10 +44,10 @@ async def fetch_pubproc_data() -> None:
                 logging.error("Error in fetching data: %s", e)
 
             # Wait until next run
-            await asyncio.sleep(600)  # 10 minutes in seconds
+            await asyncio.sleep(3600)  # 1 hour in seconds
 
         except asyncio.CancelledError:
-            logging.info("Publication data fetch service    is shutting down")
+            logging.info("Publication data fetch service is shutting down")
             raise  # Re-raise to allow proper cleanup
 
 
@@ -59,10 +59,10 @@ async def update_pubproc_data() -> None:
         while True:
             try:
                 # Your update logic here
-                await asyncio.sleep(3600)  # 1 hour in seconds
+                pass
             except Exception as e:
                 logging.error("Error in updating pubproc data: %s", e)
-                await asyncio.sleep(300)  # 5 minutes before retry on error
+            await asyncio.sleep(3600)  # 1 hour in seconds
     except asyncio.CancelledError:
         logging.info("Publication data update service is shutting down")
         raise
@@ -75,10 +75,10 @@ async def gather_notifications() -> None:
         while True:
             try:
                 # Your notification gathering logic here
-                await asyncio.sleep(3600)  # 1 hour in seconds
+                pass
             except Exception as e:
                 logging.error("Error in gathering notifications: %s", e)
-                await asyncio.sleep(300)  # 5 minutes before retry on error
+            await asyncio.sleep(3600)  # 1 hour in seconds
     except asyncio.CancelledError:
         logging.info("Notification gathering service is shutting down")
         raise
