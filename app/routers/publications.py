@@ -406,7 +406,6 @@ async def get_related_content(
         related_publications_data = get_related_active_publications(
             publication=publication,
             session=session,
-            company=company,
             limit=publications_limit
         )
         
