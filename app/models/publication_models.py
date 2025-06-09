@@ -298,4 +298,4 @@ Index("idx_match_recommended", CompanyPublicationMatch.is_recommended)
 
 from app.models.conversation_models import Conversation
 from app.models.kanban_models import PublicationStatus
-from app.models.publication_award_models import Contract
+from app.models.publication_contract_models import Contract

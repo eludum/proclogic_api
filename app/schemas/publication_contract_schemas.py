@@ -1,8 +1,9 @@
+import re
 from pydantic import BaseModel, EmailStr, HttpUrl, Field, field_validator
 from typing import Dict, Optional, List
 from datetime import date, datetime
 
-
+# TODO: remove all nulls and make all fields required, after you have fixed the db
 class ContractAddressSchema(BaseModel):
     street: Optional[str] = None
     city: Optional[str] = None
@@ -29,6 +30,25 @@ class ContractOrganizationSchema(BaseModel):
     company_size: Optional[str] = None
     subcontracting: Optional[str] = None
 
+    @field_validator('business_id')
+    @classmethod
+    def clean_vat_number(cls, v):
+        """
+        Clean and format VAT number by removing spaces, dots, dashes and other separators.
+        Examples:
+        - "BE XX.XX" -> "BEXXXX"
+        - "BE 1234.567.890" -> "BE1234567890"
+        - "FR 12 345 678 901" -> "FR12345678901"
+        - "DE123-456-789" -> "DE123456789"
+        """
+        if not v:
+            return v
+        
+        # Remove all non-alphanumeric characters (spaces, dots, dashes, etc.)
+        cleaned = re.sub(r'[^A-Za-z0-9]', '', str(v))
+        
+        # Convert to uppercase for consistency
+        return cleaned.upper() if cleaned else None
 
 class ContractSchema(BaseModel):
     notice_id: str

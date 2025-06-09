@@ -1,6 +1,7 @@
 from datetime import datetime
 from sqlalchemy import (
     DateTime,
+    Integer,
     String,
     ForeignKey,
 )
@@ -14,7 +15,7 @@ from app.models.base import Base
 class ContractAddress(Base):
     __tablename__ = "contract_addresses"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True)
     street: Mapped[str] = mapped_column(String(255))
     city: Mapped[str] = mapped_column(String(100))
     postal_code: Mapped[str] = mapped_column(String(20))
@@ -30,9 +31,8 @@ class ContractAddress(Base):
 class ContractOrganization(Base):
     __tablename__ = "contract_organizations"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    business_id: Mapped[str] = mapped_column(String(50), unique=True)
+    business_id: Mapped[str] = mapped_column(String(50), unique=True, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
     website: Mapped[str] = mapped_column(String(255))
     phone: Mapped[str] = mapped_column(String(50))
     email: Mapped[str] = mapped_column(String(255))
@@ -67,7 +67,7 @@ class ContractOrganization(Base):
 class ContractContactPerson(Base):
     __tablename__ = "contract_contact_persons"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True)
     name: Mapped[str] = mapped_column(String(255))
     job_title: Mapped[str] = mapped_column(String(255))
     phone: Mapped[str] = mapped_column(String(50))
@@ -104,10 +104,10 @@ class Contract(Base):
     framework_agreement: Mapped[str] = mapped_column(String(50))
 
     # Foreign Keys
-    contracting_authority_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
-    winning_publisher_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
-    appeals_body_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
-    service_provider_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
+    contracting_authority_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.business_id"))
+    winning_publisher_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.business_id"))
+    appeals_body_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.business_id"))
+    service_provider_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.business_id"))
 
     # Relationships
     contracting_authority: Mapped["ContractOrganization"] = relationship(

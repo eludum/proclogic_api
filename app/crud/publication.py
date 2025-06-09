@@ -6,7 +6,7 @@ from sqlalchemy import and_, case, desc, func, literal_column, or_, select
 from sqlalchemy.orm import Session, aliased, joinedload
 from sqlalchemy.sql import exists
 
-from app.models.publication_award_models import (
+from app.models.publication_contract_models import (
     Contract,
     ContractAddress,
     ContractContactPerson,
@@ -247,7 +247,11 @@ def create_contract_contact_person(
 def create_contract_organization(
     org_schema: ContractOrganizationSchema, session: Session
 ) -> ContractOrganization:
-    address = create_contract_address(org_schema.address, session=session)
+    address = None
+    if org_schema.address is not None:
+        print(org_schema.address)
+        print("hmmm")
+        address = create_contract_address(org_schema.address, session=session)
 
     contact_persons = []
     for person_schema in org_schema.contact_persons:
@@ -275,7 +279,6 @@ def create_contract_organization(
 
 def create_contract(contract_schema: ContractSchema, session: Session) -> Contract:
     contract = session.get(Contract, contract_schema.contract_id)
-    logging.info(contract)
     if not contract:
         contract = Contract(
             notice_id=contract_schema.notice_id,
@@ -426,7 +429,6 @@ def get_or_create_publication(
     publication_schema: PublicationSchema, session: Session
 ) -> Publication:
     publication = session.get(Publication, publication_schema.publication_workspace_id)
-
     if publication:
         update_publication(
             publication=publication,
@@ -457,6 +459,7 @@ def get_or_create_publication(
         for lot in publication_schema.lots:
             lots.append(create_lot(lot_schema=lot, session=session))
 
+        contract = None
         if publication_schema.contract:
             contract = create_contract(publication_schema.contract, session)
 

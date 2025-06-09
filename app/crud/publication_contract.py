@@ -1,10 +1,10 @@
 import logging
-from datetime import date
 from typing import List, Optional, Tuple
 
 from sqlalchemy import and_, extract, func, or_
 from sqlalchemy.orm import Session, joinedload
 
+from app.models.publication_contract_models import Contract, ContractOrganization
 from app.models.publication_models import Publication
 
 
@@ -14,9 +14,6 @@ def build_search_filter(search_term: str):
         return None
 
     search_pattern = f"%{search_term.strip()}%"
-
-    # Import the Contract model for proper joins
-    from app.models.publication_award_models import Contract, ContractOrganization
 
     # Search in winner name, buyer name, and service provider name
     return or_(
@@ -77,8 +74,6 @@ def build_winner_filter(winner: Optional[str]):
     if not winner or not winner.strip():
         return None
 
-    from app.models.publication_award_models import Contract, ContractOrganization
-
     winner_pattern = f"%{winner.strip()}%"
     return Publication.contract.has(
         Contract.winning_publisher.has(
@@ -91,8 +86,6 @@ def build_supplier_filter(supplier: Optional[str]):
     """Build supplier filter"""
     if not supplier or not supplier.strip():
         return None
-
-    from app.models.publication_award_models import Contract, ContractOrganization
 
     supplier_pattern = f"%{supplier.strip()}%"
     return Publication.contract.has(
@@ -143,7 +136,6 @@ def get_paginated_contracts(
         Tuple[List[Publication], int]: Publications for current page and total count
     """
     try:
-        from app.models.publication_award_models import Contract, ContractOrganization
 
         # Base query: only publications with contracts (awards)
         query = session.query(Publication).filter(Publication.contract_id.isnot(None))
@@ -190,7 +182,7 @@ def get_paginated_contracts(
                 Contract, Publication.contract_id == Contract.contract_id
             ).join(
                 ContractOrganization,
-                Contract.winning_publisher_id == ContractOrganization.id,
+                Contract.winning_publisher_id == ContractOrganization.business_id,
             )
             if sort_order.lower() == "desc":
                 query = query.order_by(ContractOrganization.name.desc())
@@ -201,7 +193,7 @@ def get_paginated_contracts(
                 Contract, Publication.contract_id == Contract.contract_id
             ).join(
                 ContractOrganization,
-                Contract.contracting_authority_id == ContractOrganization.id,
+                Contract.contracting_authority_id == ContractOrganization.business_id,
             )
             if sort_order.lower() == "desc":
                 query = query.order_by(ContractOrganization.name.desc())
@@ -251,8 +243,6 @@ def get_contracts_summary(
         Tuple[int, float, float]: (total_count, total_value, avg_value)
     """
     try:
-        from app.models.publication_award_models import Contract
-
         # Build the same query as the main endpoint but for aggregation
         query = session.query(Publication).filter(Publication.contract_id.isnot(None))
 
