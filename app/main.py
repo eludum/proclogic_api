@@ -26,7 +26,7 @@ settings = Settings()
 
 logging.basicConfig(
     level=(
-        logging.DEBUG if settings.debug_mode else logging.ERROR
+        logging.INFO if settings.debug_mode else logging.ERROR
     ),  # change logging info to debug if you actually need to go deep
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler(stdout)],

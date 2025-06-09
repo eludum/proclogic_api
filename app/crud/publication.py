@@ -457,7 +457,8 @@ def get_or_create_publication(
         for lot in publication_schema.lots:
             lots.append(create_lot(lot_schema=lot, session=session))
 
-        contract = create_contract(publication_schema.contract, session)
+        if publication_schema.contract:
+            contract = create_contract(publication_schema.contract, session)
 
         # Create new publication with updated fields
         publication = Publication(
