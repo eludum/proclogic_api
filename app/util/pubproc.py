@@ -13,7 +13,7 @@ import app.crud.company as crud_company
 import app.crud.publication as crud_publication
 from app.ai.recommend import (
     get_recommendation,
-    summarize_publication_award,
+    summarize_publication_contract,
     summarize_publication_with_files,
     summarize_publication_without_files,
 )
@@ -214,7 +214,7 @@ async def process_award_publication(
         publication_workspace_id=pub.publication_workspace_id,
     )
 
-    pub.contract = summarize_publication_award(xml=xml_content)
+    pub.contract = summarize_publication_contract(xml=xml_content)
 
     crud_publication.get_or_create_publication(publication_schema=pub, session=session)
 

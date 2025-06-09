@@ -335,7 +335,7 @@ def extract_data_from_xml(xml_content: str) -> Optional[ContractSchema]:
         return None
 
 
-def summarize_publication_award(xml: str, client: OpenAI = None) -> Optional[ContractSchema]:
+def summarize_publication_contract(xml: str, client: OpenAI = None) -> Optional[ContractSchema]:
     """
     Extract award information from publication XML.
     First tries to parse with ElementTree and Pydantic models, falls back to AI if needed.
