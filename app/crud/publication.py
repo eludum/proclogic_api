@@ -275,6 +275,7 @@ def create_contract_organization(
 
 def create_contract(contract_schema: ContractSchema, session: Session) -> Contract:
     contract = session.get(Contract, contract_schema.contract_id)
+    logging.info(contract)
     if not contract:
         contract = Contract(
             notice_id=contract_schema.notice_id,

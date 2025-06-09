@@ -79,263 +79,260 @@ def parse_organization(org_data: dict) -> Optional[ContractOrganizationSchema]:
         logging.warning(f"Failed to parse organization: {e}")
         return None
 
+
 # TODO: make sure all lots are represented in the schames and not only the first one in the gunnning
 def extract_data_from_xml(xml_content: str) -> Optional[ContractSchema]:
     """
     Extract contract award information from XML and return a Contract Pydantic model.
     Returns None if parsing fails.
     """
-    try:
-        # Parse XML content
-        root = ET.fromstring(xml_content)
 
-        # Define namespaces
-        namespaces = {
-            "": "urn:oasis:names:specification:ubl:schema:xsd:ContractAwardNotice-2",
-            "cac": "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2",
-            "cbc": "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2",
-            "efac": "http://data.europa.eu/p27/eforms-ubl-extension-aggregate-components/1",
-            "efbc": "http://data.europa.eu/p27/eforms-ubl-extension-basic-components/1",
-            "efext": "http://data.europa.eu/p27/eforms-ubl-extensions/1",
-            "ext": "urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2",
-        }
-
-        # Helper function to find text safely
-
-        # Extract basic contract information
-        notice_id = find_text(root, "cbc:ID", namespaces)
-        contract_folder_id = find_text(root, "cbc:ContractFolderID", namespaces)
-        internal_id = find_text(root, ".//cac:ProcurementProject/cbc:ID", namespaces)
-
-        # Extract issue date
-        issue_date_str = find_text(root, "cbc:IssueDate", namespaces)
-        issue_date = None
-        if issue_date_str:
-            try:
-                # Remove timezone info and parse
-                date_part = issue_date_str.split("+")[0]
-                issue_date = datetime.strptime(date_part, "%Y-%m-%d").date()
-            except:
-                pass
-
-        # Extract notice type
-        notice_type = find_text(root, "cbc:NoticeTypeCode", namespaces)
-
-        # Extract financial information from NoticeResult
-        notice_result = root.find(".//efac:NoticeResult", namespaces)
-        total_amount = None
-        currency = "EUR"
-        lowest_amount = None
-        highest_amount = None
-
-        if notice_result:
-            total_amount_elem = notice_result.find("cbc:TotalAmount", namespaces)
-            if total_amount_elem is not None:
-                total_amount = float(total_amount_elem.text)
-                currency = total_amount_elem.get("currencyID", "EUR")
-
-            # Get amounts from LotResult
-            lot_result = notice_result.find(".//efac:LotResult", namespaces)
-            if lot_result:
-                lower_elem = lot_result.find("cbc:LowerTenderAmount", namespaces)
-                higher_elem = lot_result.find("cbc:HigherTenderAmount", namespaces)
-                if lower_elem is not None:
-                    lowest_amount = float(lower_elem.text)
-                if higher_elem is not None:
-                    highest_amount = float(higher_elem.text)
-
-        # Extract publication statistics
-        number_publications = None
-        number_participation = None
-
-        if notice_result:
-            stats = notice_result.findall(
-                ".//efac:ReceivedSubmissionsStatistics", namespaces
-            )
-            for stat in stats:
-                code = find_text(stat, "efbc:StatisticsCode", namespaces)
-                value = find_text(stat, "efbc:StatisticsNumeric", namespaces)
-                if code == "tenders" and value:
-                    number_publications = int(value)
-                elif code == "part-req" and value:
-                    number_participation = int(value)
-
-        # Extract process information
-        auction_elem = root.find(
-            ".//cac:AuctionTerms/cbc:AuctionConstraintIndicator", namespaces
+    # Parse XML content
+    root = ET.fromstring(xml_content)
+    root_tag = root.tag
+    if "PriorInformationNotice" in root_tag:
+        # TODO: capture different types of notices
+        raise ValueError(
+            "This is a PriorInformationNotice (planning notice), not an award notice"
         )
-        electronic_auction = False
-        if auction_elem is not None and auction_elem.text.lower() == "true":
-            electronic_auction = True
 
-        # Extract DPS and Framework info
-        contracting_systems = root.findall(".//cac:ContractingSystem", namespaces)
-        dps = "none"
-        framework = "none"
-        for system in contracting_systems:
-            type_code = find_text(system, "cbc:ContractingSystemTypeCode", namespaces)
-            if type_code:
-                if "dps" in type_code:
-                    dps = type_code
-                elif "framework" in type_code:
-                    framework = type_code
+    # Define namespaces
+    namespaces = {
+        "": "urn:oasis:names:specification:ubl:schema:xsd:ContractAwardNotice-2",
+        "cac": "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2",
+        "cbc": "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2",
+        "efac": "http://data.europa.eu/p27/eforms-ubl-extension-aggregate-components/1",
+        "efbc": "http://data.europa.eu/p27/eforms-ubl-extension-basic-components/1",
+        "efext": "http://data.europa.eu/p27/eforms-ubl-extensions/1",
+        "ext": "urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2",
+    }
 
-        # Extract organizations
-        organizations_dict = {}
-        orgs_section = root.find(".//efac:Organizations", namespaces)
+    # Helper function to find text safely
 
-        if orgs_section:
-            for org_elem in orgs_section.findall(".//efac:Organization", namespaces):
-                company = org_elem.find("efac:Company", namespaces)
-                if company:
-                    org_id = find_text(
-                        company, ".//cac:PartyIdentification/cbc:ID", namespaces
+    # Extract basic contract information
+    notice_id = find_text(root, "cbc:ID", namespaces)
+    contract_folder_id = find_text(root, "cbc:ContractFolderID", namespaces)
+    internal_id = find_text(root, ".//cac:ProcurementProject/cbc:ID", namespaces)
+
+    # Extract issue date
+    issue_date_str = find_text(root, "cbc:IssueDate", namespaces)
+    issue_date = None
+    if issue_date_str:
+        try:
+            # Remove timezone info and parse
+            date_part = issue_date_str.split("+")[0]
+            issue_date = datetime.strptime(date_part, "%Y-%m-%d").date()
+        except:
+            pass
+
+    # Extract notice type
+    notice_type = find_text(root, "cbc:NoticeTypeCode", namespaces)
+
+    # Extract financial information from NoticeResult
+    notice_result = root.find(".//efac:NoticeResult", namespaces)
+    total_amount = None
+    currency = "EUR"
+    lowest_amount = None
+    highest_amount = None
+
+    if notice_result:
+        total_amount_elem = notice_result.find("cbc:TotalAmount", namespaces)
+        if total_amount_elem is not None:
+            total_amount = float(total_amount_elem.text)
+            currency = total_amount_elem.get("currencyID", "EUR")
+
+        # Get amounts from LotResult
+        lot_result = notice_result.find(".//efac:LotResult", namespaces)
+        if lot_result:
+            lower_elem = lot_result.find("cbc:LowerTenderAmount", namespaces)
+            higher_elem = lot_result.find("cbc:HigherTenderAmount", namespaces)
+            if lower_elem is not None:
+                lowest_amount = float(lower_elem.text)
+            if higher_elem is not None:
+                highest_amount = float(higher_elem.text)
+
+    # Extract publication statistics
+    number_publications = None
+    number_participation = None
+
+    if notice_result:
+        stats = notice_result.findall(
+            ".//efac:ReceivedSubmissionsStatistics", namespaces
+        )
+        for stat in stats:
+            code = find_text(stat, "efbc:StatisticsCode", namespaces)
+            value = find_text(stat, "efbc:StatisticsNumeric", namespaces)
+            if code == "tenders" and value:
+                number_publications = int(value)
+            elif code == "part-req" and value:
+                number_participation = int(value)
+
+    # Extract process information
+    auction_elem = root.find(
+        ".//cac:AuctionTerms/cbc:AuctionConstraintIndicator", namespaces
+    )
+    electronic_auction = False
+    if auction_elem is not None and auction_elem.text.lower() == "true":
+        electronic_auction = True
+
+    # Extract DPS and Framework info
+    contracting_systems = root.findall(".//cac:ContractingSystem", namespaces)
+    dps = "none"
+    framework = "none"
+    for system in contracting_systems:
+        type_code = find_text(system, "cbc:ContractingSystemTypeCode", namespaces)
+        if type_code:
+            if "dps" in type_code:
+                dps = type_code
+            elif "framework" in type_code:
+                framework = type_code
+
+    # Extract organizations
+    organizations_dict = {}
+    orgs_section = root.find(".//efac:Organizations", namespaces)
+
+    if orgs_section:
+        for org_elem in orgs_section.findall(".//efac:Organization", namespaces):
+            company = org_elem.find("efac:Company", namespaces)
+            if company:
+                org_id = find_text(
+                    company, ".//cac:PartyIdentification/cbc:ID", namespaces
+                )
+
+                # Extract organization details
+                org_data = {
+                    "name": find_text(company, ".//cac:PartyName/cbc:Name", namespaces)
+                    or "Unknown",
+                    "business_id": find_text(
+                        company, ".//cac:PartyLegalEntity/cbc:CompanyID", namespaces
+                    ),
+                    "website": find_text(company, "cbc:WebsiteURI", namespaces),
+                    "phone": find_text(
+                        company, ".//cac:Contact/cbc:Telephone", namespaces
+                    ),
+                    "email": find_text(
+                        company, ".//cac:Contact/cbc:ElectronicMail", namespaces
+                    ),
+                    "company_size": find_text(
+                        company, "efbc:CompanySizeCode", namespaces
+                    ),
+                }
+
+                # Extract address
+                address_elem = company.find(".//cac:PostalAddress", namespaces)
+                if address_elem:
+                    org_data["address"] = ContractAddressSchema(
+                        street=find_text(address_elem, "cbc:StreetName", namespaces),
+                        city=find_text(address_elem, "cbc:CityName", namespaces),
+                        postal_code=find_text(
+                            address_elem, "cbc:PostalZone", namespaces
+                        ),
+                        country=find_text(
+                            address_elem,
+                            ".//cac:Country/cbc:IdentificationCode",
+                            namespaces,
+                        ),
+                        nuts_code=find_text(
+                            address_elem, "cbc:CountrySubentityCode", namespaces
+                        ),
                     )
 
-                    # Extract organization details
-                    org_data = {
-                        "name": find_text(
-                            company, ".//cac:PartyName/cbc:Name", namespaces
-                        )
-                        or "Unknown",
-                        "business_id": find_text(
-                            company, ".//cac:PartyLegalEntity/cbc:CompanyID", namespaces
-                        ),
-                        "website": find_text(company, "cbc:WebsiteURI", namespaces),
-                        "phone": find_text(
-                            company, ".//cac:Contact/cbc:Telephone", namespaces
-                        ),
-                        "email": find_text(
-                            company, ".//cac:Contact/cbc:ElectronicMail", namespaces
-                        ),
-                        "company_size": find_text(
-                            company, "efbc:CompanySizeCode", namespaces
-                        ),
-                    }
-
-                    # Extract address
-                    address_elem = company.find(".//cac:PostalAddress", namespaces)
-                    if address_elem:
-                        org_data["address"] = ContractAddressSchema(
-                            street=find_text(
-                                address_elem, "cbc:StreetName", namespaces
-                            ),
-                            city=find_text(address_elem, "cbc:CityName", namespaces),
-                            postal_code=find_text(
-                                address_elem, "cbc:PostalZone", namespaces
-                            ),
-                            country=find_text(
-                                address_elem,
-                                ".//cac:Country/cbc:IdentificationCode",
-                                namespaces,
-                            ),
-                            nuts_code=find_text(
-                                address_elem, "cbc:CountrySubentityCode", namespaces
-                            ),
-                        )
-
-                    # Extract contact person
-                    contact_elem = company.find(".//cac:Contact", namespaces)
-                    if contact_elem and find_text(contact_elem, "cbc:Name", namespaces):
-                        contact = ContractContactPersonSchema(
-                            name=find_text(contact_elem, "cbc:Name", namespaces),
-                            job_title=find_text(
-                                contact_elem, "cbc:JobTitle", namespaces
-                            ),
-                            phone=find_text(contact_elem, "cbc:Telephone", namespaces),
-                            email=find_text(
-                                contact_elem, "cbc:ElectronicMail", namespaces
-                            ),
-                        )
-                        org_data["contact_persons"] = [contact]
-
-                    organizations_dict[org_id] = ContractOrganizationSchema(**org_data)
-
-        # Identify organization roles
-        contracting_authority = None
-        winning_publisher = None
-        appeals_body = None
-        service_provider = None
-
-        # Get contracting authority
-        ca_id = find_text(
-            root,
-            ".//cac:ContractingParty/cac:Party/cac:PartyIdentification/cbc:ID",
-            namespaces,
-        )
-        if ca_id and ca_id in organizations_dict:
-            contracting_authority = organizations_dict[ca_id]
-
-        # Get service provider
-        sp_id = find_text(
-            root,
-            ".//cac:ServiceProviderParty/cac:Party/cac:PartyIdentification/cbc:ID",
-            namespaces,
-        )
-        if sp_id and sp_id in organizations_dict:
-            service_provider = organizations_dict[sp_id]
-
-        # Get appeals body
-        appeals_id = find_text(
-            root,
-            ".//cac:AppealReceiverParty/cac:PartyIdentification/cbc:ID",
-            namespaces,
-        )
-        if appeals_id and appeals_id in organizations_dict:
-            appeals_body = organizations_dict[appeals_id]
-
-        # Get winning publisher from TenderingParty and add subcontracting info
-        if notice_result:
-            winner_id = find_text(
-                notice_result, ".//efac:TenderingParty/efac:Tenderer/cbc:ID", namespaces
-            )
-            if winner_id and winner_id in organizations_dict:
-                winning_publisher = organizations_dict[winner_id]
-
-                # Extract publication details and add to winning publisher
-                lot_tender = notice_result.find(".//efac:LotTender", namespaces)
-                if lot_tender:
-                    subcontracting = find_text(
-                        lot_tender,
-                        ".//efac:SubcontractingTerm/efbc:TermCode",
-                        namespaces,
+                # Extract contact person
+                contact_elem = company.find(".//cac:Contact", namespaces)
+                if contact_elem and find_text(contact_elem, "cbc:Name", namespaces):
+                    contact = ContractContactPersonSchema(
+                        name=find_text(contact_elem, "cbc:Name", namespaces),
+                        job_title=find_text(contact_elem, "cbc:JobTitle", namespaces),
+                        phone=find_text(contact_elem, "cbc:Telephone", namespaces),
+                        email=find_text(contact_elem, "cbc:ElectronicMail", namespaces),
                     )
+                    org_data["contact_persons"] = [contact]
 
-                    # Update the winning publisher with subcontracting info
-                    winning_publisher.subcontracting = (
-                        "Not applicable" if subcontracting == "no" else subcontracting
-                    )
+                organizations_dict[org_id] = ContractOrganizationSchema(**org_data)
 
-        # Create the Contract model
-        contract = ContractSchema(
-            notice_id=notice_id,
-            contract_id=contract_folder_id,
-            internal_id=internal_id,
-            issue_date=issue_date,
-            notice_type=notice_type,
-            total_contract_amount=total_amount,
-            currency=currency,
-            lowest_publication_amount=lowest_amount,
-            highest_publication_amount=highest_amount,
-            number_of_publications_received=number_publications,
-            number_of_participation_requests=number_participation,
-            electronic_auction_used=electronic_auction,
-            dynamic_purchasing_system=dps,
-            framework_agreement=framework,
-            contracting_authority=contracting_authority,
-            winning_publisher=winning_publisher,
-            appeals_body=appeals_body,
-            service_provider=service_provider,
+    # Identify organization roles
+    contracting_authority = None
+    winning_publisher = None
+    appeals_body = None
+    service_provider = None
+
+    # Get contracting authority
+    ca_id = find_text(
+        root,
+        ".//cac:ContractingParty/cac:Party/cac:PartyIdentification/cbc:ID",
+        namespaces,
+    )
+    if ca_id and ca_id in organizations_dict:
+        contracting_authority = organizations_dict[ca_id]
+
+    # Get service provider
+    sp_id = find_text(
+        root,
+        ".//cac:ServiceProviderParty/cac:Party/cac:PartyIdentification/cbc:ID",
+        namespaces,
+    )
+    if sp_id and sp_id in organizations_dict:
+        service_provider = organizations_dict[sp_id]
+
+    # Get appeals body
+    appeals_id = find_text(
+        root,
+        ".//cac:AppealReceiverParty/cac:PartyIdentification/cbc:ID",
+        namespaces,
+    )
+    if appeals_id and appeals_id in organizations_dict:
+        appeals_body = organizations_dict[appeals_id]
+
+    # Get winning publisher from TenderingParty and add subcontracting info
+    if notice_result:
+        winner_id = find_text(
+            notice_result, ".//efac:TenderingParty/efac:Tenderer/cbc:ID", namespaces
         )
+        if winner_id and winner_id in organizations_dict:
+            winning_publisher = organizations_dict[winner_id]
 
-        return contract
+            # Extract publication details and add to winning publisher
+            lot_tender = notice_result.find(".//efac:LotTender", namespaces)
+            if lot_tender:
+                subcontracting = find_text(
+                    lot_tender,
+                    ".//efac:SubcontractingTerm/efbc:TermCode",
+                    namespaces,
+                )
 
-    except Exception as e:
-        logging.error(f"Failed to parse XML and create Contract schema: {e}")
-        return None
+                # Update the winning publisher with subcontracting info
+                winning_publisher.subcontracting = (
+                    "Not applicable" if subcontracting == "no" else subcontracting
+                )
+
+    # Create the Contract model
+    contract = ContractSchema(
+        notice_id=notice_id,
+        contract_id=contract_folder_id,
+        internal_id=internal_id,
+        issue_date=issue_date,
+        notice_type=notice_type,
+        total_contract_amount=total_amount,
+        currency=currency,
+        lowest_publication_amount=lowest_amount,
+        highest_publication_amount=highest_amount,
+        number_of_publications_received=number_publications,
+        number_of_participation_requests=number_participation,
+        electronic_auction_used=electronic_auction,
+        dynamic_purchasing_system=dps,
+        framework_agreement=framework,
+        contracting_authority=contracting_authority,
+        winning_publisher=winning_publisher,
+        appeals_body=appeals_body,
+        service_provider=service_provider,
+    )
+
+    return contract
 
 
-def summarize_publication_contract(xml: str, client: OpenAI = None) -> Optional[ContractSchema]:
+def summarize_publication_contract(
+    xml: str, client: OpenAI = None
+) -> Optional[ContractSchema]:
     """
     Extract award information from publication XML.
     First tries to parse with ElementTree and Pydantic models, falls back to AI if needed.
@@ -351,11 +348,12 @@ def summarize_publication_contract(xml: str, client: OpenAI = None) -> Optional[
             logging.info("Successfully extracted award data using Pydantic XML parser")
             return contract
 
+    except ValueError as e:
+        logging.warning(f"Wrong notice type: {e}")
+        return None
     except Exception as e:
         logging.warning(f"Pydantic parsing failed: {e}, falling back to AI")
 
-    # Fall back to using AI if Pydantic parsing was unsuccessful
-    logging.info("Falling back to AI for award data extraction")
     client = client or get_openai_client()
 
     completion = client.chat.completions.create(
@@ -489,8 +487,9 @@ def summarize_publication_contract(xml: str, client: OpenAI = None) -> Optional[
         return contract
 
     except (json.JSONDecodeError, ValidationError, KeyError) as e:
-        # TODO: fix so it returns at least somethign
+        # TODO: catch the error and send mail about error
         logging.error(f"Error extracting award data via AI: {e}")
+        return None
 
 
 def get_recommendation(

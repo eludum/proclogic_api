@@ -214,9 +214,13 @@ async def process_award_publication(
         publication_workspace_id=pub.publication_workspace_id,
     )
 
-    pub.contract = summarize_publication_contract(xml=xml_content)
+    contract = summarize_publication_contract(xml=xml_content)
+    if contract:
+        pub.contract = contract
+        crud_publication.get_or_create_publication(publication_schema=pub, session=session)
+    else:
+        logging.info("No contract found for publication %s", pub.publication_workspace_id)
 
-    crud_publication.get_or_create_publication(publication_schema=pub, session=session)
 
 
 async def enrich_publication_with_ai(

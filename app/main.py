@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from sys import stdout
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,28 +9,27 @@ from fastapi.security import HTTPBearer
 from fastapi_pagination import add_pagination
 
 from app.config.settings import Settings
-from app.routers.publication_contracts import contracts_router
 from app.routers.company import companies_router
 from app.routers.conversations import conversations_router
 from app.routers.health import health_router
 from app.routers.kanban import kanban_router
 from app.routers.notifications import notifications_router
+from app.routers.publication_contracts import contracts_router
 from app.routers.publications import publications_router
-from app.routers.users import users_router
 from app.routers.stripe import stripe_router
+from app.routers.users import users_router
 from app.util.alembic_runner import run_migration
-from app.util.pubproc import (
-    fetch_pubproc_data,
-    update_pubproc_data,
-    gather_notifications,
-)
+from app.util.pubproc import (fetch_pubproc_data, gather_notifications,
+                              update_pubproc_data)
 
 settings = Settings()
 
 logging.basicConfig(
-    level=logging.INFO if settings.debug_mode else logging.ERROR,
+    level=(
+        logging.DEBUG if settings.debug_mode else logging.ERROR
+    ),  # change logging info to debug if you actually need to go deep
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
+    handlers=[logging.StreamHandler(stdout)],
 )
 
 

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, HttpUrl, Field
+from pydantic import BaseModel, EmailStr, HttpUrl, Field, field_validator
 from typing import Dict, Optional, List
 from datetime import date, datetime
 
@@ -21,7 +21,7 @@ class ContractContactPersonSchema(BaseModel):
 class ContractOrganizationSchema(BaseModel):
     name: str
     business_id: Optional[str] = None
-    website: Optional[HttpUrl] = None
+    website: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[EmailStr] = None
     address: Optional[ContractAddressSchema] = None
