@@ -182,7 +182,7 @@ def get_paginated_contracts(
                 Contract, Publication.contract_id == Contract.contract_id
             ).join(
                 ContractOrganization,
-                Contract.winning_publisher_id == ContractOrganization.business_id,
+                Contract.winning_publisher_id == ContractOrganization.id,
             )
             if sort_order.lower() == "desc":
                 query = query.order_by(ContractOrganization.name.desc())
@@ -193,7 +193,7 @@ def get_paginated_contracts(
                 Contract, Publication.contract_id == Contract.contract_id
             ).join(
                 ContractOrganization,
-                Contract.contracting_authority_id == ContractOrganization.business_id,
+                Contract.contracting_authority_id == ContractOrganization.id,
             )
             if sort_order.lower() == "desc":
                 query = query.order_by(ContractOrganization.name.desc())

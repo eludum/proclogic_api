@@ -31,8 +31,9 @@ class ContractAddress(Base):
 class ContractOrganization(Base):
     __tablename__ = "contract_organizations"
 
-    business_id: Mapped[str] = mapped_column(String(50), unique=True, primary_key=True)
-    name: Mapped[str] = mapped_column(String(255))
+    id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    business_id: Mapped[str] = mapped_column(String(50), unique=True)
     website: Mapped[str] = mapped_column(String(255))
     phone: Mapped[str] = mapped_column(String(50))
     email: Mapped[str] = mapped_column(String(255))
@@ -104,10 +105,10 @@ class Contract(Base):
     framework_agreement: Mapped[str] = mapped_column(String(50))
 
     # Foreign Keys
-    contracting_authority_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.business_id"))
-    winning_publisher_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.business_id"))
-    appeals_body_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.business_id"))
-    service_provider_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.business_id"))
+    contracting_authority_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
+    winning_publisher_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
+    appeals_body_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
+    service_provider_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
 
     # Relationships
     contracting_authority: Mapped["ContractOrganization"] = relationship(

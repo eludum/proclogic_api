@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import uuid
-from datetime import date, timedelta
+from datetime import date
 from typing import List
 
 import httpx
@@ -330,8 +330,7 @@ async def get_daily_pubproc_search_data(
 ) -> dict:
     token = get_token()
 
-    # TODO: CHANGE ME BEFORE PROD !!!!!!!!!!!!!!
-    today = date.today() - timedelta(days=1)
+    today = date.today()
     page_size = 100
 
     # TODO: go page by page and stop if we hit already processed ones, to limit api usage

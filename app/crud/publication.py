@@ -249,8 +249,6 @@ def create_contract_organization(
 ) -> ContractOrganization:
     address = None
     if org_schema.address is not None:
-        print(org_schema.address)
-        print("hmmm")
         address = create_contract_address(org_schema.address, session=session)
 
     contact_persons = []
@@ -279,6 +277,31 @@ def create_contract_organization(
 
 def create_contract(contract_schema: ContractSchema, session: Session) -> Contract:
     contract = session.get(Contract, contract_schema.contract_id)
+
+    contracting_authority = None
+    if contract_schema.contracting_authority is not None:
+        contracting_authority = create_contract_organization(
+            contract_schema.contracting_authority, session
+        )
+
+    winning_publisher = None
+    if contract_schema.winning_publisher is not None:
+        winning_publisher = create_contract_organization(
+            contract_schema.winning_publisher, session
+        )
+
+    appeals_body = None
+    if contract_schema.appeals_body is not None:
+        appeals_body = create_contract_organization(
+            contract_schema.appeals_body, session
+        )
+
+    service_provider = None
+    if contract_schema.service_provider is not None:
+        service_provider = create_contract_organization(
+            contract_schema.service_provider, session
+        )
+
     if not contract:
         contract = Contract(
             notice_id=contract_schema.notice_id,
@@ -295,18 +318,10 @@ def create_contract(contract_schema: ContractSchema, session: Session) -> Contra
             electronic_auction_used=contract_schema.electronic_auction_used,
             dynamic_purchasing_system=contract_schema.dynamic_purchasing_system,
             framework_agreement=contract_schema.framework_agreement,
-            contracting_authority=create_contract_organization(
-                contract_schema.contracting_authority, session
-            ),
-            winning_publisher=create_contract_organization(
-                contract_schema.winning_publisher, session
-            ),
-            appeals_body=create_contract_organization(
-                contract_schema.appeals_body, session
-            ),
-            service_provider=create_contract_organization(
-                contract_schema.service_provider, session
-            ),
+            contracting_authority=contracting_authority,
+            winning_publisher=winning_publisher,
+            appeals_body=appeals_body,
+            service_provider=service_provider,
         )
 
         session.add(contract)
