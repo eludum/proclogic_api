@@ -1,7 +1,6 @@
-from typing import List, Optional, Tuple, Dict
+from typing import List
 
 from app.models.company_models import Sector
-from app.schemas.company_schemas import SectorSchema
 
 
 en_sectors = {
@@ -175,7 +174,9 @@ def get_cpv_sector_code(code: str) -> str:
     return code[:2] + "000000"
 
 
-def check_if_publication_is_in_sector(interested_sectors: List[Sector], cpv_main_code: str) -> bool:
+def check_if_publication_is_in_sector(
+    interested_sectors: List[Sector], cpv_main_code: str
+) -> bool:
     """Check if a publication's CPV code matches any of the company's interested sectors."""
     for sector in interested_sectors:
         if sector.sector == get_cpv_sector_name(cpv_main_code, "nl"):

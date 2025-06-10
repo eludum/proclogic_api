@@ -230,7 +230,6 @@ class Publication(Base):
     ai_summary_with_documents: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True
     )
-    award: Mapped[Optional[dict]] = mapped_column(PickleType, nullable=True)
 
     # Added fields for better matching
     estimated_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -251,6 +250,11 @@ class Publication(Base):
         ForeignKey("dossiers.reference_number")
     )
     dossier: Mapped["Dossier"] = relationship()
+
+    contract_id: Mapped[str] = mapped_column(
+        ForeignKey("contracts.contract_id"), nullable=True
+    )
+    contract: Mapped["Contract"] = relationship()
 
     # Many-to-Many relationships
     cpv_additional_codes: Mapped[List["CPVCode"]] = relationship(
@@ -294,3 +298,4 @@ Index("idx_match_recommended", CompanyPublicationMatch.is_recommended)
 
 from app.models.conversation_models import Conversation
 from app.models.kanban_models import PublicationStatus
+from app.models.publication_contract_models import Contract

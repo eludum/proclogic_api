@@ -280,6 +280,38 @@ class PublicationConverter(BaseModel):
         return output
 
     @classmethod
+    def to_output_schema_free(
+        cls,
+        publication: Publication,
+        # forum: Optional[Dict[str, Any]] = None,
+    ) -> PublicationOut:
+        """Convert a publication to the PublicationOut schema"""
+        pub_text = cls.extract_text(publication)
+        pub_data = cls.extract_data(publication)
+
+        # Create the base output schema
+        output = PublicationOut(
+            title=pub_text.title,
+            workspace_id=pub_data.workspace_id,
+            dispatch_date=pub_data.dispatch_date,
+            publication_date=pub_data.publication_date,
+            submission_deadline=pub_data.submission_deadline,
+            is_active=pub_data.is_active,
+            original_description=pub_text.description,
+            organisation=pub_text.organisation_name,
+            cpv_code=pub_data.cpv_code,
+            cpv_additional_codes=pub_data.cpv_additional_codes,
+            accreditations=pub_data.accreditations,
+            region=pub_data.region_names,
+            sector=pub_data.sector,
+            lot_titles=pub_text.lots_titles,
+            lot_descriptions=pub_text.lots_descriptions,
+            estimated_value=pub_data.estimated_value,
+        )
+
+        return output
+
+    @classmethod
     def to_ai_prompt_format(
         cls,
         publication_schema: Optional[PublicationSchema] = None,

@@ -6,6 +6,12 @@ from sqlalchemy import and_, case, desc, func, literal_column, or_, select
 from sqlalchemy.orm import Session, aliased, joinedload
 from sqlalchemy.sql import exists
 
+from app.models.publication_contract_models import (
+    Contract,
+    ContractAddress,
+    ContractContactPerson,
+    ContractOrganization,
+)
 from app.models.publication_models import (
     CompanyPublicationMatch,
     CPVCode,
@@ -16,6 +22,12 @@ from app.models.publication_models import (
     Organisation,
     OrganisationName,
     Publication,
+)
+from app.schemas.publication_contract_schemas import (
+    ContractAddressSchema,
+    ContractContactPersonSchema,
+    ContractOrganizationSchema,
+    ContractSchema,
 )
 from app.schemas.publication_schemas import (
     CPVCodeSchema,
@@ -201,6 +213,123 @@ def create_lot(lot_schema: LotSchema, session: Session) -> Lot:
     return lot
 
 
+def create_contract_address(
+    address_schema: ContractAddressSchema, session: Session
+) -> ContractAddress:
+    address = ContractAddress(
+        street=address_schema.street,
+        city=address_schema.city,
+        postal_code=address_schema.postal_code,
+        country=address_schema.country,
+        nuts_code=address_schema.nuts_code,
+    )
+    session.add(address)
+    session.flush()
+    return address
+
+
+def create_contract_contact_person(
+    person_schema: ContractContactPersonSchema,
+    session: Session,
+) -> ContractContactPerson:
+    person = ContractContactPerson(
+        name=person_schema.name,
+        job_title=person_schema.job_title,
+        phone=person_schema.phone,
+        email=person_schema.email,
+    )
+
+    session.add(person)
+    session.flush()
+    return person
+
+
+def create_contract_organization(
+    org_schema: ContractOrganizationSchema, session: Session
+) -> ContractOrganization:
+    address = None
+    if org_schema.address is not None:
+        address = create_contract_address(org_schema.address, session=session)
+
+    contact_persons = []
+    for person_schema in org_schema.contact_persons:
+        contact_persons.append(
+            create_contract_contact_person(person_schema, session=session)
+        )
+
+    organization = ContractOrganization(
+        name=org_schema.name,
+        business_id=org_schema.business_id,
+        website=org_schema.website,
+        phone=org_schema.phone,
+        email=org_schema.email,
+        company_size=org_schema.company_size,
+        subcontracting=org_schema.subcontracting,
+        address=address,
+        contact_persons=contact_persons,
+    )
+
+    session.add(organization)
+    session.flush()
+
+    return organization
+
+
+def create_contract(contract_schema: ContractSchema, session: Session) -> Contract:
+    contract = session.get(Contract, contract_schema.contract_id)
+
+    contracting_authority = None
+    if contract_schema.contracting_authority is not None:
+        contracting_authority = create_contract_organization(
+            contract_schema.contracting_authority, session
+        )
+
+    winning_publisher = None
+    if contract_schema.winning_publisher is not None:
+        winning_publisher = create_contract_organization(
+            contract_schema.winning_publisher, session
+        )
+
+    appeals_body = None
+    if contract_schema.appeals_body is not None:
+        appeals_body = create_contract_organization(
+            contract_schema.appeals_body, session
+        )
+
+    service_provider = None
+    if contract_schema.service_provider is not None:
+        service_provider = create_contract_organization(
+            contract_schema.service_provider, session
+        )
+
+    if not contract:
+        contract = Contract(
+            notice_id=contract_schema.notice_id,
+            contract_id=contract_schema.contract_id,
+            internal_id=contract_schema.internal_id,
+            issue_date=contract_schema.issue_date,
+            notice_type=contract_schema.notice_type,
+            total_contract_amount=contract_schema.total_contract_amount,
+            currency=contract_schema.currency,
+            lowest_publication_amount=contract_schema.lowest_publication_amount,
+            highest_publication_amount=contract_schema.highest_publication_amount,
+            number_of_publications_received=contract_schema.number_of_publications_received,
+            number_of_participation_requests=contract_schema.number_of_participation_requests,
+            electronic_auction_used=contract_schema.electronic_auction_used,
+            dynamic_purchasing_system=contract_schema.dynamic_purchasing_system,
+            framework_agreement=contract_schema.framework_agreement,
+            contracting_authority=contracting_authority,
+            winning_publisher=winning_publisher,
+            appeals_body=appeals_body,
+            service_provider=service_provider,
+        )
+
+        session.add(contract)
+        session.flush()
+
+    return contract
+
+
 def update_publication(
     publication: Publication,
     publication_schema: PublicationSchema,
@@ -263,8 +392,8 @@ def update_publication(
         publication.estimated_value = publication_schema.estimated_value
     if publication_schema.extracted_keywords:
         publication.extracted_keywords = publication_schema.extracted_keywords
-    if publication_schema.award:
-        publication.award = publication_schema.award
+    if publication_schema.contract:
+        publication.contract = publication_schema.contract
 
     publication.cpv_main_code = cpv_main_code
     publication.dossier = dossier
@@ -315,7 +444,6 @@ def get_or_create_publication(
     publication_schema: PublicationSchema, session: Session
 ) -> Publication:
     publication = session.get(Publication, publication_schema.publication_workspace_id)
-
     if publication:
         update_publication(
             publication=publication,
@@ -346,6 +474,10 @@ def get_or_create_publication(
         for lot in publication_schema.lots:
             lots.append(create_lot(lot_schema=lot, session=session))
 
+        contract = None
+        if publication_schema.contract:
+            contract = create_contract(publication_schema.contract, session)
+
         # Create new publication with updated fields
         publication = Publication(
             publication_workspace_id=publication_schema.publication_workspace_id,
@@ -370,7 +502,7 @@ def get_or_create_publication(
             ai_summary_with_documents=publication_schema.ai_summary_with_documents,
             estimated_value=publication_schema.estimated_value,
             extracted_keywords=publication_schema.extracted_keywords,
-            award=publication_schema.award,
+            contract=contract,
             cpv_main_code=cpv_main_code,
             dossier=dossier,
             organisation=organisation,

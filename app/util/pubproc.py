@@ -13,7 +13,7 @@ import app.crud.company as crud_company
 import app.crud.publication as crud_publication
 from app.ai.recommend import (
     get_recommendation,
-    summarize_publication_award,
+    summarize_publication_contract,
     summarize_publication_with_files,
     summarize_publication_without_files,
 )
@@ -31,30 +31,57 @@ settings = Settings()
 
 
 async def fetch_pubproc_data() -> None:
+    logging.info("Starting publication data fetch service")
     while True:
-        # TODO: scan all saved publications and check if they have changed documents or forum
-        # TODO: USE AP SCHEDULER NOT PYCRON
         try:
-            async with httpx.AsyncClient() as client:
-                await retrieve_publications(client=client)
-        except Exception as e:
-            logging.error("error in fetching data: %s", e)
-        finally:
-            await asyncio.sleep(600)  # 10 minutes in seconds
+            # TODO: scan all saved publications and check if they have changed documents or forum
+            # TODO: USE AP SCHEDULER NOT PYCRON
+            try:
+                async with httpx.AsyncClient() as client:
+                    await retrieve_publications(client=client)
+                    logging.info("Publication data fetch completed successfully")
+            except Exception as e:
+                logging.error("Error in fetching data: %s", e)
+
+            # Wait until next run
+            await asyncio.sleep(3600)  # 1 hour in seconds
+
+        except asyncio.CancelledError:
+            logging.info("Publication data fetch service is shutting down")
+            raise  # Re-raise to allow proper cleanup
 
 
 async def update_pubproc_data() -> None:
-    # TODO: update all saved publications data forums docs, daily send to ai and send notification
-    #       clean files from minio if not active anymore and implement minio
-    pass
-    # with get_session() as session:
-    #     for company in crud_company.get_all_companies(session=session):
-    #         await crud_publication.get_all_publications() (only get active ones obviously make new crud if needed)
+    logging.info("Starting publication data update service")
+    try:
+        # TODO: update all saved publications data forums docs, daily send to ai and send notification
+        #       clean files from minio if not active anymore and implement minio
+        while True:
+            try:
+                # Your update logic here
+                pass
+            except Exception as e:
+                logging.error("Error in updating pubproc data: %s", e)
+            await asyncio.sleep(3600)  # 1 hour in seconds
+    except asyncio.CancelledError:
+        logging.info("Publication data update service is shutting down")
+        raise
 
 
 async def gather_notifications() -> None:
-    # TODO: scan for deadlines and send notifications
-    pass
+    logging.info("Starting notification gathering service")
+    try:
+        # TODO: scan for deadlines and send notifications
+        while True:
+            try:
+                # Your notification gathering logic here
+                pass
+            except Exception as e:
+                logging.error("Error in gathering notifications: %s", e)
+            await asyncio.sleep(3600)  # 1 hour in seconds
+    except asyncio.CancelledError:
+        logging.info("Notification gathering service is shutting down")
+        raise
 
 
 async def retrieve_publications(client: httpx.AsyncClient) -> None:
@@ -96,7 +123,7 @@ async def process_publication(
     elif not existing_publication and pub.vault_submission_deadline is None:
         # TODO: get the actual publication
         # e.g.  https://www.publicprocurement.be/publication-workspaces/cde195bc-c647-4792-8859-19a853a0339b/general
-        await process_award_publication(client=client, pub=pub, session=session)
+        await process_publication_contract(client=client, pub=pub, session=session)
 
 
 async def update_existing_publication(
@@ -176,7 +203,7 @@ async def create_new_publication(
     await generate_company_recommendations(pub=pub, session=session)
 
 
-async def process_award_publication(
+async def process_publication_contract(
     client: httpx.AsyncClient, pub: PublicationSchema, session: Session
 ) -> None:
     """
@@ -187,9 +214,13 @@ async def process_award_publication(
         publication_workspace_id=pub.publication_workspace_id,
     )
 
-    pub.award = summarize_publication_award(xml=xml_content)
+    contract = summarize_publication_contract(xml=xml_content)
+    if contract:
+        pub.contract = contract
+        crud_publication.get_or_create_publication(publication_schema=pub, session=session)
+    else:
+        logging.info("No contract found for publication %s", pub.publication_workspace_id)
 
-    crud_publication.get_or_create_publication(publication_schema=pub, session=session)
 
 
 async def enrich_publication_with_ai(

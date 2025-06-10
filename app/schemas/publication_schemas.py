@@ -3,7 +3,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
-from app.schemas.company_schemas import CompanySchema, CompanyPublicationMatchSchema
+from app.schemas.company_schemas import CompanyPublicationMatchSchema
+from app.schemas.publication_contract_schemas import ContractSchema
 
 
 class DescriptionSchema(BaseModel):
@@ -95,11 +96,13 @@ class PublicationSchema(BaseModel):
     # forum: Optional[dict] = None
     ai_summary_without_documents: Optional[str] = None
     ai_summary_with_documents: Optional[str] = None
-    award: Optional[dict] = None
+    contract: Optional[ContractSchema] = None
 
     estimated_value: Optional[int] = None
     extracted_keywords: Optional[List[str]] = Field(default_factory=list)
 
-    company_matches: Optional[List[CompanyPublicationMatchSchema]] = Field(default_factory=list)
+    company_matches: Optional[List[CompanyPublicationMatchSchema]] = Field(
+        default_factory=list
+    )
 
     model_config = ConfigDict(from_attributes=True, alias_generator=to_camel)
