@@ -29,9 +29,12 @@ def get_related_publications(
         List of (publication, similarity_score, similarity_reason) tuples
     """
     # Build similarity score calculation at database level
-    # Prioritized scoring: Keywords and Organization are main factors, then CPV and Value
+    # Prioritized scoring: Same Organization is HIGHEST priority (50 points), Keywords second (35 points), then CPV and Value
     similarity_score = (
-        # Keyword similarity (35 points max) - HIGHEST PRIORITY
+        # Same organization (50 points) - HIGHEST PRIORITY (15 points more than keywords)
+        case((Publication.organisation_id == publication.organisation_id, 50), else_=0)
+        +
+        # Keyword similarity (35 points max) - SECOND PRIORITY
         case(
             (
                 and_(
@@ -45,10 +48,7 @@ def get_related_publications(
             else_=0,
         )
         +
-        # Same organization (30 points) - HIGHEST PRIORITY
-        case((Publication.organisation_id == publication.organisation_id, 30), else_=0)
-        +
-        # CPV code similarity (25 points max) - SECOND PRIORITY
+        # CPV code similarity (25 points max) - THIRD PRIORITY
         case(
             (Publication.cpv_main_code_code == publication.cpv_main_code.code, 25),
             (
@@ -67,8 +67,8 @@ def get_related_publications(
         # Geographic overlap (5 points) - LOWEST PRIORITY
         case((Publication.nuts_codes.op("&&")(publication.nuts_codes), 5), else_=0)
     )
-    
-    # Add value similarity only if the publication has a valid estimated value (15 points max) - SECOND PRIORITY
+
+    # Add value similarity only if the publication has a valid estimated value (15 points max) - THIRD PRIORITY
     if publication.estimated_value is not None and publication.estimated_value > 0:
         value_similarity = case(
             (
@@ -86,7 +86,7 @@ def get_related_publications(
             else_=0,
         )
         similarity_score = similarity_score + value_similarity
-    
+
     similarity_score = similarity_score.label("similarity_score")
 
     # Base query with calculated similarity
@@ -153,7 +153,9 @@ def get_related_publications(
             and set(pub.extracted_keywords) & set(publication.extracted_keywords)
         ):
             common = set(pub.extracted_keywords) & set(publication.extracted_keywords)
-            reasons.append(f"Gemeenschappelijke trefwoorden: {', '.join(list(common)[:3])}")
+            reasons.append(
+                f"Gemeenschappelijke trefwoorden: {', '.join(list(common)[:3])}"
+            )
 
         # Fixed the estimated value comparison to handle None values properly
         if (
