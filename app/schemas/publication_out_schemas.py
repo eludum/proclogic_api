@@ -3,6 +3,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
+from app.schemas.publication_contract_schemas import ContractSchema
+
 
 class PublicationOut(BaseModel):
     # Basic information about the publication
@@ -44,6 +46,9 @@ class PublicationOut(BaseModel):
     # Lot information
     lot_titles: Optional[List[str]] = None
     lot_descriptions: Optional[List[str]] = None
+
+    # Contract information
+    contract: Optional[ContractSchema] = None
 
     # Forum information
     # forum: Optional[dict] = None
