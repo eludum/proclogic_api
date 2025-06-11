@@ -1,29 +1,36 @@
 import logging
 import re
-from typing import List, Optional, Dict, Any, ClassVar
-from pydantic import BaseModel, ConfigDict, Field, computed_field
 from datetime import datetime
+from typing import Any, ClassVar, Dict, List, Optional
+
 import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.config.settings import Settings
 from app.models.company_models import Company
 from app.models.publication_models import Publication
 from app.schemas.company_schemas import CompanySchema
+from app.schemas.publication_contract_schemas import (
+    ContractAddressSchema,
+    ContractContactPersonSchema,
+    ContractOrganizationSchema,
+    ContractSchema,
+)
 from app.schemas.publication_out_schemas import PublicationOut
 from app.schemas.publication_schemas import (
     DescriptionSchema,
     OrganisationNameSchema,
     PublicationSchema,
 )
-from app.util.publication_utils.nuts_codes import (
-    check_if_publication_is_in_region,
-    get_nuts_code_as_str,
-)
 from app.util.publication_utils.cpv_codes import (
     check_if_publication_is_in_sector,
     get_cpv_sector_name,
+)
+from app.util.publication_utils.nuts_codes import (
+    check_if_publication_is_in_region,
+    get_nuts_code_as_str,
 )
 
 settings = Settings()
@@ -222,6 +229,85 @@ class PublicationConverter(BaseModel):
         return match_data
 
     @classmethod
+    def extract_contract_data(
+        cls, publication: Publication
+    ) -> Optional[ContractSchema]:
+        """Extract contract data from a publication"""
+        if not publication.contract:
+            return None
+
+        contract = publication.contract
+
+        # Helper function to convert organization
+        def convert_organization(org) -> Optional[ContractOrganizationSchema]:
+            if not org:
+                return None
+
+            # Convert address
+            address = None
+            if org.address:
+                address = ContractAddressSchema(
+                    street=org.address.street,
+                    city=org.address.city,
+                    postal_code=org.address.postal_code,
+                    country=org.address.country,
+                    nuts_code=org.address.nuts_code,
+                )
+
+            # Convert contact persons
+            contact_persons = []
+            if org.contact_persons:
+                for person in org.contact_persons:
+                    contact_persons.append(
+                        ContractContactPersonSchema(
+                            name=person.name,
+                            job_title=person.job_title,
+                            phone=person.phone,
+                            email=person.email,
+                        )
+                    )
+
+            return ContractOrganizationSchema(
+                name=org.name,
+                business_id=org.business_id,
+                website=org.website,
+                phone=org.phone,
+                email=org.email,
+                address=address,
+                contact_persons=contact_persons,
+                company_size=org.company_size,
+                subcontracting=org.subcontracting,
+            )
+
+        # Convert the contract
+        try:
+            return ContractSchema(
+                notice_id=contract.notice_id,
+                contract_id=contract.contract_id,
+                internal_id=contract.internal_id,
+                issue_date=contract.issue_date,
+                notice_type=contract.notice_type,
+                total_contract_amount=contract.total_contract_amount,
+                currency=contract.currency,
+                lowest_publication_amount=contract.lowest_publication_amount,
+                highest_publication_amount=contract.highest_publication_amount,
+                number_of_publications_received=contract.number_of_publications_received,
+                number_of_participation_requests=contract.number_of_participation_requests,
+                electronic_auction_used=contract.electronic_auction_used,
+                dynamic_purchasing_system=contract.dynamic_purchasing_system,
+                framework_agreement=contract.framework_agreement,
+                contracting_authority=convert_organization(
+                    contract.contracting_authority
+                ),
+                winning_publisher=convert_organization(contract.winning_publisher),
+                appeals_body=convert_organization(contract.appeals_body),
+                service_provider=convert_organization(contract.service_provider),
+            )
+        except Exception as e:
+            logging.error(f"Error converting contract to schema: {e}")
+            return None
+
+    @classmethod
     def to_output_schema(
         cls,
         publication: Publication,
@@ -233,6 +319,9 @@ class PublicationConverter(BaseModel):
         """Convert a publication to the PublicationOut schema"""
         pub_text = cls.extract_text(publication)
         pub_data = cls.extract_data(publication)
+        
+        # Extract contract data using the new method
+        contract_data = cls.extract_contract_data(publication)
 
         # Create the base output schema
         output = PublicationOut(
@@ -252,6 +341,7 @@ class PublicationConverter(BaseModel):
             lot_titles=pub_text.lots_titles,
             lot_descriptions=pub_text.lots_descriptions,
             estimated_value=pub_data.estimated_value,
+            contract=contract_data,
             ai_summary_without_documents=pub_data.ai_summary_without_documents,
             ai_summary_with_documents=pub_data.ai_summary_with_documents,
         )

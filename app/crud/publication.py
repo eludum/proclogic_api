@@ -560,6 +560,15 @@ def get_publication_by_workspace_id(
                 joinedload(Publication.lots).joinedload(Lot.descriptions),
                 joinedload(Publication.lots).joinedload(Lot.titles),
                 joinedload(Publication.company_matches),
+                joinedload(Publication.contract).joinedload(Contract.contracting_authority).joinedload(ContractOrganization.address),
+                joinedload(Publication.contract).joinedload(Contract.contracting_authority).joinedload(ContractOrganization.contact_persons),
+                joinedload(Publication.contract).joinedload(Contract.winning_publisher).joinedload(ContractOrganization.address),
+                joinedload(Publication.contract).joinedload(Contract.winning_publisher).joinedload(ContractOrganization.contact_persons),
+                joinedload(Publication.contract).joinedload(Contract.appeals_body).joinedload(ContractOrganization.address),
+                joinedload(Publication.contract).joinedload(Contract.appeals_body).joinedload(ContractOrganization.contact_persons),
+                joinedload(Publication.contract).joinedload(Contract.service_provider).joinedload(ContractOrganization.address),
+                joinedload(Publication.contract).joinedload(Contract.service_provider).joinedload(ContractOrganization.contact_persons),
+
             )
             .first()
         )
