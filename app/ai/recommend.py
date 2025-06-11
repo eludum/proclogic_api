@@ -644,6 +644,19 @@ def summarize_publication_with_files(
         publication_schema=publication
     )
 
+    # TODO: play with these lengths
+    # Truncate XML and structured prompt if they're too long
+    max_xml_length = 50000  # Reserve space for other content
+    max_prompt_length = 30000
+    
+    if len(xml) > max_xml_length:
+        xml = xml[:max_xml_length] + "...[XML truncated due to length]"
+        logging.warning(f"XML content truncated for publication {publication.publication_workspace_id}")
+    
+    if len(structured_prompt) > max_prompt_length:
+        structured_prompt = structured_prompt[:max_prompt_length] + "...[content truncated due to length]"
+        logging.warning(f"Structured prompt truncated for publication {publication.publication_workspace_id}")
+
     # Create a prompt for summarization
     prompt = f"""
     Create a summary in Dutch of this procurement:
@@ -654,7 +667,11 @@ def summarize_publication_with_files(
     
     Create a concise but complete summary that describes the most important aspects of this procurement.
     """
+    
     try:
+        vector_store_id = None
+        assistant_id = "asst_OMvTxo3W1byW40gTiceOzP8B"
+        
         if filesmap:
             # Use the utility function to prepare files for the vector store
             file_objects = prepare_files_for_vector_store(filesmap=filesmap)
@@ -663,6 +680,7 @@ def summarize_publication_with_files(
                 vector_store = client.vector_stores.create(
                     name=f"publication_workspace_{publication.publication_workspace_id}"
                 )
+                vector_store_id = vector_store.id
 
                 file_batch = client.vector_stores.file_batches.upload_and_poll(
                     vector_store_id=vector_store.id,
@@ -671,65 +689,99 @@ def summarize_publication_with_files(
 
                 if file_batch.status != "completed":
                     logging.error("File upload failed.")
-                    return None, None, None
+                    # Continue without files rather than failing completely
+                    vector_store_id = None
 
-                assistant = client.beta.assistants.update(
-                    assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
-                    tool_resources={
-                        "file_search": {"vector_store_ids": [vector_store.id]}
-                    },
-                    response_format={"type": "json_object"},
-                )
-            else:
-                # No valid files after filtering
-                assistant = client.beta.assistants.update(
-                    assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
-                    tool_resources={"file_search": {"vector_store_ids": []}},
-                    response_format={"type": "json_object"},
-                )
+        # Update assistant with vector store (or empty if no files)
+        if vector_store_id:
+            assistant = client.beta.assistants.update(
+                assistant_id=assistant_id,
+                tool_resources={
+                    "file_search": {"vector_store_ids": [vector_store_id]}
+                },
+                response_format={"type": "json_object"},
+            )
         else:
             assistant = client.beta.assistants.update(
-                assistant_id="asst_OMvTxo3W1byW40gTiceOzP8B",
+                assistant_id=assistant_id,
                 tool_resources={"file_search": {"vector_store_ids": []}},
                 response_format={"type": "json_object"},
             )
+
+        # Ensure the prompt isn't too long for the message
+        max_message_length = 200000  # Conservative limit for message content
+        if len(prompt) + len(xml) > max_message_length:
+            # Further truncate if needed
+            available_space = max_message_length - len(prompt) - 1000  # Buffer
+            if available_space > 0:
+                xml = xml[:available_space] + "...[XML further truncated]"
+            else:
+                xml = "[XML too long, removed]"
+        
+        final_message = f"Summarize the publication and attached documents. {prompt} XML: {xml}"
+        
+        # Double-check final message length
+        if len(final_message) > 250000:  # Leave some buffer
+            # Emergency truncation
+            final_message = final_message[:250000] + "...[Message truncated due to length limits]"
+            logging.warning(f"Emergency message truncation for publication {publication.publication_workspace_id}")
 
         thread = client.beta.threads.create(
             messages=[
                 {
                     "role": "user",
-                    "content": f"Summarize the publication and attached documents. {prompt} XML: {xml}",
+                    "content": final_message,
                 }
             ]
         )
 
         run = client.beta.threads.runs.create_and_poll(
             thread_id=thread.id,
-            assistant_id=assistant.id,
+            assistant_id=assistant_id,
         )
+        
         messages = list(
             client.beta.threads.messages.list(thread_id=thread.id, run_id=run.id)
         )
 
         if not messages:
             logging.error("No response from assistant.")
-            return None, None, None
+            return "0", "Geen samenvatting beschikbaar.", ""
 
-        message_content = handle_json_response_formats(
-            messages[0].content[0].text.value
-        )
+        try:
+            message_content = handle_json_response_formats(
+                messages[0].content[0].text.value
+            )
+        except (json.JSONDecodeError, IndexError, AttributeError) as e:
+            logging.error(f"Error parsing assistant response: {e}")
+            return "0", "Fout bij het verwerken van de samenvatting.", ""
 
         summary = message_content.get("summary", "Geen samenvatting beschikbaar.")
         estimated_value = message_content.get("estimated_value", 0)
 
-        citations = [
-            f"[{i}] {client.files.retrieve(ann['file_citation']['file_id']).filename}"
-            for i, ann in enumerate(messages[0].content[0].text.annotations)
-            if "file_citation" in ann
-        ]
+        # Handle citations safely
+        citations = []
+        try:
+            for i, ann in enumerate(messages[0].content[0].text.annotations):
+                if hasattr(ann, 'file_citation') and ann.file_citation:
+                    try:
+                        cited_file = client.files.retrieve(ann.file_citation.file_id)
+                        citations.append(f"[{i}] {cited_file.filename}")
+                    except Exception as cite_error:
+                        logging.warning(f"Error retrieving citation file: {cite_error}")
+                        citations.append(f"[{i}] Reference to document")
+        except (AttributeError, IndexError) as e:
+            logging.warning(f"Error processing citations: {e}")
 
-        return estimated_value, summary, "\n".join(citations)
+        # Ensure we return strings, not None
+        estimated_value_str = str(estimated_value) if estimated_value is not None else "0"
+        summary_str = str(summary) if summary is not None else "Geen samenvatting beschikbaar."
+        citations_str = "\n".join(citations) if citations else ""
+
+        return estimated_value_str, summary_str, citations_str
 
     except Exception as e:
         logging.error(f"Failed to summarize files: {e}")
-        return None, None, None
+        # Return safe default values instead of None
+        return "0", "Fout bij het genereren van samenvatting.", ""
+    
