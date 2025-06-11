@@ -362,7 +362,6 @@ async def get_related_content(
         ..., description="Unique ID of the publication workspace"
     ),
     contracts_limit: int = Query(10, ge=1, le=20, description="Number of related contracts to return"),
-    publications_limit: int = Query(10, ge=1, le=20, description="Number of related publications to return"),
     auth_user: Optional[AuthUser] = Depends(get_auth_user),
 ) -> RelatedContentResponse:
     """
@@ -402,13 +401,6 @@ async def get_related_content(
             limit=contracts_limit
         )
         
-        # Get related publications
-        related_publications_data = get_related_active_publications(
-            publication=publication,
-            session=session,
-            limit=publications_limit
-        )
-        
         # Convert to response format
         related_contracts = []
         for pub, score, reason in related_contracts_data:
@@ -442,35 +434,9 @@ async def get_related_content(
                     similarity_reason=reason
                 ))
         
-        related_publications = []
-        for pub, score, reason in related_publications_data:
-            # Get match percentage if user is authenticated
-            match_percentage = None
-            if company:
-                for match in pub.company_matches:
-                    if match.company_vat_number == company.vat_number:
-                        match_percentage = match.match_percentage
-                        break
-            
-            related_publications.append(RelatedPublicationItem(
-                workspace_id=pub.publication_workspace_id,
-                title=PublicationConverter.get_descr_as_str(pub.dossier.titles),
-                organisation=PublicationConverter.get_org_name_as_str(pub.organisation.organisation_names),
-                publication_date=pub.publication_date,
-                submission_deadline=pub.vault_submission_deadline,
-                cpv_code=pub.cpv_main_code.code,
-                sector=get_cpv_sector_name(pub.cpv_main_code.code, "nl"),
-                estimated_value=pub.estimated_value,
-                similarity_score=score,
-                similarity_reason=reason,
-                match_percentage=match_percentage
-            ))
-        
         return RelatedContentResponse(
             related_contracts=related_contracts,
-            related_publications=related_publications,
             total_contracts=len(related_contracts),
-            total_publications=len(related_publications)
         )
 
 

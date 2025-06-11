@@ -39,8 +39,6 @@ class RelatedPublicationItem(BaseModel):
 class RelatedContentResponse(BaseModel):
     """Response schema for related content"""
     related_contracts: List[RelatedContractItem]
-    related_publications: List[RelatedPublicationItem]
     total_contracts: int
-    total_publications: int
 
     model_config = ConfigDict(from_attributes=True)
