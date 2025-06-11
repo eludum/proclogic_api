@@ -648,14 +648,21 @@ def summarize_publication_with_files(
     # Truncate XML and structured prompt if they're too long
     max_xml_length = 50000  # Reserve space for other content
     max_prompt_length = 30000
-    
+
     if len(xml) > max_xml_length:
         xml = xml[:max_xml_length] + "...[XML truncated due to length]"
-        logging.warning(f"XML content truncated for publication {publication.publication_workspace_id}")
-    
+        logging.warning(
+            f"XML content truncated for publication {publication.publication_workspace_id}"
+        )
+
     if len(structured_prompt) > max_prompt_length:
-        structured_prompt = structured_prompt[:max_prompt_length] + "...[content truncated due to length]"
-        logging.warning(f"Structured prompt truncated for publication {publication.publication_workspace_id}")
+        structured_prompt = (
+            structured_prompt[:max_prompt_length]
+            + "...[content truncated due to length]"
+        )
+        logging.warning(
+            f"Structured prompt truncated for publication {publication.publication_workspace_id}"
+        )
 
     # Create a prompt for summarization
     prompt = f"""
@@ -667,11 +674,11 @@ def summarize_publication_with_files(
     
     Create a concise but complete summary that describes the most important aspects of this procurement.
     """
-    
+
     try:
         vector_store_id = None
         assistant_id = "asst_OMvTxo3W1byW40gTiceOzP8B"
-        
+
         if filesmap:
             # Use the utility function to prepare files for the vector store
             file_objects = prepare_files_for_vector_store(filesmap=filesmap)
@@ -696,9 +703,7 @@ def summarize_publication_with_files(
         if vector_store_id:
             assistant = client.beta.assistants.update(
                 assistant_id=assistant_id,
-                tool_resources={
-                    "file_search": {"vector_store_ids": [vector_store_id]}
-                },
+                tool_resources={"file_search": {"vector_store_ids": [vector_store_id]}},
                 response_format={"type": "json_object"},
             )
         else:
@@ -717,14 +722,20 @@ def summarize_publication_with_files(
                 xml = xml[:available_space] + "...[XML further truncated]"
             else:
                 xml = "[XML too long, removed]"
-        
-        final_message = f"Summarize the publication and attached documents. {prompt} XML: {xml}"
-        
+
+        final_message = (
+            f"Summarize the publication and attached documents. {prompt} XML: {xml}"
+        )
+
         # Double-check final message length
         if len(final_message) > 250000:  # Leave some buffer
             # Emergency truncation
-            final_message = final_message[:250000] + "...[Message truncated due to length limits]"
-            logging.warning(f"Emergency message truncation for publication {publication.publication_workspace_id}")
+            final_message = (
+                final_message[:250000] + "...[Message truncated due to length limits]"
+            )
+            logging.warning(
+                f"Emergency message truncation for publication {publication.publication_workspace_id}"
+            )
 
         thread = client.beta.threads.create(
             messages=[
@@ -739,7 +750,7 @@ def summarize_publication_with_files(
             thread_id=thread.id,
             assistant_id=assistant_id,
         )
-        
+
         messages = list(
             client.beta.threads.messages.list(thread_id=thread.id, run_id=run.id)
         )
@@ -763,7 +774,7 @@ def summarize_publication_with_files(
         citations = []
         try:
             for i, ann in enumerate(messages[0].content[0].text.annotations):
-                if hasattr(ann, 'file_citation') and ann.file_citation:
+                if hasattr(ann, "file_citation") and ann.file_citation:
                     try:
                         cited_file = client.files.retrieve(ann.file_citation.file_id)
                         citations.append(f"[{i}] {cited_file.filename}")
@@ -774,8 +785,12 @@ def summarize_publication_with_files(
             logging.warning(f"Error processing citations: {e}")
 
         # Ensure we return strings, not None
-        estimated_value_str = str(estimated_value) if estimated_value is not None else "0"
-        summary_str = str(summary) if summary is not None else "Geen samenvatting beschikbaar."
+        estimated_value_str = (
+            str(estimated_value) if estimated_value is not None else "0"
+        )
+        summary_str = (
+            str(summary) if summary is not None else "Geen samenvatting beschikbaar."
+        )
         citations_str = "\n".join(citations) if citations else ""
 
         return estimated_value_str, summary_str, citations_str
@@ -784,4 +799,3 @@ def summarize_publication_with_files(
         logging.error(f"Failed to summarize files: {e}")
         # Return safe default values instead of None
         return "0", "Fout bij het genereren van samenvatting.", ""
-    
