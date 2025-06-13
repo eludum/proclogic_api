@@ -282,7 +282,9 @@ def get_or_create_contract_organization(
     return organization
 
 
-def get_or_create_contract(contract_schema: ContractSchema, session: Session) -> Contract:
+def get_or_create_contract(
+    contract_schema: ContractSchema, session: Session
+) -> Contract:
     contract = session.get(Contract, contract_schema.contract_id)
 
     contracting_authority = None
