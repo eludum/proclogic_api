@@ -275,7 +275,7 @@ def create_contract_organization(
     return organization
 
 
-def create_contract(contract_schema: ContractSchema, session: Session) -> Contract:
+def get_or_create_contract(contract_schema: ContractSchema, session: Session) -> Contract:
     contract = session.get(Contract, contract_schema.contract_id)
 
     contracting_authority = None
@@ -476,7 +476,7 @@ def get_or_create_publication(
 
         contract = None
         if publication_schema.contract:
-            contract = create_contract(publication_schema.contract, session)
+            contract = get_or_create_contract(publication_schema.contract, session)
 
         # Create new publication with updated fields
         publication = Publication(

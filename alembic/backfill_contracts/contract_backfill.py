@@ -4,6 +4,7 @@ Contract Backfill Script
 
 This script backfills contract data from pubproc API, working backwards from June 10, 2025.
 It fetches contracts data, stores XML files locally, and updates the database.
+When the daily request limit is reached, it sleeps until midnight and continues.
 
 Usage:
     python contract_backfill.py [--start-date YYYY-MM-DD] [--days-back N] [--dry-run]
@@ -46,6 +47,7 @@ class ContractBackfiller:
         self.xml_storage_path.mkdir(parents=True, exist_ok=True)
         self.requests_per_day = requests_per_day
         self.request_count = 0
+        self.daily_reset_time = None  # Track when we last reset the counter
         self.contracts_processed = 0
         self.contracts_updated = 0
         self.contracts_failed = 0
@@ -56,6 +58,49 @@ class ContractBackfiller:
         """Generate a UUID for BelGov-Trace-Id header"""
         return str(uuid.uuid4())
 
+    def reset_daily_counter_if_needed(self):
+        """Reset the request counter if it's a new day"""
+        now = datetime.now()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        if self.daily_reset_time is None or self.daily_reset_time < today_start:
+            if self.daily_reset_time is not None:
+                logger.info(
+                    f"New day started, resetting request counter from {self.request_count} to 0"
+                )
+            self.request_count = 0
+            self.daily_reset_time = today_start
+
+    async def sleep_until_midnight(self):
+        """Sleep until the next midnight (00:00:00)"""
+        now = datetime.now()
+        # Calculate next midnight
+        next_midnight = (now + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        sleep_duration = (next_midnight - now).total_seconds()
+
+        logger.info(
+            f"Daily request limit reached ({self.request_count}/{self.requests_per_day})"
+        )
+        logger.info(
+            f"Sleeping until next midnight ({next_midnight.strftime('%Y-%m-%d %H:%M:%S')}) - {sleep_duration:.0f} seconds"
+        )
+
+        await asyncio.sleep(sleep_duration)
+
+        # Reset the counter after sleeping
+        self.request_count = 0
+        self.daily_reset_time = next_midnight
+        logger.info("Midnight reached, request counter reset. Continuing processing...")
+
+    async def check_and_handle_rate_limit(self):
+        """Check if we've hit the rate limit and sleep if needed"""
+        self.reset_daily_counter_if_needed()
+
+        if self.request_count >= self.requests_per_day:
+            await self.sleep_until_midnight()
+
     async def get_contracts_for_date(
         self, client: httpx.AsyncClient, dispatch_date: date
     ) -> List[dict]:
@@ -63,9 +108,7 @@ class ContractBackfiller:
         Fetch all contracts for a specific dispatch date.
         First request gets the list of contracts using the shortLink.
         """
-        if self.request_count >= self.requests_per_day:
-            logger.warning(f"Daily request limit of {self.requests_per_day} reached")
-            return []
+        await self.check_and_handle_rate_limit()
 
         token = get_token()
         headers = {
@@ -105,9 +148,7 @@ class ContractBackfiller:
             if total_count > 100:
                 pages = (total_count + 99) // 100  # Ceiling division
                 for page in range(2, pages + 1):
-                    if self.request_count >= self.requests_per_day:
-                        logger.warning("Request limit reached during pagination")
-                        break
+                    await self.check_and_handle_rate_limit()
 
                     params["page"] = page
                     response = await client.get(url, params=params, headers=headers)
@@ -132,9 +173,7 @@ class ContractBackfiller:
         Fetch the XML content for a specific contract.
         This is the second request type mentioned in requirements.
         """
-        if self.request_count >= self.requests_per_day:
-            logger.warning(f"Daily request limit of {self.requests_per_day} reached")
-            return None
+        await self.check_and_handle_rate_limit()
 
         token = get_token()
         headers = {
@@ -237,26 +276,24 @@ class ContractBackfiller:
             publication = crud_publication.get_publication_by_workspace_id(
                 publication_workspace_id=publication_workspace_id, session=session
             )
-
+            
             if not publication:
-                logger.warning(
-                    f"Publication {publication_workspace_id} not found in database"
-                )
+                logger.error(f"Publication {publication_workspace_id} not found")
                 return False
 
             if dry_run:
                 logger.info(
-                    f"DRY RUN: Would update publication {publication_workspace_id}"
+                    f"DRY RUN: Would update publication {publication_workspace_id} with contract"
                 )
                 return True
 
-            # Create or update contract
-            contract = crud_publication.get_or_create_contract(
-                contract_schema=contract_schema, session=session
-            )
-
-            # Link contract to publication
-            publication.contract_id = contract.contract_id
+            # Create the contract using the existing create_contract function
+            contract = crud_publication.get_or_create_contract(contract_schema, session)
+            
+            # Link contract to publication directly on the SQLAlchemy model
+            publication.contract = contract
+            
+            session.add(publication)
             session.commit()
 
             logger.info(
@@ -268,7 +305,7 @@ class ContractBackfiller:
             logger.error(f"Error updating publication {publication_workspace_id}: {e}")
             session.rollback()
             return False
-
+        
     async def process_contracts_for_date(
         self, client: httpx.AsyncClient, dispatch_date: date, dry_run: bool = False
     ):
@@ -284,10 +321,6 @@ class ContractBackfiller:
 
         with get_session() as session:
             for contract_data in contracts:
-                if self.request_count >= self.requests_per_day:
-                    logger.warning("Daily request limit reached, stopping processing")
-                    break
-
                 publication_workspace_id = contract_data.get("publicationWorkspaceId")
                 if not publication_workspace_id:
                     logger.warning("Contract missing publicationWorkspaceId")
@@ -295,7 +328,7 @@ class ContractBackfiller:
 
                 self.contracts_processed += 1
 
-                # Get XML content
+                # Get XML content (this will handle rate limiting internally)
                 xml_content = await self.get_contract_xml(
                     client, publication_workspace_id
                 )
@@ -343,21 +376,20 @@ class ContractBackfiller:
         if dry_run:
             logger.info("DRY RUN MODE - No database changes will be made")
 
+        # Initialize the daily reset time
+        self.reset_daily_counter_if_needed()
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             current_date = start_date
 
             for day in range(days_back):
-                if self.request_count >= self.requests_per_day:
-                    logger.warning("Daily request limit reached, stopping backfill")
-                    break
-
                 await self.process_contracts_for_date(client, current_date, dry_run)
                 current_date -= timedelta(days=1)
 
                 # Log progress
                 logger.info(f"Progress: {day + 1}/{days_back} days processed")
                 logger.info(
-                    f"Requests used: {self.request_count}/{self.requests_per_day}"
+                    f"Requests used today: {self.request_count}/{self.requests_per_day}"
                 )
                 logger.info(
                     f"Contracts: {self.contracts_processed} processed, {self.contracts_updated} updated, {self.contracts_skipped} skipped, {self.contracts_failed} failed, {self.xml_download_failures} XML failures"
@@ -365,7 +397,6 @@ class ContractBackfiller:
 
         # Final summary
         logger.info("Backfill completed!")
-        logger.info(f"Total requests made: {self.request_count}")
         logger.info(f"Total contracts processed: {self.contracts_processed}")
         logger.info(f"Total contracts updated: {self.contracts_updated}")
         logger.info(f"Total contracts skipped (non-awards): {self.contracts_skipped}")
