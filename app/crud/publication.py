@@ -244,9 +244,15 @@ def create_contract_contact_person(
     return person
 
 
-def create_contract_organization(
+def get_or_create_contract_organization(
     org_schema: ContractOrganizationSchema, session: Session
 ) -> ContractOrganization:
+    organization = (
+        session.query(ContractOrganization)
+        .filter(ContractOrganization.business_id == org_schema.business_id)
+        .first()
+    )
+
     address = None
     if org_schema.address is not None:
         address = create_contract_address(org_schema.address, session=session)
@@ -257,20 +263,21 @@ def create_contract_organization(
             create_contract_contact_person(person_schema, session=session)
         )
 
-    organization = ContractOrganization(
-        name=org_schema.name,
-        business_id=org_schema.business_id,
-        website=org_schema.website,
-        phone=org_schema.phone,
-        email=org_schema.email,
-        company_size=org_schema.company_size,
-        subcontracting=org_schema.subcontracting,
-        address=address,
-        contact_persons=contact_persons,
-    )
+    if not organization:
+        organization = ContractOrganization(
+            name=org_schema.name,
+            business_id=org_schema.business_id,
+            website=org_schema.website,
+            phone=org_schema.phone,
+            email=org_schema.email,
+            company_size=org_schema.company_size,
+            subcontracting=org_schema.subcontracting,
+            address=address,
+            contact_persons=contact_persons,
+        )
 
-    session.add(organization)
-    session.flush()
+        session.add(organization)
+        session.flush()
 
     return organization
 
@@ -280,25 +287,25 @@ def get_or_create_contract(contract_schema: ContractSchema, session: Session) ->
 
     contracting_authority = None
     if contract_schema.contracting_authority is not None:
-        contracting_authority = create_contract_organization(
+        contracting_authority = get_or_create_contract_organization(
             contract_schema.contracting_authority, session
         )
 
     winning_publisher = None
     if contract_schema.winning_publisher is not None:
-        winning_publisher = create_contract_organization(
+        winning_publisher = get_or_create_contract_organization(
             contract_schema.winning_publisher, session
         )
 
     appeals_body = None
     if contract_schema.appeals_body is not None:
-        appeals_body = create_contract_organization(
+        appeals_body = get_or_create_contract_organization(
             contract_schema.appeals_body, session
         )
 
     service_provider = None
     if contract_schema.service_provider is not None:
-        service_provider = create_contract_organization(
+        service_provider = get_or_create_contract_organization(
             contract_schema.service_provider, session
         )
 
@@ -560,15 +567,30 @@ def get_publication_by_workspace_id(
                 joinedload(Publication.lots).joinedload(Lot.descriptions),
                 joinedload(Publication.lots).joinedload(Lot.titles),
                 joinedload(Publication.company_matches),
-                joinedload(Publication.contract).joinedload(Contract.contracting_authority).joinedload(ContractOrganization.address),
-                joinedload(Publication.contract).joinedload(Contract.contracting_authority).joinedload(ContractOrganization.contact_persons),
-                joinedload(Publication.contract).joinedload(Contract.winning_publisher).joinedload(ContractOrganization.address),
-                joinedload(Publication.contract).joinedload(Contract.winning_publisher).joinedload(ContractOrganization.contact_persons),
-                joinedload(Publication.contract).joinedload(Contract.appeals_body).joinedload(ContractOrganization.address),
-                joinedload(Publication.contract).joinedload(Contract.appeals_body).joinedload(ContractOrganization.contact_persons),
-                joinedload(Publication.contract).joinedload(Contract.service_provider).joinedload(ContractOrganization.address),
-                joinedload(Publication.contract).joinedload(Contract.service_provider).joinedload(ContractOrganization.contact_persons),
-
+                joinedload(Publication.contract)
+                .joinedload(Contract.contracting_authority)
+                .joinedload(ContractOrganization.address),
+                joinedload(Publication.contract)
+                .joinedload(Contract.contracting_authority)
+                .joinedload(ContractOrganization.contact_persons),
+                joinedload(Publication.contract)
+                .joinedload(Contract.winning_publisher)
+                .joinedload(ContractOrganization.address),
+                joinedload(Publication.contract)
+                .joinedload(Contract.winning_publisher)
+                .joinedload(ContractOrganization.contact_persons),
+                joinedload(Publication.contract)
+                .joinedload(Contract.appeals_body)
+                .joinedload(ContractOrganization.address),
+                joinedload(Publication.contract)
+                .joinedload(Contract.appeals_body)
+                .joinedload(ContractOrganization.contact_persons),
+                joinedload(Publication.contract)
+                .joinedload(Contract.service_provider)
+                .joinedload(ContractOrganization.address),
+                joinedload(Publication.contract)
+                .joinedload(Contract.service_provider)
+                .joinedload(ContractOrganization.contact_persons),
             )
             .first()
         )
