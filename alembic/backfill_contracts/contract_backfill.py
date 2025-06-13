@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.config.postgres import get_session
 from app.config.settings import Settings
+from app.models.publication_models import Publication
 from app.schemas.publication_contract_schemas import ContractSchema
 from app.util.pubproc_token import get_token
 import app.crud.publication as crud_publication
@@ -132,6 +133,9 @@ class ContractBackfiller:
             response = await client.get(url, params=params, headers=headers)
             self.request_count += 1
 
+            # Add 20-second delay after API request
+            await asyncio.sleep(20)
+
             if response.status_code != 200:
                 logger.error(
                     f"Failed to fetch contracts for {dispatch_date}: {response.status_code}"
@@ -153,6 +157,9 @@ class ContractBackfiller:
                     params["page"] = page
                     response = await client.get(url, params=params, headers=headers)
                     self.request_count += 1
+
+                    # Add 20-second delay after each pagination request
+                    await asyncio.sleep(20)
 
                     if response.status_code == 200:
                         page_data = response.json()
@@ -190,6 +197,9 @@ class ContractBackfiller:
             )
             response = await client.get(url, headers=headers)
             self.request_count += 1
+
+            # Add 20-second delay after API request
+            await asyncio.sleep(20)
 
             if response.status_code != 200:
                 logger.error(
@@ -272,11 +282,10 @@ class ContractBackfiller:
     ) -> bool:
         """Update existing publication with contract data"""
         try:
-            # Find existing publication
-            publication = crud_publication.get_publication_by_workspace_id(
-                publication_workspace_id=publication_workspace_id, session=session
-            )
-            
+            # Find existing publication - note: this function closes the session
+            # so we need to use a different approach
+            publication = session.get(Publication, publication_workspace_id)
+
             if not publication:
                 logger.error(f"Publication {publication_workspace_id} not found")
                 return False
@@ -288,11 +297,11 @@ class ContractBackfiller:
                 return True
 
             # Create the contract using the existing create_contract function
-            contract = crud_publication.get_or_create_contract(contract_schema, session)
-            
+            contract = crud_publication.create_contract(contract_schema, session)
+
             # Link contract to publication directly on the SQLAlchemy model
             publication.contract = contract
-            
+
             session.add(publication)
             session.commit()
 
@@ -305,7 +314,7 @@ class ContractBackfiller:
             logger.error(f"Error updating publication {publication_workspace_id}: {e}")
             session.rollback()
             return False
-        
+
     async def process_contracts_for_date(
         self, client: httpx.AsyncClient, dispatch_date: date, dry_run: bool = False
     ):
@@ -319,49 +328,44 @@ class ContractBackfiller:
             logger.info(f"No contracts found for {dispatch_date}")
             return
 
-        with get_session() as session:
-            for contract_data in contracts:
-                publication_workspace_id = contract_data.get("publicationWorkspaceId")
-                if not publication_workspace_id:
-                    logger.warning("Contract missing publicationWorkspaceId")
-                    continue
+        for contract_data in contracts:
+            publication_workspace_id = contract_data.get("publicationWorkspaceId")
+            if not publication_workspace_id:
+                logger.warning("Contract missing publicationWorkspaceId")
+                continue
 
-                self.contracts_processed += 1
+            self.contracts_processed += 1
 
-                # Get XML content (this will handle rate limiting internally)
-                xml_content = await self.get_contract_xml(
-                    client, publication_workspace_id
+            # Get XML content (this will handle rate limiting internally)
+            xml_content = await self.get_contract_xml(client, publication_workspace_id)
+            if not xml_content:
+                self.xml_download_failures += 1
+                continue
+
+            # Save XML locally
+            if not self.save_xml_locally(
+                publication_workspace_id, xml_content, dispatch_date
+            ):
+                logger.warning(f"Failed to save XML for {publication_workspace_id}")
+
+            # Parse contract data using the existing XML extraction function
+            contract_schema = self.parse_contract_data(contract_data, xml_content)
+            if not contract_schema:
+                # This is expected for non-award notices, don't count as failure
+                logger.debug(
+                    f"Skipping {publication_workspace_id} - not an award notice or parsing failed"
                 )
-                if not xml_content:
-                    self.xml_download_failures += 1
-                    continue
+                self.contracts_skipped += 1
+                continue
 
-                # Save XML locally
-                if not self.save_xml_locally(
-                    publication_workspace_id, xml_content, dispatch_date
-                ):
-                    logger.warning(f"Failed to save XML for {publication_workspace_id}")
-
-                # Parse contract data using the existing XML extraction function
-                contract_schema = self.parse_contract_data(contract_data, xml_content)
-                if not contract_schema:
-                    # This is expected for non-award notices, don't count as failure
-                    logger.debug(
-                        f"Skipping {publication_workspace_id} - not an award notice or parsing failed"
-                    )
-                    self.contracts_skipped += 1
-                    continue
-
-                # Update database
+            # Update database - create new session for each update
+            with get_session() as session:
                 if await self.update_publication_with_contract(
                     session, publication_workspace_id, contract_schema, dry_run
                 ):
                     self.contracts_updated += 1
                 else:
                     self.contracts_failed += 1
-
-                # Add small delay to be respectful to the API
-                await asyncio.sleep(0.1)
 
     async def run_backfill(
         self, start_date: date, days_back: int, dry_run: bool = False
