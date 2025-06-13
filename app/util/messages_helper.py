@@ -1,7 +1,29 @@
 from datetime import datetime
-from app.config.postgres import get_session
-import app.crud.notification as crud_notification
+
 import app.crud.company as crud_company
+import app.crud.notification as crud_notification
+from app.config.postgres import get_session
+
+
+def smart_truncate_publication_title(
+    publication_title: str, max_length: int = 200
+) -> str:
+    """
+    Smart truncation for publication titles, preserving meaning by cutting at word boundaries.
+    Leaves room for the notification suffix text.
+    """
+    if len(publication_title) <= max_length:
+        return publication_title
+
+    # Try to truncate at word boundary
+    truncated = publication_title[: max_length - 3]
+    last_space = truncated.rfind(" ")
+
+    # Only use word boundary if we don't lose too much content (more than 80% retained)
+    if last_space > max_length * 0.8:
+        truncated = truncated[:last_space]
+
+    return truncated + "..."
 
 
 async def send_recommendation_notification(
@@ -16,8 +38,11 @@ async def send_recommendation_notification(
         if not company:
             return False
 
+        # Truncate only the publication title, leaving room for the suffix
+        truncated_title = smart_truncate_publication_title(publication_title)
+        
         crud_notification.create_notification(
-            title=f"'{publication_title}' is aanbevolen voor jou door Procy",
+            title=f"'{truncated_title}' is aanbevolen voor jou door Procy",
             content=f"Wees er snel bij, inschrijven kan nog tot {publication_submission_deadline}",
             notification_type="recommendation",
             company_vat_number=company_vat_number,
