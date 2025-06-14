@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?><ContractAwardNotice xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2" xmlns="urn:oasis:names:specification:ubl:schema:xsd:ContractAwardNotice-2" xmlns:ns8="urn:oasis:names:specification:ubl:schema:xsd:ContractNotice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:ns9="urn:oasis:names:specification:ubl:schema:xsd:PriorInformationNotice-2" xmlns:efac="http://data.europa.eu/p27/eforms-ubl-extension-aggregate-components/1" xmlns:efbc="http://data.europa.eu/p27/eforms-ubl-extension-basic-components/1" xmlns:efext="http://data.europa.eu/p27/eforms-ubl-extensions/1"><ext:UBLExtensions><ext:UBLExtension><ext:ExtensionContent><efext:EformsExtension><efbc:TransmissionDate>2025-06-06+02:00</efbc:TransmissionDate><efbc:TransmissionTime>00:00:00+02:00</efbc:TransmissionTime><efac:NoticeResult><efac:LotResult><cbc:ID schemeName="result">RES-0001</cbc:ID><cbc:TenderResultCode listName="winner-selection-status">clos-nw</cbc:TenderResultCode><efac:DecisionReason><efbc:DecisionReasonCode listName="non-award-justification">all-rej</efbc:DecisionReasonCode></efac:DecisionReason><efac:ReceivedSubmissionsStatistics><efbc:StatisticsCode listName="received-submission-type">tenders</efbc:StatisticsCode><efbc:StatisticsNumeric>1</efbc:StatisticsNumeric></efac:ReceivedSubmissionsStatistics><efac:TenderLot><cbc:ID schemeName="Lot">LOT-0001</cbc:ID></efac:TenderLot></efac:LotResult></efac:NoticeResult><efac:NoticeSubType><cbc:SubTypeCode listName="notice-subtype">29</cbc:SubTypeCode></efac:NoticeSubType><efac:Organizations><efac:Organization><efac:Company><cbc:WebsiteURI>https://www.chba.be</cbc:WebsiteURI><cac:PartyIdentification><cbc:ID schemeName="organization">ORG-0001</cbc:ID></cac:PartyIdentification><cac:PartyName><cbc:Name languageID="FRA">Centre Hospitalier Bois de l'Abbaye</cbc:Name></cac:PartyName><cac:PostalAddress><cbc:StreetName>Rue Laplace 40</cbc:StreetName><cbc:Department>Centrale d'achat du Centre Hospitalier Bois de l'Abbaye</cbc:Department><cbc:CityName>Seraing</cbc:CityName><cbc:PostalZone>4100</cbc:PostalZone><cbc:CountrySubentityCode listName="nuts">BE332</cbc:CountrySubentityCode><cac:Country><cbc:IdentificationCode listName="country">BEL</cbc:IdentificationCode></cac:Country></cac:PostalAddress><cac:PartyLegalEntity><cbc:CompanyID>0203980409_8861</cbc:CompanyID></cac:PartyLegalEntity><cac:Contact><cbc:Telephone>+32 43387000</cbc:Telephone><cbc:Telefax>+32 43387050</cbc:Telefax><cbc:ElectronicMail>v.lacroix@chba.be</cbc:ElectronicMail></cac:Contact></efac:Company></efac:Organization><efac:Organization><efac:Company><cbc:WebsiteURI>https://bosa.belgium.be</cbc:WebsiteURI><cac:PartyIdentification><cbc:ID schemeName="organization">ORG-0002</cbc:ID></cac:PartyIdentification><cac:PartyName><cbc:Name languageID="FRA">SPF Stratégie et Appui</cbc:Name></cac:PartyName><cac:PostalAddress><cbc:StreetName>Boulevard Simon Bolivar 30 Bte1</cbc:StreetName><cbc:CityName>Bruxelles</cbc:CityName><cbc:PostalZone>1000</cbc:PostalZone><cbc:CountrySubentityCode listName="nuts">BE100</cbc:CountrySubentityCode><cac:Country><cbc:IdentificationCode listName="country">BEL</cbc:IdentificationCode></cac:Country></cac:PostalAddress><cac:PartyLegalEntity><cbc:CompanyID>BE001</cbc:CompanyID></cac:PartyLegalEntity><cac:Contact><cbc:Telephone>+32 2 740 80 00</cbc:Telephone><cbc:ElectronicMail>revise@publicprocurement.be</cbc:ElectronicMail></cac:Contact></efac:Company></efac:Organization><efac:Organization><efac:Company><cac:PartyIdentification><cbc:ID schemeName="organization">ORG-0003</cbc:ID></cac:PartyIdentification><cac:PartyName><cbc:Name languageID="FRA">Conseil d'État</cbc:Name></cac:PartyName><cac:PostalAddress><cbc:CityName>Bruxelles</cbc:CityName><cbc:PostalZone>1040</cbc:PostalZone><cbc:CountrySubentityCode listName="nuts">BE100</cbc:CountrySubentityCode><cac:Country><cbc:IdentificationCode listName="country">BEL</cbc:IdentificationCode></cac:Country></cac:PostalAddress><cac:PartyLegalEntity><cbc:CompanyID>0931.814.266</cbc:CompanyID></cac:PartyLegalEntity><cac:Contact><cbc:Telephone>0022349611</cbc:Telephone><cbc:ElectronicMail>info@conseildetat.be</cbc:ElectronicMail></cac:Contact></efac:Company></efac:Organization></efac:Organizations></efext:EformsExtension></ext:ExtensionContent></ext:UBLExtension></ext:UBLExtensions><cbc:UBLVersionID>2.3</cbc:UBLVersionID><cbc:CustomizationID>eforms-sdk-1.13</cbc:CustomizationID><cbc:ID schemeName="notice-id">7dd24902-6cb2-4cc0-bf1c-fdfa366bc224</cbc:ID><cbc:ContractFolderID>d1311780-1f9b-477d-a280-28e7fb8e97bc</cbc:ContractFolderID><cbc:IssueDate>2025-06-06+02:00</cbc:IssueDate><cbc:IssueTime>00:00:00+02:00</cbc:IssueTime><cbc:VersionID>01</cbc:VersionID><cbc:RequestedPublicationDate>2025-06-10+02:00</cbc:RequestedPublicationDate><cbc:RegulatoryDomain>32014L0024</cbc:RegulatoryDomain><cbc:NoticeTypeCode listName="result">can-standard</cbc:NoticeTypeCode><cbc:NoticeLanguageCode listName="language">FRA</cbc:NoticeLanguageCode><cac:ContractingParty><cbc:BuyerProfileURI>https://www.publicprocurement.be/bda?organisationIds=8861&amp;includeOrganisationChildren=true</cbc:BuyerProfileURI><cac:ContractingPartyType><cbc:PartyTypeCode listName="buyer-legal-type">la</cbc:PartyTypeCode></cac:ContractingPartyType><cac:ContractingActivity><cbc:ActivityTypeCode listName="authority-activity">health</cbc:ActivityTypeCode></cac:ContractingActivity><cac:Party><cac:PartyIdentification><cbc:ID schemeName="organization">ORG-0001</cbc:ID></cac:PartyIdentification><cac:ServiceProviderParty><cbc:ServiceTypeCode listName="organisation-role">ted-esen</cbc:ServiceTypeCode><cac:Party><cac:PartyIdentification><cbc:ID schemeName="organization">ORG-0002</cbc:ID></cac:PartyIdentification></cac:Party></cac:ServiceProviderParty></cac:Party></cac:ContractingParty><cac:TenderingProcess><cbc:ProcedureCode listName="procurement-procedure-type">open</cbc:ProcedureCode><cac:ProcessJustification><cbc:ProcessReasonCode listName="accelerated-procedure">false</cbc:ProcessReasonCode></cac:ProcessJustification></cac:TenderingProcess><cac:ProcurementProject><cbc:ID schemeName="InternalID">CF04-24</cbc:ID><cbc:Name languageID="FRA">FOURNITURE DE CAPTEURS CGM POUR LA GLYCEMIE </cbc:Name><cbc:Description languageID="FRA">Il s’agit d’un marché de fournitures, ayant pour objet l’achat et passé forme d’accord-cadre relatif à la fourniture de capteurs CGM pour la glycémie à destination de divers pouvoirs adjudicateurs bénéficiaires.</cbc:Description><cbc:ProcurementTypeCode listName="contract-nature">supplies</cbc:ProcurementTypeCode><cac:MainCommodityClassification><cbc:ItemClassificationCode listName="cpv">38434540</cbc:ItemClassificationCode></cac:MainCommodityClassification><cac:RealizedLocation><cac:Address><cbc:CountrySubentityCode listName="nuts">BE332</cbc:CountrySubentityCode><cac:Country><cbc:IdentificationCode listName="country">BEL</cbc:IdentificationCode></cac:Country></cac:Address></cac:RealizedLocation></cac:ProcurementProject><cac:ProcurementProjectLot><cbc:ID schemeName="Lot">LOT-0001</cbc:ID><cac:TenderingTerms><ext:UBLExtensions><ext:UBLExtension><ext:ExtensionContent><efext:EformsExtension><efac:StrategicProcurement><efbc:ApplicableLegalBasis listName="cvd-scope">false</efbc:ApplicableLegalBasis></efac:StrategicProcurement></efext:EformsExtension></ext:ExtensionContent></ext:UBLExtension></ext:UBLExtensions><cbc:FundingProgramCode listName="eu-funded">no-eu-funds</cbc:FundingProgramCode><cac:AwardingTerms><cac:AwardingCriterion><cac:SubordinateAwardingCriterion><ext:UBLExtensions><ext:UBLExtension><ext:ExtensionContent><efext:EformsExtension><efac:AwardCriterionParameter><efbc:ParameterCode listName="number-weight">poi-exa</efbc:ParameterCode><efbc:ParameterNumeric>50</efbc:ParameterNumeric></efac:AwardCriterionParameter></efext:EformsExtension></ext:ExtensionContent></ext:UBLExtension></ext:UBLExtensions><cbc:AwardingCriterionTypeCode listName="award-criterion-type">price</cbc:AwardingCriterionTypeCode><cbc:Description languageID="FRA">Les points seront attribués selon la formule suivante:
+
+50 x montant du prix de journée la plus basse
+ Montant du prix de journée de l'offre concernée
+</cbc:Description></cac:SubordinateAwardingCriterion><cac:SubordinateAwardingCriterion><ext:UBLExtensions><ext:UBLExtension><ext:ExtensionContent><efext:EformsExtension><efac:AwardCriterionParameter><efbc:ParameterCode listName="number-weight">poi-exa</efbc:ParameterCode><efbc:ParameterNumeric>50</efbc:ParameterNumeric></efac:AwardCriterionParameter></efext:EformsExtension></ext:ExtensionContent></ext:UBLExtension></ext:UBLExtensions><cbc:AwardingCriterionTypeCode listName="award-criterion-type">quality</cbc:AwardingCriterionTypeCode><cbc:Description languageID="FRA">2	Qualité des produits	45
+	Méthode d’évaluation : 
+Qualité du capteur		31 points
+Sous-critère	Pondération	Base de cotation	Méthode de calcul
+Facilité de placement 	3 points	Test	Comité évaluateur
+Echelle de cotation 
+(point VI)
+Autonomie 	3 points	Fiches techniques	10 jours : 0 point
+La + grande autonomie : 3 points
+Etanchéité	2 points	Fiches techniques	Le + grands étanchéité : 2 points
+Règle de 3
+Le + petite étanchéité : 0 point
+Présence de colle IBOA	1 point	Fiches techniques	OUI : 1 point
+NON : 0 point
+Douleur à la mise en place	3 points	Test	Comité évaluateur
+Echelle de cotation 
+(point VI)
+Taille	5 points	Fiches techniques	La + petit taille : 5 points
+Règle de 3
+La + grande taille : 0 point
+Epaisseur	4 points	Fiches techniques	La + petit taille : 4 points
+Règle de 3
+La + grande taille : 0 point
+Temps de préchauffage	3 points	Fiches techniques	Le + petit temps de préchauffage : 3 points
+Règle de 3
+Le + long temps de préchauffage : 0 point
+Intervalle entre chaque prise de mesures du glucose	4 points	Fiches techniques	Le + petit intervalle : 4 points
+Règle de 3
+Toutes les 5 minutes  : 0 point
+Stabilité de la connexion entre le capteur et le récepteur (application, …)	2 points	Test	Comité évaluateur
+Echelle de cotation 
+(point VI)
+Capacité d’enregistrement	1 point	Fiches techniques	La + grande capacité : 1 point
+Règle de 3
+Le + petite capacité : 0 point
+La qualité technique des fournitures proposées sera évaluée sur base des caractéristiques techniques du matériel proposé, des fiches techniques, des éventuels tests et de tout élément jugé pertinent dans l’offre.
+
+Qualité de l’application, du lecteur/récepteur	14 points
+Sous-critère	Pondération	Base de cotation	Méthode de calcul
+Possibilité de partager les résultats avec des membres de la famille ou amis 	1 point	Fiches techniques	OUI : 1 point
+NON : 0 points
+Affichage d’un maximum d’instructions claires sur l’écran (glycémie, état et autonomie du système, graphique, …) en couleur	2 points	Fiches techniques	OUI : 2 points
+NON : 0 points
+Affichage des résultats avec des tendances permettant une anticipation thérapeutique éventuelle	2 points	Fiches techniques	OUI :2 points
+NON : 0 points
+Le système permet d’activer des alarmes hypo-hyper personnalisées	2 points	Fiches techniques	OUI : 2 points
+NON : 0 points
+Facilité d’utilisation	2 points	Test	Comité évaluateur
+Echelle de cotation 
+(point VI)
+Facilité de lecture et d’analyse des données sur l’application	2 points	Test	Comité évaluateur
+Echelle de cotation 
+(point VI)
+Possibilité de réaliser un test capillaire avec le lecteur	3 points	Fiches techniques	OUI : 3 points
+NON : 0 points
+
+Les offres n’atteignant pas un minimum de 60% pour ce critère, seront exclues.
+3	Service après-vente et formation	5
+	La qualité du service après-vente et de la formation sera évaluée sur base des mémoires remis.
+Sous-critère	Pondération	Base de cotation	Méthode de calcul
+Support technico-commerciale 	3 points	Mémoire	Comité évaluateur
+Echelle de cotation 
+(point VI)
+Formation continue pour le personnel	2 points	Mémoire	Comité évaluateur
+Echelle de cotation 
+(point VI)
+ Le soumissionnaire joindra obligatoirement à son offre un mémoire d’une page A4 en Arial 10 pour le service après-vente et une pour la formation.
+</cbc:Description></cac:SubordinateAwardingCriterion></cac:AwardingCriterion></cac:AwardingTerms><cac:AppealTerms><cac:PresentationPeriod><cbc:Description languageID="FRA">I.24.1 Recours en annulation
+
+Ce recours doit être introduit sous peine d’irrecevabilité dans les 60 jours après l’information et être adressé au Conseil d’Etat.
+I.24.2 Recours en suspension
+
+Ce recours doit être introduit sous peine d’irrecevabilité dans les 15 jours après l’information et être adressé au Conseil d’Etat.
+I.24.3 Dommages et intérêts
+
+Ce recours doit être introduit sous peine d’irrecevabilité dans les 5 ans et être adressé au Juge Judiciaire.
+
+
+I.24.4 Déclaration d’absence d’effets
+	
+Ce recours doit être introduit sous peine d’irrecevabilité dans les 30 jours de la publication de l’avis d’attribution de marché ou dans les 30 jours de l’information des soumissionnaires concernés, et être adressé au Juge Judiciaire.
+I.24.5 Sanctions de substitution
+	
+Ce recours doit être introduit sous peine d’irrecevabilité dans les 6 mois de la publication de l’avis d’attribution de marché, de l’information ou de la prise de connaissance de l’acte, et être adressé au Juge Judiciaire siégeant en référé.
+</cbc:Description></cac:PresentationPeriod><cac:AppealReceiverParty><cac:PartyIdentification><cbc:ID schemeName="organization">ORG-0003</cbc:ID></cac:PartyIdentification></cac:AppealReceiverParty></cac:AppealTerms></cac:TenderingTerms><cac:TenderingProcess><cbc:GovernmentAgreementConstraintIndicator>true</cbc:GovernmentAgreementConstraintIndicator><cac:AuctionTerms><cbc:AuctionConstraintIndicator>false</cbc:AuctionConstraintIndicator></cac:AuctionTerms><cac:FrameworkAgreement><cac:SubsequentProcessTenderRequirement><cbc:Name>buyer-categories</cbc:Name></cac:SubsequentProcessTenderRequirement></cac:FrameworkAgreement><cac:ContractingSystem><cbc:ContractingSystemTypeCode listName="framework-agreement">fa-wo-rc</cbc:ContractingSystemTypeCode></cac:ContractingSystem><cac:ContractingSystem><cbc:ContractingSystemTypeCode listName="dps-usage">none</cbc:ContractingSystemTypeCode></cac:ContractingSystem></cac:TenderingProcess><cac:ProcurementProject><cbc:ID schemeName="InternalID">1</cbc:ID><cbc:Name languageID="FRA">CF04-24 - 1</cbc:Name><cbc:Description languageID="FRA">Capteurs CGM pour la glycémie</cbc:Description><cbc:ProcurementTypeCode listName="contract-nature">supplies</cbc:ProcurementTypeCode><cac:MainCommodityClassification><cbc:ItemClassificationCode listName="cpv">38434540</cbc:ItemClassificationCode></cac:MainCommodityClassification><cac:RealizedLocation><cac:Address><cbc:CountrySubentityCode listName="nuts">BE332</cbc:CountrySubentityCode><cac:Country><cbc:IdentificationCode listName="country">BEL</cbc:IdentificationCode></cac:Country></cac:Address></cac:RealizedLocation><cac:PlannedPeriod><cbc:StartDate>2025-04-01+02:00</cbc:StartDate><cbc:DurationMeasure unitCode="YEAR">4</cbc:DurationMeasure></cac:PlannedPeriod></cac:ProcurementProject></cac:ProcurementProjectLot><cac:TenderResult><cbc:AwardDate>2000-01-01+01:00</cbc:AwardDate></cac:TenderResult></ContractAwardNotice>
