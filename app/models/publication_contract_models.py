@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import List
 from sqlalchemy import (
     DateTime,
     Integer,
@@ -12,7 +11,6 @@ from sqlalchemy.orm import (
     relationship,
 )
 from app.models.base import Base
-
 
 class ContractAddress(Base):
     __tablename__ = "contract_addresses"
@@ -76,9 +74,7 @@ class ContractContactPerson(Base):
     phone: Mapped[str] = mapped_column(String(50))
     email: Mapped[str] = mapped_column(String(255))
 
-    organization_id: Mapped[int] = mapped_column(
-        ForeignKey("contract_organizations.id")
-    )
+    organization_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
 
     # Relationships
     organization: Mapped["ContractOrganization"] = relationship(
@@ -90,9 +86,7 @@ class Contract(Base):
     __tablename__ = "contracts"
 
     notice_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    contract_id: Mapped[str] = mapped_column(
-        String(100), unique=True, nullable=False, primary_key=True
-    )
+    contract_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, primary_key=True)
     internal_id: Mapped[str] = mapped_column(String(255), unique=True)
     issue_date: Mapped[datetime] = mapped_column(DateTime)
     notice_type: Mapped[str] = mapped_column(String(100))
@@ -111,18 +105,10 @@ class Contract(Base):
     framework_agreement: Mapped[str] = mapped_column(String(50))
 
     # Foreign Keys
-    contracting_authority_id: Mapped[int] = mapped_column(
-        ForeignKey("contract_organizations.id")
-    )
-    winning_publisher_id: Mapped[int] = mapped_column(
-        ForeignKey("contract_organizations.id")
-    )
-    appeals_body_id: Mapped[int] = mapped_column(
-        ForeignKey("contract_organizations.id")
-    )
-    service_provider_id: Mapped[int] = mapped_column(
-        ForeignKey("contract_organizations.id")
-    )
+    contracting_authority_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
+    winning_publisher_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
+    appeals_body_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
+    service_provider_id: Mapped[int] = mapped_column(ForeignKey("contract_organizations.id"))
 
     # Relationships
     contracting_authority: Mapped["ContractOrganization"] = relationship(
@@ -141,10 +127,3 @@ class Contract(Base):
         foreign_keys=[service_provider_id],
         back_populates="contracts_as_service_provider",
     )
-
-    email_tracking: Mapped[List["ContractEmailTracking"]] = relationship(
-        back_populates="contract"
-    )
-
-
-from app.models.email_models import ContractEmailTracking
