@@ -1,0 +1,9 @@
+pytest
+pytest-asyncio
+pytest-cov
+pytest-mock
+httpx
+factory-boy
+faker
+pytest-env
+freezegun
