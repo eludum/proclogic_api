@@ -269,7 +269,9 @@ class Publication(Base):
     conversations: Mapped[List["Conversation"]] = relationship(
         back_populates="publication"
     )
-    status_entries: Mapped[List["PublicationStatus"]] = relationship(back_populates="publication", cascade="all, delete-orphan")
+    status_entries: Mapped[List["PublicationStatus"]] = relationship(
+        back_populates="publication", cascade="all, delete-orphan"
+    )
 
     # Helper properties
     @property
@@ -277,8 +279,6 @@ class Publication(Base):
         """Check if the publication is still active based on submission deadline"""
         if not self.vault_submission_deadline:
             return False
-        from datetime import datetime
-
         return self.vault_submission_deadline > datetime.now()
 
     @property
