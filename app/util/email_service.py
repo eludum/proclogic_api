@@ -7,8 +7,11 @@ from typing import Any, Dict, Optional
 from sqlalchemy.orm import Session
 
 from app.ai.openai import get_openai_client
+from app.config.settings import Settings
 from app.models.email_models import ContractEmailTracking
 from app.models.publication_contract_models import Contract
+
+settings = Settings()
 
 
 class ContractEmailService:
@@ -17,9 +20,7 @@ class ContractEmailService:
     def __init__(self):
         self.openai_client = get_openai_client()
         self.smtp_server = "sandbox.smtp.mailtrap.io"
-        self.smtp_port = 2525
-        self.smtp_user = "44230b56ee39ca"
-        self.smtp_password = "76cc41676b4f36"
+        self.smtp_port = 587
         self.sender_email = "ProcLogic Team <team@proclogic.be>"
 
     async def send_contract_winner_email(
@@ -249,7 +250,7 @@ class ContractEmailService:
             # Send email
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
                 server.starttls()
-                server.login(self.smtp_user, self.smtp_password)
+                server.login("api", settings.mailtrap_token)
                 server.send_message(msg)
 
             logging.info(f"Email sent successfully to {recipient_email}")
