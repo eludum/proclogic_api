@@ -182,26 +182,11 @@ def get_related_awarded_contracts(
     Find related awarded contracts based on the given publication.
     Returns list of (publication, similarity_score, similarity_reason).
     """
+    # TODO: use pgai here too?
     return get_related_publications(
         publication=publication,
         session=session,
         include_awarded=True,
         include_active=False,
-        limit=limit,
-    )
-
-
-def get_related_active_publications(
-    publication: Publication, session: Session, limit: int = 10
-) -> List[Tuple[Publication, float, str]]:
-    """
-    Find related active publications based on the given publication.
-    Returns list of (publication, similarity_score, similarity_reason).
-    """
-    return get_related_publications(
-        publication=publication,
-        session=session,
-        include_awarded=False,
-        include_active=True,
         limit=limit,
     )

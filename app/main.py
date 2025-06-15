@@ -19,8 +19,14 @@ from app.routers.publications import publications_router
 from app.routers.stripe import stripe_router
 from app.routers.users import users_router
 from app.util.alembic_runner import run_migration
-from app.util.pubproc import (fetch_pubproc_data, gather_notifications,
-                              update_pubproc_data)
+from app.util.publication_utils.semantic_embedding_maintenance import (
+    maintain_embeddings,
+)
+from app.util.pubproc import (
+    fetch_pubproc_data,
+    gather_notifications,
+    update_pubproc_data,
+)
 
 settings = Settings()
 
@@ -44,6 +50,7 @@ async def lifespan(app: FastAPI):
             background_tasks.append(asyncio.create_task(fetch_pubproc_data()))
             background_tasks.append(asyncio.create_task(update_pubproc_data()))
             background_tasks.append(asyncio.create_task(gather_notifications()))
+            background_tasks.append(asyncio.create_task(maintain_embeddings()))
 
             # Yield control back to the application
             yield
