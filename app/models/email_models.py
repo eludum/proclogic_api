@@ -17,6 +17,7 @@ from app.models.base import Base
 
 class ContractEmailTracking(Base):
     """Track emails sent to contract winners"""
+
     __tablename__ = "contract_email_tracking"
 
     id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True)
@@ -25,12 +26,14 @@ class ContractEmailTracking(Base):
     recipient_name: Mapped[str] = mapped_column(String(255))
     email_subject: Mapped[str] = mapped_column(String(500))
     email_content: Mapped[str] = mapped_column(Text)
-    email_type: Mapped[str] = mapped_column(String(50), default="contract_winner_notification")
-    
+    email_type: Mapped[str] = mapped_column(
+        String(50), default="contract_winner_notification"
+    )
+
     # Tracking fields
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     is_delivered: Mapped[bool] = mapped_column(Boolean, default=True)
     delivery_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    
+
     # Relationships
     contract = relationship("Contract", back_populates="email_tracking")

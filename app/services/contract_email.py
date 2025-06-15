@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.publication_contract_models import Contract
 from app.util.email_service import ContractEmailService
-from app.ai.openai import get_openai_client
+
 
 async def handle_new_contract_created(
     contract: Contract, session: Session, custom_message: Optional[str] = None
