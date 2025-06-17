@@ -3,13 +3,11 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.publication_contract_models import Contract
+from app.models.publication_models import Publication
 from app.util.email_service import ContractEmailService
 
 
-async def handle_new_contract_created(
-    contract: Contract, session: Session, custom_message: Optional[str] = None
-):
+async def handle_new_contract_created(publication: Publication, session: Session):
     """
     Handle new contract creation - send automatic email to winner
 
@@ -21,7 +19,7 @@ async def handle_new_contract_created(
 
         # Send email to contract winner
         success = await email_service.send_contract_winner_email(
-            contract=contract, session=session, custom_message=custom_message
+            publication=publication, session=session
         )
 
         if success:

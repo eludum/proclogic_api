@@ -222,7 +222,7 @@ async def process_publication_contract(
             publication_schema=pub, session=session
         )
         await handle_new_contract_created(
-            contract=contract,
+            publication=pub,
             session=session,
         )
     else:
