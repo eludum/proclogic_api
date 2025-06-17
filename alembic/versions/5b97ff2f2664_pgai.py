@@ -18,7 +18,7 @@ down_revision: Union[str, None] = "9dc262f2c7ac"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
+# TODO: make something without cron, just do it in the event startup, also write something for the old ones
 def upgrade() -> None:
     # Enable required extensions
     op.execute("CREATE EXTENSION IF NOT EXISTS ai CASCADE;")

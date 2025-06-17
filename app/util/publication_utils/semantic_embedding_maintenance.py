@@ -126,7 +126,7 @@ async def ensure_embeddings_for_active_publications():
         except Exception as e:
             logging.error(f"Error checking for missing embeddings: {e}")
 
-
+# TODO: embed this into lifecycle every 5 min
 # Add this to your background tasks in main.py or pubproc.py
 async def maintain_embeddings():
     """Periodic task to maintain embeddings."""

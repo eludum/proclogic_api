@@ -8,7 +8,7 @@ from app.config.settings import Settings
 
 settings = Settings()
 
-
+# TODO: also give similar contracts
 class SemanticSearchEngine:
     """Handle semantic search operations using pgai vectorizer."""
 
@@ -18,7 +18,6 @@ class SemanticSearchEngine:
         query: str,
         limit: int = 100,
         similarity_threshold: float = 0.7,
-        company_vat_number: Optional[str] = None,
         region_filter: Optional[List[str]] = None,
         sector_filter: Optional[List[str]] = None,
         active_only: bool = True,
@@ -31,7 +30,6 @@ class SemanticSearchEngine:
             query: Search query text
             limit: Maximum number of results
             similarity_threshold: Minimum similarity score (0-1)
-            company_vat_number: Optional company VAT for personalized results # TODO: not implemented
             region_filter: Optional NUTS codes filter
             sector_filter: Optional CPV sector filter
             active_only: Only return active publications
