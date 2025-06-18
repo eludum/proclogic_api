@@ -1,7 +1,9 @@
 import logging
+from pathlib import Path
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from string import Template
 from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
@@ -95,9 +97,8 @@ class ContractEmailService:
             )
             return False
 
-    # TODO: run mail through claude one last time
     def _get_email_template(self, publication: Publication) -> str:
-        """Fallback email template if OpenAI fails"""
+        """Generate email template with proper formatting"""
         # Prepare contract data for personalization
         pub_out = PublicationConverter.to_output_schema(publication=publication)
         contract = publication.contract
@@ -118,58 +119,15 @@ class ContractEmailService:
             ),
             "notice_type": contract.notice_type,
         }
-        return f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h2 style="color: #2563eb;">Proficiat met uw contractwin!</h2>
-                
-                <p>Beste {contract_data['winner_name']},</p>
-                
-                <p>Van harte gefeliciteerd met het binnenhalen van de volgende gunning:</p>
-                
-                <div style="background-color: #f8f9fa; padding: 15px; border-left: 4px solid #2563eb; margin: 20px 0;">
-                    <ul style="margin: 0; list-style-type: none; padding: 0;">
-                        <li><strong>Titel:</strong> {contract_data['title']}</li>
-                        <li><strong>Uitgiftedatum:</strong> {contract_data['issue_date']}</li>
-                        <li><strong>Aanbestedende overheid:</strong> {contract_data['contracting_authority']}</li>
-                    </ul>
-                </div>
-                
-                <p>Wil je in de toekomst nog meer contracten winnen? <a href="https://proclogic.be" style="color: #2563eb;">ProcLogic</a> helpt je daarbij. 
-                Met onze slimme AI-tool vind, analyseer en selecteer je razendsnel de aanbestedingen die écht bij je bedrijf passen. Geen tijdverlies, wel direct overzicht.</p>              
-                <div style="background-color: #eff6ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                    <h4 style="margin-top: 0; color: #1e40af;">Wat kan je verwachten van ProcLogic?</h4>
-                    <ul style="color: #374151;">
-                        <li>Gepersonaliseerde aanbevelingen die aansluiten op je profiel/li>
-                        <li>Je AI-assistent Procy, die 24/7 voor je klaarstaat</li>
-                        <li>Concurrentieanalyse: zie wie er meedingt op vergelijkbare projecten</li>
-                        <li>Automatische reminders zodat je nooit meer een deadline mist</li>
-                    </ul>
-                </div>
-                
-                <p><strong>Klaar om het maximale uit aanbestedingen te halen? Plan dan nu een gratis demo in. We laten je graag zien hoe ProcLogic werkt en wat het voor jou kan betekenen:</strong></p>
-                
-                <div style="text-align: center; margin: 30px 0;">
-                    <a href="https://calendly.com/koselogic-info/30min" 
-                       style="background-color: #2563eb; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
-                        Boek een demo →
-                    </a>
-                </div>
-                
-                <p style="color: #6b7280; font-size: 14px;">
-                    Op naar je volgende winst!<br>
-                    <br>
-                    Met vriendelijke groeten,<br>
-                    <strong>Het ProcLogic Team</strong><br>
-                    <a href="mailto:info@proclogic.be" style="color: #2563eb;">info@proclogic.be</a>
-                    <a href="tel:+32489895836" style="color: #2563eb;">+32 4 89 89 58 36</a>
-                    <a href="https://proclogic.be" style="color: #2563eb;">proclogic.be</a>
-                </p>
-            </div>
-        </body>
-        </html>
-        """
+
+        # Load template from external file
+        template_path = Path(__file__).parent / "contract_win_email.html"
+        with open(template_path, "r", encoding="utf-8") as f:
+            template_content = f.read()
+
+        # Use Template class for safer substitution
+        template = Template(template_content)
+        return template.safe_substitute(contract_data)
 
     async def _send_email(
         self, recipient_email: str, recipient_name: str, subject: str, content: str
