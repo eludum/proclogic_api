@@ -23,11 +23,11 @@ async def handle_new_contract_created(publication: Publication, session: Session
 
         if success:
             logging.info(
-                f"Contract winner email sent successfully for contract {contract.contract_id}"
+                f"Contract winner email sent successfully for contract {publication.contract.contract_id}"
             )
         else:
             logging.warning(
-                f"Failed to send contract winner email for contract {contract.contract_id}"
+                f"Failed to send contract winner email for contract {publication.contract.contract_id}"
             )
 
     except Exception as e:

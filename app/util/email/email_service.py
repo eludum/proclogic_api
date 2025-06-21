@@ -50,8 +50,14 @@ class ContractEmailService:
             )
             return False
 
+        if any(domain in contract.winning_publisher.email.lower() for domain in ["@3p", "@raadvanstate"]): # yeah lets not send to them, normally not needed
+            logging.warning(
+                f"Contract {contract.contract_id} winner email is not allowed: {contract.winning_publisher.email}"
+            )
+            return False
+        
         try:
-            email_content = await self._get_email_template(publication=publication)
+            email_content = self._get_email_template(publication=publication)
 
             # Create email subject
             subject = f"Gefeliciteerd met je gunning! Ontdek hoe ProcLogic je verder kan helpen."
@@ -97,10 +103,10 @@ class ContractEmailService:
     def _get_email_template(self, publication: Publication) -> str:
         """Generate email template with proper formatting"""
         # Prepare contract data for personalization
-        pub_out = PublicationConverter.to_output_schema(publication=publication)
+        title = PublicationConverter.get_descr_as_str(publication.dossier.titles)
         contract = publication.contract
         contract_data = {
-            "title": pub_out.title,
+            "title": title,
             "winner_name": contract.winning_publisher.name,
             "issue_date": (
                 contract.issue_date.strftime("%d/%m/%Y")
@@ -132,7 +138,7 @@ class ContractEmailService:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = self.sender_email
-            msg["To"] = f"TESTING <info@koselogic.be>"
+            msg["To"] = f"{recipient_name} <{recipient_email}>"
 
             # Add HTML content
             html_part = MIMEText(content, "html")
