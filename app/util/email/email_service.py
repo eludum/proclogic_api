@@ -8,7 +8,6 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
-from app.ai.openai import get_openai_client
 from app.config.settings import Settings
 from app.models.email_models import ContractEmailTracking
 from app.models.publication_contract_models import Contract
@@ -22,8 +21,7 @@ class ContractEmailService:
     """Service for sending automated emails to contract winners"""
 
     def __init__(self):
-        self.openai_client = get_openai_client()
-        self.smtp_server = "sandbox.smtp.mailtrap.io"
+        self.smtp_server = "live.smtp.mailtrap.io"
         self.smtp_port = 587
         self.sender_email = "ProcLogic Team <team@proclogic.be>"
 
@@ -53,7 +51,6 @@ class ContractEmailService:
             return False
 
         try:
-            # Generate personalized email content using OpenAI
             email_content = await self._get_email_template(publication=publication)
 
             # Create email subject
@@ -135,7 +132,7 @@ class ContractEmailService:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = self.sender_email
-            msg["To"] = f"{recipient_name} <{recipient_email}>"
+            msg["To"] = f"TESTING <info@koselogic.be>"
 
             # Add HTML content
             html_part = MIMEText(content, "html")
