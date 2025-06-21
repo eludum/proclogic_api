@@ -105,19 +105,16 @@ class ContractEmailService:
         contract_data = {
             "title": pub_out.title,
             "winner_name": contract.winning_publisher.name,
-            "contract_amount": contract.total_contract_amount,
-            "currency": contract.currency,
             "issue_date": (
-                contract.issue_date.strftime("%Y-%m-%d")
+                contract.issue_date.strftime("%d/%m/%Y")
                 if contract.issue_date
-                else "N/A"
+                else "Niet van toepassing"
             ),
             "contracting_authority": (
                 contract.contracting_authority.name
                 if contract.contracting_authority
-                else "N/A"
+                else "Niet van toepassing"
             ),
-            "notice_type": contract.notice_type,
         }
 
         # Load template from external file
