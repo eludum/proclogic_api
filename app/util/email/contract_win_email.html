@@ -45,11 +45,24 @@
             color: white;
         }
 
+        .logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
         .logo {
             width: 48px;
             height: 48px;
-            margin: 0 auto 16px;
             fill: white;
+        }
+
+        .brand-text {
+            font-size: 24px;
+            font-weight: 600;
+            color: white;
         }
 
         .header h1 {
@@ -206,6 +219,10 @@
             .header h1 {
                 font-size: 24px;
             }
+
+            .brand-text {
+                font-size: 20px;
+            }
         }
     </style>
 </head>
@@ -214,8 +231,9 @@
     <div class="email-container">
         <!-- Header with logo -->
         <div class="header">
-            <!-- ProcLogic Logo SVG -->
-            <svg class="logo" viewBox="0 0 375 375" xmlns="http://www.w3.org/2000/svg">
+            <div class="logo-container">
+                <!-- ProcLogic Logo SVG -->
+                <svg class="logo" viewBox="0 0 375 375" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                     <clipPath id="654d8fdd28">
                         <path d="M59 46h257v283H59Zm0 0"></path>
@@ -306,7 +324,9 @@
                         </g>
                     </g>
                 </g>
-            </svg>
+                </svg>
+                <span class="brand-text">ProcLogic</span>
+            </div>
             <h1>Proficiat met je gunning!</h1>
         </div>
 
