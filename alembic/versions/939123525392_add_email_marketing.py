@@ -26,8 +26,6 @@ def upgrade() -> None:
         sa.Column("contract_id", sa.String(length=100), nullable=False),
         sa.Column("recipient_email", sa.String(length=255), nullable=False),
         sa.Column("recipient_name", sa.String(length=255), nullable=False),
-        sa.Column("email_subject", sa.String(length=500), nullable=False),
-        sa.Column("email_content", sa.Text(), nullable=False),
         sa.Column(
             "email_type",
             sa.String(length=50),

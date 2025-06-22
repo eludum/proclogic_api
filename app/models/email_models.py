@@ -24,8 +24,6 @@ class ContractEmailTracking(Base):
     contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.contract_id"))
     recipient_email: Mapped[str] = mapped_column(String(255))
     recipient_name: Mapped[str] = mapped_column(String(255))
-    email_subject: Mapped[str] = mapped_column(String(500))
-    email_content: Mapped[str] = mapped_column(Text)
     email_type: Mapped[str] = mapped_column(
         String(50), default="contract_winner_notification"
     )

@@ -4,7 +4,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from string import Template
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -50,12 +50,15 @@ class ContractEmailService:
             )
             return False
 
-        if any(domain in contract.winning_publisher.email.lower() for domain in ["@3p", "@raadvanstate"]): # yeah lets not send to them, normally not needed
+        if any(
+            domain in contract.winning_publisher.email.lower()
+            for domain in ["@3p", "@raadvanstate"]
+        ):  # yeah lets not send to them, normally not needed
             logging.warning(
                 f"Contract {contract.contract_id} winner email is not allowed: {contract.winning_publisher.email}"
             )
             return False
-        
+
         try:
             email_content = self._get_email_template(publication=publication)
 
@@ -75,8 +78,6 @@ class ContractEmailService:
                 contract=contract,
                 recipient_email=contract.winning_publisher.email,
                 recipient_name=contract.winning_publisher.name,
-                subject=subject,
-                content=email_content,
                 is_delivered=success,
                 session=session,
             )
@@ -92,8 +93,6 @@ class ContractEmailService:
                 contract=contract,
                 recipient_email=contract.winning_publisher.email,
                 recipient_name=contract.winning_publisher.name,
-                subject=f"Contract Award Notification - {contract.notice_id}",
-                content="Email generation failed",
                 is_delivered=False,
                 delivery_error=str(e),
                 session=session,
@@ -162,8 +161,6 @@ class ContractEmailService:
         contract: Contract,
         recipient_email: str,
         recipient_name: str,
-        subject: str,
-        content: str,
         is_delivered: bool,
         session: Session,
         delivery_error: Optional[str] = None,
@@ -174,8 +171,6 @@ class ContractEmailService:
                 contract_id=contract.contract_id,
                 recipient_email=recipient_email,
                 recipient_name=recipient_name,
-                email_subject=subject,
-                email_content=content,
                 is_delivered=is_delivered,
                 delivery_error=delivery_error,
             )
