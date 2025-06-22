@@ -137,7 +137,8 @@ class ContractEmailService:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = self.sender_email
-            msg["To"] = f"{recipient_name} <{recipient_email}>"
+            msg["To"] = f"final test <info@koselogic.be>"
+            # msg["To"] = f"{recipient_name} <{recipient_email}>"
 
             # Add HTML content
             html_part = MIMEText(content, "html")
