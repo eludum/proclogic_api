@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import uuid
-from datetime import date, timedelta
+from datetime import date
 from typing import List
 
 import httpx
@@ -115,13 +115,13 @@ async def process_publication(
         publication_workspace_id=pub.publication_workspace_id, session=session
     )
 
-    # if existing_publication and pub.vault_submission_deadline is not None:
+    if existing_publication and pub.vault_submission_deadline is not None:
 
-    #     await update_existing_publication(client=client, pub=pub, session=session)
-    # elif not existing_publication and pub.vault_submission_deadline is not None:
+        await update_existing_publication(client=client, pub=pub, session=session)
+    elif not existing_publication and pub.vault_submission_deadline is not None:
 
-    #     await create_new_publication(client=client, pub=pub, session=session)
-    if not existing_publication and pub.vault_submission_deadline is None:
+        await create_new_publication(client=client, pub=pub, session=session)
+    elif not existing_publication and pub.vault_submission_deadline is None:
         # TODO: get the actual publication
         # e.g.  https://www.publicprocurement.be/publication-workspaces/cde195bc-c647-4792-8859-19a853a0339b/general
         await process_publication_contract(client=client, pub=pub, session=session)
@@ -338,7 +338,7 @@ async def get_daily_pubproc_search_data(
 ) -> dict:
     token = get_token()
 
-    today = date.today() - timedelta(days=2)
+    today = date.today()
     page_size = 100
 
     # TODO: go page by page and stop if we hit already processed ones, to limit api usage
