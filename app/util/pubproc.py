@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from typing import List
 
 import httpx
@@ -21,6 +21,7 @@ from app.config.postgres import get_session
 from app.config.settings import Settings
 from app.schemas.company_schemas import CompanyPublicationMatchSchema
 from app.schemas.publication_schemas import CPVCodeSchema, PublicationSchema
+from app.services.contract_email import handle_new_contract_created
 from app.util.messages_helper import send_recommendation_notification
 from app.util.publication_utils.publication_converter import PublicationConverter
 from app.util.pubproc_token import get_token
@@ -114,13 +115,13 @@ async def process_publication(
         publication_workspace_id=pub.publication_workspace_id, session=session
     )
 
-    if existing_publication and pub.vault_submission_deadline is not None:
+    # if existing_publication and pub.vault_submission_deadline is not None:
 
-        await update_existing_publication(client=client, pub=pub, session=session)
-    elif not existing_publication and pub.vault_submission_deadline is not None:
+    #     await update_existing_publication(client=client, pub=pub, session=session)
+    # elif not existing_publication and pub.vault_submission_deadline is not None:
 
-        await create_new_publication(client=client, pub=pub, session=session)
-    elif not existing_publication and pub.vault_submission_deadline is None:
+    #     await create_new_publication(client=client, pub=pub, session=session)
+    if not existing_publication and pub.vault_submission_deadline is None:
         # TODO: get the actual publication
         # e.g.  https://www.publicprocurement.be/publication-workspaces/cde195bc-c647-4792-8859-19a853a0339b/general
         await process_publication_contract(client=client, pub=pub, session=session)
@@ -217,10 +218,17 @@ async def process_publication_contract(
     contract = summarize_publication_contract(xml=xml_content)
     if contract:
         pub.contract = contract
-        crud_publication.get_or_create_publication(publication_schema=pub, session=session)
+        crud_publication.get_or_create_publication(
+            publication_schema=pub, session=session
+        )
+        await handle_new_contract_created(
+            publication=pub,
+            session=session,
+        )
     else:
-        logging.info("No contract found for publication %s", pub.publication_workspace_id)
-
+        logging.info(
+            "No contract found for publication %s", pub.publication_workspace_id
+        )
 
 
 async def enrich_publication_with_ai(
@@ -330,7 +338,7 @@ async def get_daily_pubproc_search_data(
 ) -> dict:
     token = get_token()
 
-    today = date.today()
+    today = date.today() - timedelta(days=2)
     page_size = 100
 
     # TODO: go page by page and stop if we hit already processed ones, to limit api usage
