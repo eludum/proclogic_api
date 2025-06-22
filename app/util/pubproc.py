@@ -21,6 +21,7 @@ from app.config.postgres import get_session
 from app.config.settings import Settings
 from app.schemas.company_schemas import CompanyPublicationMatchSchema
 from app.schemas.publication_schemas import CPVCodeSchema, PublicationSchema
+from app.services.contract_email import handle_new_contract_created
 from app.util.messages_helper import send_recommendation_notification
 from app.util.publication_utils.publication_converter import PublicationConverter
 from app.util.pubproc_token import get_token
@@ -217,10 +218,17 @@ async def process_publication_contract(
     contract = summarize_publication_contract(xml=xml_content)
     if contract:
         pub.contract = contract
-        crud_publication.get_or_create_publication(publication_schema=pub, session=session)
+        crud_publication.get_or_create_publication(
+            publication_schema=pub, session=session
+        )
+        await handle_new_contract_created(
+            publication=pub,
+            session=session,
+        )
     else:
-        logging.info("No contract found for publication %s", pub.publication_workspace_id)
-
+        logging.info(
+            "No contract found for publication %s", pub.publication_workspace_id
+        )
 
 
 async def enrich_publication_with_ai(

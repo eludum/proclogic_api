@@ -18,6 +18,7 @@ from app.routers.publication_contracts import contracts_router
 from app.routers.publications import publications_router
 from app.routers.stripe import stripe_router
 from app.routers.users import users_router
+from app.routers.email import email_tracking_router
 from app.util.alembic_runner import run_migration
 from app.util.publication_utils.semantic_embedding_maintenance import (
     maintain_embeddings,
@@ -87,6 +88,7 @@ proclogic.include_router(contracts_router)
 proclogic.include_router(notifications_router)
 proclogic.include_router(kanban_router)
 proclogic.include_router(stripe_router)
+proclogic.include_router(email_tracking_router)
 
 # TODO: fix cors
 # origins = [
