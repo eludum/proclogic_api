@@ -1,10 +1,6 @@
+import datetime
 import logging
-from datetime import date
 from typing import List, Optional, Tuple
-
-from sqlalchemy import and_, case, desc, func, literal_column, or_, select
-from sqlalchemy.orm import Session, aliased, joinedload
-from sqlalchemy.sql import exists
 
 from app.models.publication_contract_models import (
     Contract,
@@ -39,6 +35,9 @@ from app.schemas.publication_schemas import (
     OrganisationSchema,
     PublicationSchema,
 )
+from sqlalchemy import and_, case, desc, func, literal_column, or_, select
+from sqlalchemy.orm import Session, aliased, joinedload
+from sqlalchemy.sql import exists
 
 
 def get_or_create_descriptions(
@@ -716,8 +715,8 @@ def get_paginated_publications_for_company(
     region_filter: Optional[List[str]] = None,
     sector_filter: Optional[List[str]] = None,
     cpv_code_filter: Optional[List[str]] = None,
-    date_from: Optional[date] = None,
-    date_to: Optional[date] = None,
+    date_from: Optional[datetime.date] = None,
+    date_to: Optional[datetime.date] = None,
     sort_by: Optional[str] = None,
     sort_order: str = "desc",
 ) -> Tuple[List[Publication], int]:
@@ -1093,3 +1092,43 @@ def get_paginated_publications_free(
     )
 
     return publications, total_count
+
+
+def get_publications_with_upcoming_deadlines(
+    session: Session, days_ahead: int = 7
+) -> List[Tuple[Publication, str, int]]:
+    """
+    Get publications with deadlines in the next X days that users have saved.
+    Returns tuples of (publication, company_vat_number, days_left).
+    """
+    try:
+        future_date = datetime.now() + datetime.timedelta(days=days_ahead)
+        start_of_day = future_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = future_date.replace(
+            hour=23, minute=59, second=59, microsecond=999999
+        )
+
+        results = (
+            session.query(Publication, CompanyPublicationMatch.company_vat_number)
+            .join(CompanyPublicationMatch)
+            .filter(
+                Publication.vault_submission_deadline >= start_of_day,
+                Publication.vault_submission_deadline <= end_of_day,
+                CompanyPublicationMatch.is_saved == True,
+            )
+            .all()
+        )
+
+        # Calculate days left for each
+        deadlines_with_days = []
+        for publication, company_vat_number in results:
+            days_left = (
+                publication.vault_submission_deadline - datetime.now()
+            ).days + 1
+            deadlines_with_days.append((publication, company_vat_number, days_left))
+
+        return deadlines_with_days
+
+    except Exception as e:
+        logging.error(f"Error getting publications with upcoming deadlines: {e}")
+        return []

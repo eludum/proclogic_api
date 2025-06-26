@@ -117,3 +117,40 @@ async def send_forum_notification(
         )
 
         return True
+
+async def send_welcome_notification_with_summary(
+    company_vat_number: str, 
+    total_matches: int, 
+    high_confidence_matches: int
+):
+    """
+    Send a welcome notification to the new company summarizing found recommendations.
+    """
+    try:        
+        if total_matches == 0:
+            # No matches found
+            title = "Welkom bij ProcLogic!"
+            content = ("We hebben je bedrijfsprofiel geanalyseerd. "
+                      "Er zijn momenteel geen actieve aanbestedingen die perfect bij je profiel passen, "
+                      "maar we blijven zoeken naar nieuwe mogelijkheden voor je.")
+        elif high_confidence_matches == 0:
+            # Some matches but none were high confidence
+            title = "Welkom bij ProcLogic!"
+            content = (f"We hebben {total_matches} mogelijke aanbesteding(en) gevonden die bij je profiel kunnen passen. "
+                      f"Bekijk ze in je dashboard en sla interessante aanbestedingen op.")
+        else:
+            # High confidence matches found
+            title = "Welkom bij ProcLogic!"
+            content = (f"Geweldig nieuws! We hebben {high_confidence_matches} aanbesteding(en) gevonden die perfect bij je bedrijf passen, "
+                      f"plus nog {total_matches - high_confidence_matches} andere mogelijkheden. "
+                      f"Check je notificaties en dashboard om ze te bekijken.")
+
+        await send_system_notification(
+            company_vat_number=company_vat_number,
+            title=title,
+            content=content,
+            link="/dashboard"
+        )
+        
+    except Exception as e:
+        logging.error(f"Error sending welcome notification: {e}")

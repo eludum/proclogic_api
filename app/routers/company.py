@@ -1,11 +1,7 @@
-import asyncio
 import json
 import logging
-from datetime import datetime, timedelta
 import re
-
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from pydantic import AnyHttpUrl, BaseModel
+from datetime import datetime, timedelta
 
 import app.crud.company as crud_company
 from app.ai.openai import get_openai_client
@@ -21,8 +17,13 @@ from app.schemas.company_schemas import (
     CompanyUpdateSchema,
 )
 from app.util.clerk import AuthUser, get_auth_user
-from app.util.messages_helper import send_recommendation_notification
+from app.util.messages_helper import (
+    send_recommendation_notification,
+    send_welcome_notification_with_summary,
+)
 from app.util.publication_utils.publication_converter import PublicationConverter
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import AnyHttpUrl, BaseModel
 
 settings = Settings()
 
@@ -107,108 +108,12 @@ async def create_company(
             raise HTTPException(status_code=500, detail="Failed to create company")
 
         # Add background task to generate recommendations
-        # background_tasks.add_task(
-        #     generate_recommendations_for_new_company,
-        #     company_vat_number=created_company.vat_number
-        # )
+        background_tasks.add_task(
+            generate_recommendations_for_new_company,
+            company_vat_number=created_company.vat_number
+        )
 
         return await convert_company_to_schema(created_company)
-
-
-async def generate_recommendations_for_new_company(company_vat_number: str):
-    """
-    Background task to generate recommendations for a newly created company
-    for all active publications from the past week.
-    """
-    logging.info(
-        f"Starting background recommendation generation for company {company_vat_number}"
-    )
-    try:
-        # Get publications from the past week
-        one_week_ago = datetime.now() - timedelta(days=7)
-
-        with get_session() as session:
-            company = crud_company.get_company_by_vat_number(
-                vat_number=company_vat_number, session=session
-            )
-
-            if not company:
-                logging.error(
-                    f"Company {company_vat_number} not found for recommendation generation"
-                )
-                return
-
-            # Get active publications from the past week
-            publications = (
-                session.query(Publication)
-                .filter(
-                    Publication.publication_date >= one_week_ago,
-                    Publication.vault_submission_deadline > datetime.now(),
-                )
-                .all()
-            )
-
-            logging.info(
-                f"Found {len(publications)} recent publications for recommendation"
-            )
-
-            # Process each publication for recommendations
-            for publication in publications:
-                try:
-                    # Generate recommendation
-                    # TODO: fix that get_recommendation takes a db model instead of schema
-                    match, match_percentage = get_recommendation(
-                        publication=publication, company=company
-                    )
-
-                    if match:
-                        # Create match record
-                        match_schema = CompanyPublicationMatchSchema(
-                            company_vat_number=company.vat_number,
-                            publication_workspace_id=publication.publication_workspace_id,
-                            match_percentage=float(match_percentage),
-                            is_recommended=True,
-                            is_saved=False,
-                            is_viewed=False,
-                        )
-
-                        # Add to database
-                        company_match = CompanyPublicationMatch(
-                            company_vat_number=match_schema.company_vat_number,
-                            publication_workspace_id=match_schema.publication_workspace_id,
-                            match_percentage=match_schema.match_percentage,
-                            is_recommended=match_schema.is_recommended,
-                            is_saved=match_schema.is_saved,
-                            is_viewed=match_schema.is_viewed,
-                        )
-                        session.add(company_match)
-
-                        # Send notification asynchronously
-                        asyncio.create_task(
-                            send_recommendation_notification(
-                                company_vat_number=company.vat_number,
-                                publication_id=publication.publication_workspace_id,
-                                publication_title=PublicationConverter.get_descr_as_str(
-                                    publication.dossier.titles
-                                ),
-                                publication_submission_deadline=publication.vault_submission_deadline
-                            )
-                        )
-
-                except Exception as e:
-                    logging.error(
-                        f"Error processing publication {publication.publication_workspace_id}: {e}"
-                    )
-                    continue
-
-            # Commit all changes
-            session.commit()
-
-        logging.info(
-            f"Completed background recommendation generation for company {company_vat_number}"
-        )
-    except Exception as e:
-        logging.error(f"Error in background recommendation generation: {e}")
 
 
 @companies_router.patch("/company/", response_model=CompanySchema)
@@ -244,7 +149,7 @@ async def update_current_company(
 
         if not updated_company:
             raise HTTPException(status_code=500, detail="Failed to update company")
-        
+
         return await convert_company_to_schema(updated_company)
 
 
@@ -298,7 +203,7 @@ async def scrape_company_website_endpoint(
 
         # Construct response with fields suitable for onboarding
         response = {
-            "vat_number": re.sub(r'[^a-zA-Z0-9]', '', scraped_data.get("vat_number")),
+            "vat_number": re.sub(r"[^a-zA-Z0-9]", "", scraped_data.get("vat_number")),
             "name": scraped_data.get("company_name"),
             "summary_activities": scraped_data.get("summary_activities"),
             "interested_sectors": processed_sectors,
@@ -314,3 +219,134 @@ async def scrape_company_website_endpoint(
         raise HTTPException(
             status_code=500, detail=f"Error processing website: {str(e)}"
         )
+
+
+async def generate_recommendations_for_new_company(company_vat_number: str):
+    """
+    Enhanced background task to generate recommendations for a newly created company
+    for all active publications from the past 2 weeks.
+    """
+    logging.info(
+        f"Starting background recommendation generation for company {company_vat_number} (going back 2 weeks)"
+    )
+
+    try:
+        # Go back 2 weeks instead of 1 week
+        two_weeks_ago = datetime.now() - timedelta(days=14)
+
+        with get_session() as session:
+            company = crud_company.get_company_by_vat_number(
+                vat_number=company_vat_number, session=session
+            )
+
+            if not company:
+                logging.error(
+                    f"Company {company_vat_number} not found for recommendation generation"
+                )
+                return
+
+            # Get active publications from the past 2 weeks
+            publications = (
+                session.query(Publication)
+                .filter(
+                    Publication.publication_date >= two_weeks_ago,
+                    Publication.vault_submission_deadline > datetime.now(),
+                )
+                .all()
+            )
+
+            logging.info(
+                f"Found {len(publications)} publications from the past 2 weeks for recommendation analysis"
+            )
+
+            match_count = 0
+            notification_count = 0
+
+            # Process each publication for recommendations
+            for publication in publications:
+                try:
+                    # Check if we already have a match for this publication
+                    existing_match = (
+                        session.query(CompanyPublicationMatch)
+                        .filter(
+                            CompanyPublicationMatch.company_vat_number
+                            == company.vat_number,
+                            CompanyPublicationMatch.publication_workspace_id
+                            == publication.publication_workspace_id,
+                        )
+                        .first()
+                    )
+
+                    if existing_match:
+                        # Skip if we already have a match for this publication
+                        continue
+
+                    # Generate recommendation using the AI system
+                    match, match_percentage = get_recommendation(
+                        publication=publication, company=company
+                    )
+
+                    if (
+                        match and match_percentage > 0.5
+                    ):  # Lower threshold for new companies to get more initial recommendations
+                        # Create match record
+                        match_schema = CompanyPublicationMatchSchema(
+                            company_vat_number=company.vat_number,
+                            publication_workspace_id=publication.publication_workspace_id,
+                            match_percentage=float(match_percentage),
+                            is_recommended=True,
+                            is_saved=False,
+                            is_viewed=False,
+                        )
+
+                        # Add to database
+                        company_match = CompanyPublicationMatch(
+                            company_vat_number=match_schema.company_vat_number,
+                            publication_workspace_id=match_schema.publication_workspace_id,
+                            match_percentage=match_schema.match_percentage,
+                            is_recommended=match_schema.is_recommended,
+                            is_saved=match_schema.is_saved,
+                            is_viewed=match_schema.is_viewed,
+                        )
+                        session.add(company_match)
+                        match_count += 1
+
+                        # Send notification for high-confidence matches
+                        if match_percentage > 0.7:
+                            try:
+                                await send_recommendation_notification(
+                                    company_vat_number=company.vat_number,
+                                    publication_id=publication.publication_workspace_id,
+                                    publication_title=PublicationConverter.get_descr_as_str(
+                                        publication.dossier.titles
+                                    ),
+                                    publication_submission_deadline=publication.vault_submission_deadline,
+                                )
+                                notification_count += 1
+                            except Exception as e:
+                                logging.error(
+                                    f"Error sending notification for publication {publication.publication_workspace_id}: {e}"
+                                )
+
+                except Exception as e:
+                    logging.error(
+                        f"Error processing publication {publication.publication_workspace_id}: {e}"
+                    )
+                    continue
+
+            # Commit all changes
+            session.commit()
+
+            # Send a welcome notification with summary
+            if match_count > 0:
+                await send_welcome_notification_with_summary(
+                    company_vat_number, match_count, notification_count
+                )
+
+            logging.info(
+                f"Completed background recommendation generation for company {company_vat_number}. "
+                f"Created {match_count} matches, sent {notification_count} notifications"
+            )
+
+    except Exception as e:
+        logging.error(f"Error in background recommendation generation: {e}")
