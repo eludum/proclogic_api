@@ -1,14 +1,17 @@
+import logging
+from contextlib import contextmanager
 from typing import Optional
-from fastapi import HTTPException, Depends
+
+import requests
+from clerk_backend_api import Clerk
+from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import jwt, jwk
+from jose import jwk, jwt
 from jose.exceptions import JWTError
 from pydantic import BaseModel
-import requests
-import logging
-from clerk_backend_api import Clerk
-from contextlib import contextmanager
 
+import app.crud.company as crud_company
+from app.config.postgres import get_session
 from app.config.settings import Settings
 
 settings = Settings()
@@ -21,6 +24,9 @@ _jwks_cache = None
 class AuthUser(BaseModel):
     user_id: str
     email: Optional[str] = None
+    has_valid_subscription: bool = False
+    subscription_status: str = "inactive"
+    company_vat_number: Optional[str] = None
 
 
 def get_jwks():
@@ -85,7 +91,7 @@ def get_clerk_client():
 
 
 async def get_auth_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Authenticate the user and return their user information"""
+    """Authenticate the user and return their user information with subscription status"""
     token = credentials.credentials
     payload = decode_token(token)
 
@@ -119,13 +125,72 @@ async def get_auth_user(credentials: HTTPAuthorizationCredentials = Depends(secu
                 logging.error(f"No email found for user: {user_id}")
                 raise HTTPException(status_code=400, detail="User email not available")
 
-            # Return with user_id and email
-            return AuthUser(user_id=user_id, email=email)
+            # Check subscription status in database
+            with get_session() as session:
+                company = crud_company.get_company_by_email(
+                    email=email, session=session
+                )
+
+                if not company:
+                    # No company found - user needs to complete onboarding or start trial
+                    return AuthUser(
+                        user_id=user_id,
+                        email=email,
+                        has_valid_subscription=False,
+                        subscription_status="no_company",
+                    )
+
+                # Check if subscription is valid (paid or trial)
+                has_valid_subscription = company.has_valid_subscription
+
+                # Update trial status if expired
+                if company.is_trial_active and company.is_trial_expired:
+                    company.end_trial()
+                    session.commit()
+                    has_valid_subscription = False
+
+                return AuthUser(
+                    user_id=user_id,
+                    email=email,
+                    has_valid_subscription=has_valid_subscription,
+                    subscription_status=company.subscription_status,
+                    company_vat_number=company.vat_number,
+                )
 
     except HTTPException:
         # Re-raise HTTP exceptions
         raise
     except Exception as e:
         logging.error(f"Error retrieving user data from Clerk: {str(e)}")
-        # Don't return a user without an email
         raise HTTPException(status_code=500, detail="Failed to retrieve user email")
+
+
+async def get_auth_user_with_subscription_check(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """
+    Enhanced auth function that requires valid subscription.
+    Use this for protected endpoints that require paid access.
+    """
+    auth_user = await get_auth_user(credentials)
+
+    if not auth_user.has_valid_subscription:
+        if auth_user.subscription_status == "no_company":
+            raise HTTPException(
+                status_code=403, detail="Please complete company onboarding first"
+            )
+        elif (
+            auth_user.subscription_status == "trial"
+            and auth_user.has_valid_subscription == False
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="Trial period has expired. Please upgrade to continue.",
+            )
+        else:
+            raise HTTPException(
+                status_code=403,
+                detail="Active subscription required to access this feature",
+            )
+
+    return auth_user

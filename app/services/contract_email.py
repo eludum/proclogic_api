@@ -3,7 +3,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from app.models.publication_models import Publication
-from app.util.email.email_service import ContractEmailService
+from app.util.email.contract_email_service import ContractEmailService
 
 
 async def handle_new_contract_created(publication: Publication, session: Session):

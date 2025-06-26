@@ -1,5 +1,7 @@
 import logging
 from typing import List, Optional
+from sqlalchemy import func
+import datetime from datetime
 
 from app.models.company_models import Company, Sector
 from app.models.publication_models import (
@@ -58,8 +60,6 @@ def create_company(
                 )
                 for sector_schema in company_schema.interested_sectors
             ]
-
-        # TODO: create automatic publication matches
 
         session.add(new_company)
         session.commit()
@@ -473,3 +473,112 @@ def get_all_companies(session: Session) -> List[Company]:
     except Exception as e:
         logging.error("Error getting all companies: %s", e)
         return []
+
+
+def get_company_by_stripe_customer_id(customer_id: str, session: Session) -> Optional[Company]:
+    """Get company by Stripe customer ID."""
+    try:
+        return session.query(Company).filter(
+            Company.stripe_customer_id == customer_id
+        ).first()
+    except Exception as e:
+        logging.error(f"Error getting company by Stripe customer ID: {e}")
+        return None
+
+
+def update_company_subscription_status(
+    company_vat_number: str, 
+    subscription_status: str, 
+    stripe_customer_id: Optional[str] = None,
+    stripe_subscription_id: Optional[str] = None,
+    session: Session = None
+) -> bool:
+    """Update company subscription status and Stripe IDs."""
+    try:
+        company = get_company_by_vat_number(
+            vat_number=company_vat_number, session=session
+        )
+        
+        if not company:
+            logging.error(f"Company {company_vat_number} not found")
+            return False
+
+        company.subscription_status = subscription_status
+        
+        if stripe_customer_id:
+            company.stripe_customer_id = stripe_customer_id
+            
+        if stripe_subscription_id:
+            company.stripe_subscription_id = stripe_subscription_id
+
+        session.commit()
+        return True
+
+    except Exception as e:
+        logging.error(f"Error updating company subscription status: {e}")
+        session.rollback()
+        return False
+
+
+def get_companies_with_expired_trials(session: Session) -> List[Company]:
+    """Get all companies with expired trials."""
+    try:        
+        return session.query(Company).filter(
+            Company.is_trial_active == True,
+            Company.trial_end_date <= datetime.now()
+        ).all()
+        
+    except Exception as e:
+        logging.error(f"Error getting companies with expired trials: {e}")
+        return []
+
+
+def get_companies_trial_expiring_soon(days: int, session: Session) -> List[Company]:
+    """Get companies whose trials expire within specified days."""
+    try:        
+        cutoff_date = datetime.now() + datetime.timedelta(days=days)
+        
+        return session.query(Company).filter(
+            Company.is_trial_active == True,
+            Company.trial_end_date <= cutoff_date,
+            Company.trial_end_date > datetime.now()
+        ).all()
+        
+    except Exception as e:
+        logging.error(f"Error getting companies with trials expiring soon: {e}")
+        return []
+
+
+def get_company_subscription_stats(session: Session) -> dict:
+    """Get subscription statistics for admin dashboard."""
+    try:        
+        stats = session.query(
+            Company.subscription_status,
+            func.count(Company.vat_number).label('count')
+        ).group_by(Company.subscription_status).all()
+        
+        # Count active trials
+        active_trials = session.query(Company).filter(
+            Company.is_trial_active == True,
+            Company.trial_end_date > datetime.now()
+        ).count()
+        
+        # Count expired trials
+        expired_trials = session.query(Company).filter(
+            Company.is_trial_active == True,
+            Company.trial_end_date <= datetime.now()
+        ).count()
+        
+        result = {
+            "subscription_stats": {stat.subscription_status: stat.count for stat in stats},
+            "active_trials": active_trials,
+            "expired_trials": expired_trials,
+            "total_companies": session.query(Company).count()
+        }
+        
+        return result
+        
+    except Exception as e:
+        logging.error(f"Error getting subscription stats: {e}")
+        return {}
+    

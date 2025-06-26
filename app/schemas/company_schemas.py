@@ -1,4 +1,6 @@
+from datetime import datetime
 from typing import List, Optional
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -35,6 +37,15 @@ class CompanySchema(BaseModel):
     max_publication_value: Optional[int] = None
     activity_keywords: Optional[List[str]] = Field(default_factory=list)
     operating_regions: Optional[List[str]] = Field(default_factory=list)
+
+    # Trial and subscription fields
+    trial_start_date: Optional[datetime] = None
+    trial_end_date: Optional[datetime] = None
+    is_trial_active: bool = False
+    stripe_customer_id: Optional[str] = None
+    stripe_subscription_id: Optional[str] = None
+    subscription_status: str = "inactive"
+
     publication_matches: Optional[List[CompanyPublicationMatchSchema]] = Field(
         default_factory=list
     )
@@ -60,3 +71,18 @@ class CompanyUpdateSchema(BaseModel):
 
     class Config:
         extra = "ignore"  # Ignore any extra fields
+
+
+class TrialInviteRequest(BaseModel):
+    email: str
+    company_name: str
+    company_vat_number: str
+    summary_activities: str = ""
+
+
+class SubscriptionStatusResponse(BaseModel):
+    has_access: bool
+    subscription_status: str
+    trial_days_remaining: Optional[int] = None
+    trial_end_date: Optional[datetime] = None
+    message: str
