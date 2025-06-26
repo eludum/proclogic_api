@@ -4,13 +4,10 @@ import uuid
 from datetime import date
 from typing import List
 
-import httpx
-import numpy as np
-from pydantic import TypeAdapter
-from sqlalchemy.orm import Session
-
 import app.crud.company as crud_company
 import app.crud.publication as crud_publication
+import httpx
+import numpy as np
 from app.ai.recommend import (
     get_recommendation,
     summarize_publication_contract,
@@ -19,15 +16,23 @@ from app.ai.recommend import (
 )
 from app.config.postgres import get_session
 from app.config.settings import Settings
+from app.crud.notification import (
+    cleanup_old_notifications,
+    has_recent_deadline_notification,
+)
 from app.schemas.company_schemas import CompanyPublicationMatchSchema
 from app.schemas.publication_schemas import CPVCodeSchema, PublicationSchema
 from app.services.contract_email import handle_new_contract_created
-from app.util.messages_helper import send_deadline_notification, send_recommendation_notification
+from app.util.messages_helper import (
+    send_deadline_notification,
+    send_recommendation_notification,
+)
 from app.util.publication_utils.publication_converter import PublicationConverter
 from app.util.pubproc_token import get_token
 from app.util.redis_cache import invalidate_publication_cache, redis_cache
 from app.util.zip import unzip
-from proclogic_api.app.crud.notification import cleanup_old_notifications, has_recent_deadline_notification
+from pydantic import TypeAdapter
+from sqlalchemy.orm import Session
 
 settings = Settings()
 
@@ -84,33 +89,39 @@ async def gather_notifications() -> None:
                 logging.info("Notification gathering completed successfully")
             except Exception as e:
                 logging.error("Error in gathering notifications: %s", e)
-            
+
             # Wait 6 hours before next notification check
             await asyncio.sleep(21600)  # 6 hours in seconds
-            
+
     except asyncio.CancelledError:
         logging.info("Notification gathering service is shutting down")
         raise
+
 
 async def send_deadline_notifications() -> None:
     """
     Send deadline reminder notifications for approaching deadlines.
     """
     logging.info("Sending deadline notifications")
-    
+
     try:
         with get_session() as session:
             # Get publications with deadlines in the next 7, 3, and 1 days
             for days_ahead in [7, 3, 1]:
-                deadline_publications = crud_publication.get_publications_with_upcoming_deadlines(
-                    session, days_ahead
+                deadline_publications = (
+                    crud_publication.get_publications_with_upcoming_deadlines(
+                        session, days_ahead
+                    )
                 )
-                
+
                 for publication, company_vat_number, days_left in deadline_publications:
                     try:
                         # Check if we already sent a notification for this deadline period
                         if not has_recent_deadline_notification(
-                            company_vat_number, publication.publication_workspace_id, days_ahead, session
+                            company_vat_number,
+                            publication.publication_workspace_id,
+                            days_ahead,
+                            session,
                         ):
                             await send_deadline_notification(
                                 company_vat_number=company_vat_number,
@@ -118,14 +129,12 @@ async def send_deadline_notifications() -> None:
                                 publication_title=PublicationConverter.get_descr_as_str(
                                     publication.dossier.titles
                                 ),
-                                days_left=days_left
+                                days_left=days_left,
                             )
-                            
+
                     except Exception as e:
-                        logging.error(
-                            f"Error sending deadline notification: {e}"
-                        )
-            
+                        logging.error(f"Error sending deadline notification: {e}")
+
     except Exception as e:
         logging.error(f"Error sending deadline notifications: {e}")
 
@@ -140,7 +149,7 @@ async def perform_notification_maintenance() -> None:
             cleanup_count = cleanup_old_notifications(session, days_to_keep=180)
             if cleanup_count > 0:
                 logging.info(f"Cleaned up {cleanup_count} old notifications")
-                
+
     except Exception as e:
         logging.error(f"Error in notification maintenance: {e}")
 

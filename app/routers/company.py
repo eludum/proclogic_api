@@ -110,7 +110,7 @@ async def create_company(
         # Add background task to generate recommendations
         background_tasks.add_task(
             generate_recommendations_for_new_company,
-            company_vat_number=created_company.vat_number
+            company_vat_number=created_company.vat_number,
         )
 
         return await convert_company_to_schema(created_company)
