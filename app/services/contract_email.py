@@ -15,7 +15,7 @@ async def handle_new_contract_created(publication: Publication, session: Session
     try:
         # Initialize email service
         email_service = ContractEmailService()
-
+        
         # Send email to contract winner
         success = await email_service.send_contract_winner_email(
             publication=publication, session=session

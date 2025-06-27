@@ -1,8 +1,6 @@
 import logging
 from typing import List, Optional
 
-from sqlalchemy.orm import Session, joinedload
-
 from app.models.company_models import Company, Sector
 from app.models.publication_models import (
     CompanyPublicationMatch,
@@ -13,6 +11,7 @@ from app.models.publication_models import (
 )
 from app.schemas.company_schemas import CompanySchema
 from app.util.publication_utils.publication_converter import PublicationConverter
+from sqlalchemy.orm import Session, joinedload
 
 
 def create_company(
@@ -59,8 +58,6 @@ def create_company(
                 )
                 for sector_schema in company_schema.interested_sectors
             ]
-
-        # TODO: create automatic publication matches
 
         session.add(new_company)
         session.commit()
@@ -196,6 +193,7 @@ def append_emails_to_company(
         logging.error("Error updating company emails: %s", e)
         return None
 
+
 def remove_email_from_company(
     vat_number: str, delete_email: str, session: Session
 ) -> Optional[Company]:
@@ -233,6 +231,7 @@ def remove_email_from_company(
         session.rollback()
         logging.error("Error updating company emails: %s", e)
         return None
+
 
 def get_company_by_vat_number(vat_number: str, session: Session) -> Optional[Company]:
     """Retrieve a company by its VAT number."""

@@ -1,9 +1,9 @@
 import logging
+from datetime import datetime, timedelta
 from typing import List, Optional
 
-from sqlalchemy.orm import Session
-
 from app.models.notification_models import Notification
+from sqlalchemy.orm import Session
 
 
 def create_notification(
@@ -162,3 +162,55 @@ def delete_notifications(notification_ids: List[int], session: Session) -> bool:
         return False
     finally:
         session.close()
+
+
+def cleanup_old_notifications(session: Session, days_to_keep: int = 90) -> int:
+    """
+    Clean up old notifications to prevent database bloat.
+    Can be called by the daily scanner for maintenance.
+    """
+    try:
+        cutoff_date = datetime.now() - timedelta(days=days_to_keep)
+
+        deleted_count = (
+            session.query(Notification)
+            .filter(Notification.created_at < cutoff_date, Notification.is_read == True)
+            .delete()
+        )
+
+        session.commit()
+        return deleted_count
+
+    except Exception as e:
+        logging.error(f"Error cleaning up old notifications: {e}")
+        session.rollback()
+        return 0
+
+
+def has_recent_deadline_notification(
+    company_vat_number: str, publication_id: str, session: Session
+) -> bool:
+    """
+    Check if a deadline notification was recently sent for a specific period.
+    Used to avoid sending duplicate deadline notifications.
+    """
+    try:
+        # Check for notifications sent in the last day for this specific deadline period
+        cutoff_time = datetime.now() - timedelta(hours=24)
+
+        existing_notification = (
+            session.query(Notification)
+            .filter(
+                Notification.company_vat_number == company_vat_number,
+                Notification.related_entity_id == publication_id,
+                Notification.notification_type == "deadline",
+                Notification.created_at >= cutoff_time,
+            )
+            .first()
+        )
+
+        return existing_notification is not None
+
+    except Exception as e:
+        logging.error(f"Error checking recent deadline notification: {e}")
+        return False
