@@ -59,8 +59,6 @@ def create_company(
                 for sector_schema in company_schema.interested_sectors
             ]
 
-        # TODO: create automatic publication matches
-
         session.add(new_company)
         session.commit()
 
