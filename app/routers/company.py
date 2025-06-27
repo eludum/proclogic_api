@@ -1,7 +1,11 @@
+import asyncio
 import json
 import logging
 import re
 from datetime import datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import AnyHttpUrl, BaseModel
 
 import app.crud.company as crud_company
 from app.ai.openai import get_openai_client
@@ -22,8 +26,6 @@ from app.util.messages_helper import (
     send_welcome_notification_with_summary,
 )
 from app.util.publication_utils.publication_converter import PublicationConverter
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from pydantic import AnyHttpUrl, BaseModel
 
 settings = Settings()
 
@@ -82,7 +84,6 @@ async def get_company_by_vat_number(
 @companies_router.post("/company/", response_model=CompanySchema)
 async def create_company(
     company: CompanySchema,
-    background_tasks: BackgroundTasks,
     auth_user: AuthUser = Depends(get_auth_user),
 ) -> CompanySchema:
     """Create a new company. User must be authenticated."""
@@ -107,10 +108,10 @@ async def create_company(
         if not created_company:
             raise HTTPException(status_code=500, detail="Failed to create company")
 
-        # Add background task to generate recommendations
-        background_tasks.add_task(
-            generate_recommendations_for_new_company,
-            company_vat_number=created_company.vat_number,
+        asyncio.create_task(
+            generate_recommendations_for_new_company(
+                company_vat_number=created_company.vat_number
+            )
         )
 
         return await convert_company_to_schema(created_company)
@@ -203,7 +204,9 @@ async def scrape_company_website_endpoint(
 
         # Construct response with fields suitable for onboarding
         response = {
-            "vat_number": re.sub(r"[^a-zA-Z0-9]", "", scraped_data.get("vat_number")),
+            "vat_number": re.sub(
+                r"[^a-zA-Z0-9]", "", scraped_data.get("vat_number") or ""
+            ),
             "name": scraped_data.get("company_name"),
             "summary_activities": scraped_data.get("summary_activities"),
             "interested_sectors": processed_sectors,
@@ -221,6 +224,34 @@ async def scrape_company_website_endpoint(
         )
 
 
+def get_three_workdays_back():
+    """
+    Get a date that is 3 workdays back from today.
+    If today is a weekend, start from the previous Friday.
+    """
+    today = datetime.now()
+
+    # If today is weekend (Saturday=5, Sunday=6), go back to Friday
+    if today.weekday() >= 5:  # Weekend
+        # Go back to the previous Friday
+        days_back_to_friday = today.weekday() - 4  # Friday is weekday 4
+        start_date = today - timedelta(days=days_back_to_friday)
+    else:
+        start_date = today
+
+    # Now go back 3 workdays from the start_date
+    workdays_back = 0
+    current_date = start_date
+
+    while workdays_back < 3:
+        current_date = current_date - timedelta(days=1)
+        # If it's a workday (Monday=0 to Friday=4)
+        if current_date.weekday() < 5:
+            workdays_back += 1
+
+    return current_date
+
+
 async def generate_recommendations_for_new_company(company_vat_number: str):
     """
     Enhanced background task to generate recommendations for a newly created company
@@ -232,7 +263,7 @@ async def generate_recommendations_for_new_company(company_vat_number: str):
 
     try:
         # Go back 2 weeks instead of 1 week
-        two_weeks_ago = datetime.now() - timedelta(days=14)
+        three_days_back = get_three_workdays_back()
 
         with get_session() as session:
             company = crud_company.get_company_by_vat_number(
@@ -249,7 +280,7 @@ async def generate_recommendations_for_new_company(company_vat_number: str):
             publications = (
                 session.query(Publication)
                 .filter(
-                    Publication.publication_date >= two_weeks_ago,
+                    Publication.publication_date >= three_days_back,
                     Publication.vault_submission_deadline > datetime.now(),
                 )
                 .all()

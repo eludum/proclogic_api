@@ -1102,18 +1102,16 @@ def get_publications_with_upcoming_deadlines(
     Returns tuples of (publication, company_vat_number, days_left).
     """
     try:
-        future_date = datetime.now() + timedelta(days=days_ahead)
-        start_of_day = future_date.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_of_day = future_date.replace(
-            hour=23, minute=59, second=59, microsecond=999999
-        )
+        now = datetime.now()
+        future_date = now + timedelta(days=days_ahead)
 
         results = (
             session.query(Publication, CompanyPublicationMatch.company_vat_number)
             .join(CompanyPublicationMatch)
             .filter(
-                Publication.vault_submission_deadline >= start_of_day,
-                Publication.vault_submission_deadline <= end_of_day,
+                Publication.vault_submission_deadline.isnot(None),  # Ensure deadline exists
+                Publication.vault_submission_deadline >= now,       # Not in the past
+                Publication.vault_submission_deadline <= future_date,  # Within time window
                 CompanyPublicationMatch.is_saved == True,
             )
             .all()
@@ -1122,9 +1120,13 @@ def get_publications_with_upcoming_deadlines(
         # Calculate days left for each
         deadlines_with_days = []
         for publication, company_vat_number in results:
-            days_left = (
-                publication.vault_submission_deadline - datetime.now()
-            ).days + 1
+            # Calculate days left more accurately
+            time_diff = publication.vault_submission_deadline - now
+            days_left = max(0, time_diff.days)  # Ensure non-negative
+            
+            if time_diff.total_seconds() > 0 and days_left == 0:
+                days_left = 0
+            
             deadlines_with_days.append((publication, company_vat_number, days_left))
 
         return deadlines_with_days
@@ -1132,3 +1134,4 @@ def get_publications_with_upcoming_deadlines(
     except Exception as e:
         logging.error(f"Error getting publications with upcoming deadlines: {e}")
         return []
+    

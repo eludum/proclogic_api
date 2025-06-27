@@ -120,7 +120,6 @@ async def send_deadline_notifications() -> None:
                         if not has_recent_deadline_notification(
                             company_vat_number,
                             publication.publication_workspace_id,
-                            days_ahead,
                             session,
                         ):
                             await send_deadline_notification(
