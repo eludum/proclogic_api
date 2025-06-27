@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from app.models.notification_models import Notification
@@ -170,7 +170,7 @@ def cleanup_old_notifications(session: Session, days_to_keep: int = 90) -> int:
     Can be called by the daily scanner for maintenance.
     """
     try:
-        cutoff_date = datetime.now() - datetime.timedelta(days=days_to_keep)
+        cutoff_date = datetime.now() - timedelta(days=days_to_keep)
 
         deleted_count = (
             session.query(Notification)
@@ -188,7 +188,7 @@ def cleanup_old_notifications(session: Session, days_to_keep: int = 90) -> int:
 
 
 def has_recent_deadline_notification(
-    company_vat_number: str, publication_id: str, days_ahead: int, session: Session
+    company_vat_number: str, publication_id: str, session: Session
 ) -> bool:
     """
     Check if a deadline notification was recently sent for a specific period.
@@ -196,7 +196,7 @@ def has_recent_deadline_notification(
     """
     try:
         # Check for notifications sent in the last day for this specific deadline period
-        cutoff_time = datetime.now() - datetime.timedelta(hours=24)
+        cutoff_time = datetime.now() - timedelta(hours=24)
 
         existing_notification = (
             session.query(Notification)

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Optional
 
 import app.crud.company as crud_company
@@ -45,10 +45,10 @@ async def get_publications(
     region: List[str] = Query(None, description="Filter by region codes"),
     sector: List[str] = Query(None, description="Filter by sector"),
     cpv_code: List[str] = Query(None, description="Filter by CPV codes"),
-    date_from: Optional[datetime.date] = Query(
+    date_from: Optional[date] = Query(
         None, description="Filter publications from this date"
     ),
-    date_to: Optional[datetime.date] = Query(
+    date_to: Optional[date] = Query(
         None, description="Filter publications until this date"
     ),
     sort_by: str = Query(

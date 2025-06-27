@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from typing import List, Optional, Tuple
 
 from app.models.publication_contract_models import (
@@ -715,8 +715,8 @@ def get_paginated_publications_for_company(
     region_filter: Optional[List[str]] = None,
     sector_filter: Optional[List[str]] = None,
     cpv_code_filter: Optional[List[str]] = None,
-    date_from: Optional[datetime.date] = None,
-    date_to: Optional[datetime.date] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
     sort_by: Optional[str] = None,
     sort_order: str = "desc",
 ) -> Tuple[List[Publication], int]:
@@ -1102,7 +1102,7 @@ def get_publications_with_upcoming_deadlines(
     Returns tuples of (publication, company_vat_number, days_left).
     """
     try:
-        future_date = datetime.now() + datetime.timedelta(days=days_ahead)
+        future_date = datetime.now() + timedelta(days=days_ahead)
         start_of_day = future_date.replace(hour=0, minute=0, second=0, microsecond=0)
         end_of_day = future_date.replace(
             hour=23, minute=59, second=59, microsecond=999999
