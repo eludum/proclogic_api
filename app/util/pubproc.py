@@ -144,8 +144,8 @@ async def perform_notification_maintenance() -> None:
     """
     try:
         with get_session() as session:
-            # Clean up old read notifications (older than 180 days)
-            cleanup_count = cleanup_old_notifications(session, days_to_keep=180)
+            # Clean up old read notifications (older than 90 days)
+            cleanup_count = cleanup_old_notifications(session, days_to_keep=90)
             if cleanup_count > 0:
                 logging.info(f"Cleaned up {cleanup_count} old notifications")
 

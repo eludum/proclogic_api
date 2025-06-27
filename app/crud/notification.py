@@ -174,7 +174,7 @@ def cleanup_old_notifications(session: Session, days_to_keep: int = 90) -> int:
 
         deleted_count = (
             session.query(Notification)
-            .filter(Notification.created_at < cutoff_date, Notification.is_read == True)
+            .filter(Notification.created_at < cutoff_date)
             .delete()
         )
 
