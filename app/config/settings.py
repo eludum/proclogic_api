@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     debug_mode: bool = False
 
     openai_api_key: str
-    openai_model: str = "gpt-4.1-mini"
+    openai_model: str = "gpt-5-mini"
     deepseek_api_key: Optional[str] = None
 
     pubproc_client_id: str
