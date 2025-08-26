@@ -208,9 +208,7 @@ def check_rate_limit(progress: dict) -> bool:
 
 def parse_args():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Backfill contracts with rate limiting and resume capability"
-    )
+    parser = argparse.ArgumentParser(description="Backfill contracts")
     parser.add_argument(
         "--from-date", required=True, help="Dispatch date from (YYYY-MM-DD)"
     )
