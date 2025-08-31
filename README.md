@@ -9,6 +9,7 @@ https://europadecentraal.nl/cpv-code-zoekmachine/#cpv-explorer-form
 $ python3 -m venv .venv
 $ source .venv/bin/activate.fish
 $ pip install -r requirements.txt
+$ playwright install
 
 make .env and .env.postgres -> see env_example and env_postgres_example
 

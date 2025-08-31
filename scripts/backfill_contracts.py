@@ -16,8 +16,9 @@ from app.ai.recommend import summarize_publication_contract
 from app.config.postgres import get_session
 from app.config.settings import Settings
 from app.schemas.publication_schemas import PublicationSchema
-from app.util.pubproc import get_notice_xml
+from app.util.pubproc import get_notice_xml, get_publication_workspace_documents
 from app.util.pubproc_token import get_token
+from app.util.web_scraper import download_xml_from_procurement_site
 
 # Configure logging
 logging.basicConfig(
@@ -32,7 +33,7 @@ settings = Settings()
 # Rate limiting constants
 MAX_REQUESTS_PER_DAY = 24000
 REQUEST_DELAY = 2  # seconds
-PROGRESS_FILE = "backfill_progress.json"
+PROGRESS_FILE = "scripts/backfill_progress.json"
 
 
 async def retrieve_publications(
@@ -111,12 +112,29 @@ async def process_publication_contract(
         publication_workspace_id=pub.publication_workspace_id,
     )
 
-    contract = summarize_publication_contract(xml=xml_content)
-    if contract:
-        pub.contract = contract
-        crud_publication.get_or_create_publication(
-            publication_schema=pub, session=session
-        )
+    if not xml_content:
+        logger.info(f"No XML content found via API for publication {pub.publication_workspace_id}")
+        
+        # Try web scraping as fallback
+        xml_content = await download_xml_from_procurement_site(pub.publication_workspace_id)
+        
+        if xml_content:
+            logger.info(f"Successfully downloaded XML via web scraping for publication {pub.publication_workspace_id}")
+        else:
+            logger.warning(f"Failed to get XML content for publication {pub.publication_workspace_id}")
+
+    if xml_content:
+        contract = summarize_publication_contract(xml=xml_content)
+        if contract:
+            pub.contract = contract
+            crud_publication.get_or_create_publication(
+                publication_schema=pub, session=session
+            )
+            logger.info(f"Successfully processed contract for publication {pub.publication_workspace_id}")
+        else:
+            logger.info(f"No contract found in XML for publication {pub.publication_workspace_id}")
+    else:
+        logger.error(f"No XML content available for publication {pub.publication_workspace_id}")
 
 
 async def get_timeframe_pubproc_search_data(
@@ -140,14 +158,14 @@ async def get_timeframe_pubproc_search_data(
     }
 
     r = await client.get(
-        settings.pubproc_server + settings.path_sea_api + "/search/publications",
+        settings.pubproc_server + settings.path_sea_api + "/search/publications/byShortLink/v2-z76di6",
         params=data,
         headers=headers,
     )
 
     r_json = r.json()
-    publications = r_json["publications"]
-    total_count = int(r_json["totalCount"])
+    publications = r_json["publicationResultSummary"]["publications"]
+    total_count = int(r_json["publicationResultSummary"]["totalCount"])
 
     if r.status_code == 200:
         pages = int(np.ceil(total_count / page_size))
@@ -158,12 +176,12 @@ async def get_timeframe_pubproc_search_data(
                 r = await client.get(
                     settings.pubproc_server
                     + settings.path_sea_api
-                    + "/search/publications",
+                    + "/search/publications/byShortLink/v2-z76di6",
                     params=data,
                     headers=headers,
                 )
                 await asyncio.sleep(REQUEST_DELAY)
-                publications.extend(r.json()["publications"])
+                publications.extend(r.json()["publicationResultSummary"]["publications"])
 
     return publications
 

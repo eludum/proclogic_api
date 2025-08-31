@@ -335,17 +335,20 @@ def summarize_publication_contract(
 ) -> Optional[ContractSchema]:
     """
     Extract award information from publication XML.
-    First tries to parse with ElementTree and Pydantic models, falls back to AI if needed.
+    First tries to parse with BS4, falls back to AI if needed.
 
     Returns:
         Contract: The parsed Contract model or None if parsing fails
     """
     # First try to extract data using the Pydantic-based XML parser
     try:
+        if not xml:
+            return None
+        
         contract = extract_data_from_xml(xml)
 
         if contract:
-            logging.info("Successfully extracted award data using Pydantic XML parser")
+            logging.info("Successfully extracted award data using BS4 XML parser")
             return contract
 
     except ValueError as e:

@@ -377,12 +377,15 @@ async def generate_company_recommendations(
 
 async def get_notice_xml(
     client: httpx.AsyncClient, publication_workspace_id: str
-) -> str:
+) -> str | None:
     # TODO: add versions to publications, also key "versions" errors sometimes
     pub_workspace_r = await get_publication_workspace_data(
         client=client, publication_workspace_id=publication_workspace_id
     )
-    return pub_workspace_r["versions"][0]["notice"]["xmlContent"]
+    try:
+        return pub_workspace_r["versions"][0]["notice"]["xmlContent"]
+    except (KeyError, IndexError, TypeError):
+        return None
 
 
 def is_new_notice_version_available(

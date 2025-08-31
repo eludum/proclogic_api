@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TED_ESENDERS xmlns="http://publications.europa.eu/resource/schema/ted/R2.0.9/reception"
+    xmlns:n2016="http://publications.europa.eu/resource/schema/ted/2016/nuts"
+    xmlns:functx="http://www.functx.com" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    VERSION="R2.0.9.S03"
+    xsi:schemaLocation="http://publications.europa.eu/resource/schema/ted/R2.0.9/reception TED_ESENDERS.xsd">
+    <SENDER>
+        <IDENTIFICATION>
+            <ESENDER_LOGIN>BE001</ESENDER_LOGIN>
+            <NO_DOC_EXT>2020-500828</NO_DOC_EXT>
+        </IDENTIFICATION>
+        <CONTACT>
+            <ORGANISATION>Archive</ORGANISATION>
+            <COUNTRY VALUE="BE" />
+            <PHONE>+32 27408000</PHONE>
+            <E_MAIL>revise@publicprocurement.be</E_MAIL>
+        </CONTACT>
+    </SENDER>
+    <FORM_SECTION>
+        <F03_2014 CATEGORY="ORIGINAL" FORM="F03" LG="FR">
+            <LEGAL_BASIS VALUE="32014L0024" />
+            <CONTRACTING_BODY>
+                <ADDRESS_CONTRACTING_BODY>
+                    <OFFICIALNAME>Cité de l'Espoir ASBL</OFFICIALNAME>
+                    <NATIONALID>0408.147.789_24859</NATIONALID>
+                    <ADDRESS>Domaine des Croisiers 2</ADDRESS>
+                    <TOWN>Andrimont</TOWN>
+                    <POSTAL_CODE>4821</POSTAL_CODE>
+                    <COUNTRY VALUE="BE" />
+                    <CONTACT_POINT>Julien Dewalque</CONTACT_POINT>
+                    <PHONE>+32 87325604</PHONE>
+                    <E_MAIL>dewalque.julien@cite-de-lespoir.be</E_MAIL>
+                    <FAX>+32 87337856</FAX>
+                    <n2016:NUTS CODE="BE335" />
+                    <URL_GENERAL>www.cite-de-lespoir.be</URL_GENERAL>
+                    <URL_BUYER>
+                        https://enot.publicprocurement.be/enot-war/preViewNotice.do?noticeId=363746</URL_BUYER>
+                </ADDRESS_CONTRACTING_BODY>
+                <CA_TYPE_OTHER>ASBL</CA_TYPE_OTHER>
+                <CA_ACTIVITY VALUE="HEALTH" />
+            </CONTRACTING_BODY>
+            <OBJECT_CONTRACT>
+                <TITLE>
+                    <P>MPNourEnt2020</P>
+                </TITLE>
+                <REFERENCE_NUMBER>CdlE-MPNourEnt2020-F03_0</REFERENCE_NUMBER>
+                <CPV_MAIN>
+                    <CPV_CODE CODE="33692300" />
+                </CPV_MAIN>
+                <TYPE_CONTRACT CTYPE="SUPPLIES" />
+                <SHORT_DESCR>
+                    <P>Fourniture de produits d'alimentation entérale (compléments nutritionnels
+                        oraux et alimentation par sonde) et du matériel d'administration</P>
+                </SHORT_DESCR>
+                <VAL_TOTAL CURRENCY="EUR">398097.50</VAL_TOTAL>
+                <NO_LOT_DIVISION />
+                <OBJECT_DESCR ITEM="1">
+                    <CPV_ADDITIONAL>
+                        <CPV_CODE CODE="33692300" />
+                    </CPV_ADDITIONAL>
+                    <n2016:NUTS CODE="BE335" />
+                    <MAIN_SITE>
+                        <P>Domaine des Croisiers 2, 4821 Andrimont</P>
+                    </MAIN_SITE>
+                    <SHORT_DESCR>
+                        <P>Voir cahier des charges et inventaire</P>
+                    </SHORT_DESCR>
+                    <AC>
+                        <AC_QUALITY>
+                            <AC_CRITERION>Qualité</AC_CRITERION>
+                            <AC_WEIGHTING>70</AC_WEIGHTING>
+                        </AC_QUALITY>
+                        <AC_PRICE>
+                            <AC_WEIGHTING>30</AC_WEIGHTING>
+                        </AC_PRICE>
+                    </AC>
+                    <NO_OPTIONS />
+                    <NO_EU_PROGR_RELATED />
+                </OBJECT_DESCR>
+            </OBJECT_CONTRACT>
+            <PROCEDURE>
+                <PT_OPEN />
+                <NO_CONTRACT_COVERED_GPA />
+                <NOTICE_NUMBER_OJ>2019/S 184-447385</NOTICE_NUMBER_OJ>
+            </PROCEDURE>
+            <AWARD_CONTRACT ITEM="1">
+                <CONTRACT_NO>MPNourEnt2020</CONTRACT_NO>
+                <LOT_NO>1</LOT_NO>
+                <TITLE>
+                    <P>MPNourEnt2020</P>
+                </TITLE>
+                <AWARDED_CONTRACT>
+                    <DATE_CONCLUSION_CONTRACT>2020-01-06</DATE_CONCLUSION_CONTRACT>
+                    <TENDERS>
+                        <NB_TENDERS_RECEIVED>2</NB_TENDERS_RECEIVED>
+                        <NB_TENDERS_RECEIVED_EMEANS>2</NB_TENDERS_RECEIVED_EMEANS>
+                    </TENDERS>
+                    <CONTRACTORS>
+                        <NO_AWARDED_TO_GROUP />
+                        <CONTRACTOR>
+                            <ADDRESS_CONTRACTOR>
+                                <OFFICIALNAME>Fresenius-Kabi NV/SA</OFFICIALNAME>
+                                <NATIONALID>BE0458.813.760</NATIONALID>
+                                <ADDRESS>Brandekensweg 9</ADDRESS>
+                                <TOWN>Schelle</TOWN>
+                                <POSTAL_CODE>2627</POSTAL_CODE>
+                                <COUNTRY VALUE="BE" />
+                                <n2016:NUTS CODE="BE211" />
+                            </ADDRESS_CONTRACTOR>
+                            <NO_SME />
+                        </CONTRACTOR>
+                    </CONTRACTORS>
+                    <VALUES>
+                        <VAL_ESTIMATED_TOTAL CURRENCY="EUR">450000.00</VAL_ESTIMATED_TOTAL>
+                        <VAL_TOTAL CURRENCY="EUR">398097.50</VAL_TOTAL>
+                    </VALUES>
+                </AWARDED_CONTRACT>
+            </AWARD_CONTRACT>
+            <COMPLEMENTARY_INFO>
+                <ADDRESS_REVIEW_BODY>
+                    <OFFICIALNAME>Tribunaux arrondissement Liège division Verviers</OFFICIALNAME>
+                    <ADDRESS>Rue du Tribunal 4</ADDRESS>
+                    <TOWN>Verviers</TOWN>
+                    <POSTAL_CODE>4800</POSTAL_CODE>
+                    <COUNTRY VALUE="BE" />
+                </ADDRESS_REVIEW_BODY>
+                <DATE_DISPATCH_NOTICE>2020-01-10</DATE_DISPATCH_NOTICE>
+            </COMPLEMENTARY_INFO>
+        </F03_2014>
+    </FORM_SECTION>
+</TED_ESENDERS>

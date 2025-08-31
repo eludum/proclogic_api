@@ -1,0 +1,201 @@
+2025-08-28 23:48:26,297 - INFO - Starting backfill from 2020-01-01 to 2020-01-11
+2025-08-28 23:48:28,663 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications/byShortLink/v2-z76di6?page=1&pageSize=100&dispatchDateFrom=2020-01-01&dispatchDateTo=2020-01-11 "HTTP/1.1 200 OK"
+2025-08-28 23:48:30,107 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications/byShortLink/v2-z76di6?page=2&pageSize=100&dispatchDateFrom=2020-01-01&dispatchDateTo=2020-01-11 "HTTP/1.1 200 OK"
+2025-08-28 23:48:33,499 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications/byShortLink/v2-z76di6?page=3&pageSize=100&dispatchDateFrom=2020-01-01&dispatchDateTo=2020-01-11 "HTTP/1.1 200 OK"
+2025-08-28 23:48:35,622 - INFO - Found 242 publications to process
+2025-08-28 23:48:35,622 - INFO - Resuming with 242 unprocessed publications
+2025-08-28 23:48:36,901 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/ebbe3483-8924-4565-b30b-51df899d5f37 "HTTP/1.1 200 OK"
+2025-08-28 23:48:36,903 - ERROR - Error processing publication ebbe3483-8924-4565-b30b-51df899d5f37: 'xmlContent'
+2025-08-28 23:48:37,135 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/2dca3f3e-29c6-4bf2-97cf-1ee1aea50ef7 "HTTP/1.1 200 OK"
+2025-08-28 23:48:37,136 - ERROR - Error processing publication 2dca3f3e-29c6-4bf2-97cf-1ee1aea50ef7: 'xmlContent'
+2025-08-28 23:48:37,320 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/a2f8f3a6-70bd-4e55-91b8-4c33627fa416 "HTTP/1.1 200 OK"
+2025-08-28 23:48:37,336 - ERROR - Error processing publication a2f8f3a6-70bd-4e55-91b8-4c33627fa416: 'xmlContent'
+2025-08-28 23:48:37,548 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/bbb71884-48b5-4a34-bfda-4a024239b80d "HTTP/1.1 200 OK"
+2025-08-28 23:48:37,549 - ERROR - Error processing publication bbb71884-48b5-4a34-bfda-4a024239b80d: 'xmlContent'
+2025-08-28 23:48:38,825 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/cf4cf548-96b7-4aa5-bc24-0d747ac1a75e "HTTP/1.1 200 OK"
+2025-08-28 23:48:38,827 - ERROR - Error processing publication cf4cf548-96b7-4aa5-bc24-0d747ac1a75e: 'xmlContent'
+2025-08-28 23:48:39,095 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/beba0ea4-1549-4285-97f0-c6ec731e746f "HTTP/1.1 200 OK"
+2025-08-28 23:48:39,096 - ERROR - Error processing publication beba0ea4-1549-4285-97f0-c6ec731e746f: 'xmlContent'
+2025-08-28 23:48:39,289 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/10ec3ce2-3282-4aec-970b-33676336d58e "HTTP/1.1 200 OK"
+2025-08-28 23:48:39,291 - ERROR - Error processing publication 10ec3ce2-3282-4aec-970b-33676336d58e: 'xmlContent'
+2025-08-28 23:48:39,470 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/cb4696fa-d685-4461-808c-ceb1b045cbb5 "HTTP/1.1 200 OK"
+2025-08-28 23:48:39,471 - ERROR - Error processing publication cb4696fa-d685-4461-808c-ceb1b045cbb5: 'xmlContent'
+2025-08-28 23:48:39,723 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/df7f58d9-5e82-4aad-bbe8-7b368c38700f "HTTP/1.1 200 OK"
+2025-08-28 23:48:39,724 - ERROR - Error processing publication df7f58d9-5e82-4aad-bbe8-7b368c38700f: 'xmlContent'
+2025-08-28 23:48:39,963 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/2ce5c16a-4bed-4760-b94e-e54aacd6844a "HTTP/1.1 200 OK"
+2025-08-28 23:48:39,964 - ERROR - Error processing publication 2ce5c16a-4bed-4760-b94e-e54aacd6844a: 'xmlContent'
+2025-08-28 23:48:40,147 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/bd4be983-415e-46ac-b547-1d69fbcbbe32 "HTTP/1.1 200 OK"
+2025-08-28 23:48:40,148 - ERROR - Error processing publication bd4be983-415e-46ac-b547-1d69fbcbbe32: 'xmlContent'
+2025-08-28 23:48:40,379 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/3d8af97c-1139-4cf0-a370-f1a040838f36 "HTTP/1.1 200 OK"
+2025-08-28 23:48:40,380 - ERROR - Error processing publication 3d8af97c-1139-4cf0-a370-f1a040838f36: 'xmlContent'
+2025-08-28 23:55:23,867 - INFO - Starting backfill from 2020-01-01 to 2020-01-11
+2025-08-28 23:55:25,432 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications/byShortLink/v2-z76di6?page=1&pageSize=100&dispatchDateFrom=2020-01-01&dispatchDateTo=2020-01-11 "HTTP/1.1 200 OK"
+2025-08-28 23:55:27,167 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications/byShortLink/v2-z76di6?page=2&pageSize=100&dispatchDateFrom=2020-01-01&dispatchDateTo=2020-01-11 "HTTP/1.1 200 OK"
+2025-08-28 23:55:30,566 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications/byShortLink/v2-z76di6?page=3&pageSize=100&dispatchDateFrom=2020-01-01&dispatchDateTo=2020-01-11 "HTTP/1.1 200 OK"
+2025-08-28 23:55:32,716 - INFO - Found 242 publications to process
+2025-08-28 23:55:32,716 - INFO - Resuming with 242 unprocessed publications
+2025-08-28 23:55:32,910 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/ebbe3483-8924-4565-b30b-51df899d5f37 "HTTP/1.1 200 OK"
+2025-08-28 23:55:32,911 - ERROR - Error processing publication ebbe3483-8924-4565-b30b-51df899d5f37: 'xmlContent'
+2025-08-28 23:55:33,129 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/2dca3f3e-29c6-4bf2-97cf-1ee1aea50ef7 "HTTP/1.1 200 OK"
+2025-08-28 23:55:33,130 - ERROR - Error processing publication 2dca3f3e-29c6-4bf2-97cf-1ee1aea50ef7: 'xmlContent'
+2025-08-28 23:55:33,358 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/a2f8f3a6-70bd-4e55-91b8-4c33627fa416 "HTTP/1.1 200 OK"
+2025-08-28 23:55:33,359 - ERROR - Error processing publication a2f8f3a6-70bd-4e55-91b8-4c33627fa416: 'xmlContent'
+2025-08-28 23:55:33,580 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/bbb71884-48b5-4a34-bfda-4a024239b80d "HTTP/1.1 200 OK"
+2025-08-28 23:55:33,582 - ERROR - Error processing publication bbb71884-48b5-4a34-bfda-4a024239b80d: 'xmlContent'
+2025-08-28 23:55:33,781 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/cf4cf548-96b7-4aa5-bc24-0d747ac1a75e "HTTP/1.1 200 OK"
+2025-08-28 23:55:33,782 - ERROR - Error processing publication cf4cf548-96b7-4aa5-bc24-0d747ac1a75e: 'xmlContent'
+2025-08-28 23:55:34,018 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/beba0ea4-1549-4285-97f0-c6ec731e746f "HTTP/1.1 200 OK"
+2025-08-28 23:55:34,020 - ERROR - Error processing publication beba0ea4-1549-4285-97f0-c6ec731e746f: 'xmlContent'
+2025-08-28 23:55:34,213 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/10ec3ce2-3282-4aec-970b-33676336d58e "HTTP/1.1 200 OK"
+2025-08-28 23:55:34,214 - ERROR - Error processing publication 10ec3ce2-3282-4aec-970b-33676336d58e: 'xmlContent'
+2025-08-28 23:55:34,448 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/cb4696fa-d685-4461-808c-ceb1b045cbb5 "HTTP/1.1 200 OK"
+2025-08-28 23:55:34,449 - ERROR - Error processing publication cb4696fa-d685-4461-808c-ceb1b045cbb5: 'xmlContent'
+2025-08-28 23:55:34,650 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/df7f58d9-5e82-4aad-bbe8-7b368c38700f "HTTP/1.1 200 OK"
+2025-08-28 23:55:34,651 - ERROR - Error processing publication df7f58d9-5e82-4aad-bbe8-7b368c38700f: 'xmlContent'
+2025-08-28 23:55:34,833 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/2ce5c16a-4bed-4760-b94e-e54aacd6844a "HTTP/1.1 200 OK"
+2025-08-28 23:55:34,834 - ERROR - Error processing publication 2ce5c16a-4bed-4760-b94e-e54aacd6844a: 'xmlContent'
+2025-08-28 23:55:35,014 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/bd4be983-415e-46ac-b547-1d69fbcbbe32 "HTTP/1.1 200 OK"
+2025-08-28 23:55:35,015 - ERROR - Error processing publication bd4be983-415e-46ac-b547-1d69fbcbbe32: 'xmlContent'
+2025-08-28 23:55:35,185 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/3d8af97c-1139-4cf0-a370-f1a040838f36 "HTTP/1.1 200 OK"
+2025-08-28 23:55:35,186 - ERROR - Error processing publication 3d8af97c-1139-4cf0-a370-f1a040838f36: 'xmlContent'
+2025-08-28 23:58:19,488 - INFO - Starting backfill from 2020-01-01 to 2020-01-11
+2025-08-28 23:58:20,931 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications/byShortLink/v2-z76di6?page=1&pageSize=100&dispatchDateFrom=2020-01-01&dispatchDateTo=2020-01-11 "HTTP/1.1 200 OK"
+2025-08-28 23:58:22,355 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications/byShortLink/v2-z76di6?page=2&pageSize=100&dispatchDateFrom=2020-01-01&dispatchDateTo=2020-01-11 "HTTP/1.1 200 OK"
+2025-08-28 23:58:25,757 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications/byShortLink/v2-z76di6?page=3&pageSize=100&dispatchDateFrom=2020-01-01&dispatchDateTo=2020-01-11 "HTTP/1.1 200 OK"
+2025-08-28 23:58:27,920 - INFO - Found 242 publications to process
+2025-08-28 23:58:27,921 - INFO - Resuming with 242 unprocessed publications
+2025-08-28 23:58:28,155 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/ebbe3483-8924-4565-b30b-51df899d5f37 "HTTP/1.1 200 OK"
+2025-08-28 23:58:28,156 - INFO - No XML content found for publication ebbe3483-8924-4565-b30b-51df899d5f37
+2025-08-28 23:58:28,433 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/ebbe3483-8924-4565-b30b-51df899d5f37/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-28 23:58:28,434 - WARNING - Pydantic parsing failed: a bytes-like object is required, not 'NoneType', falling back to AI
+2025-08-28 23:58:34,912 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-08-28 23:58:34,930 - WARNING - Failed to parse organization: 1 validation error for ContractOrganizationSchema
+name
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.11/v/string_type
+2025-08-28 23:58:34,930 - WARNING - Failed to parse organization: 1 validation error for ContractOrganizationSchema
+name
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.11/v/string_type
+2025-08-28 23:58:34,931 - ERROR - Error extracting award data via AI: 2 validation errors for ContractSchema
+notice_id
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.11/v/string_type
+contract_id
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.11/v/string_type
+2025-08-28 23:58:34,931 - INFO - Processed 1/242: ebbe3483-8924-4565-b30b-51df899d5f37
+2025-08-28 23:58:37,178 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/2dca3f3e-29c6-4bf2-97cf-1ee1aea50ef7 "HTTP/1.1 200 OK"
+2025-08-28 23:58:37,179 - INFO - No XML content found for publication 2dca3f3e-29c6-4bf2-97cf-1ee1aea50ef7
+2025-08-28 23:58:37,401 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/2dca3f3e-29c6-4bf2-97cf-1ee1aea50ef7/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-28 23:58:37,402 - WARNING - Pydantic parsing failed: a bytes-like object is required, not 'NoneType', falling back to AI
+2025-08-28 23:58:42,168 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-08-28 23:58:42,172 - WARNING - Failed to parse organization: 1 validation error for ContractOrganizationSchema
+name
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.11/v/string_type
+2025-08-28 23:58:42,173 - WARNING - Failed to parse organization: 1 validation error for ContractOrganizationSchema
+name
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.11/v/string_type
+2025-08-28 23:58:42,173 - ERROR - Error extracting award data via AI: 2 validation errors for ContractSchema
+notice_id
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.11/v/string_type
+contract_id
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.11/v/string_type
+2025-08-28 23:58:42,173 - INFO - Processed 2/242: 2dca3f3e-29c6-4bf2-97cf-1ee1aea50ef7
+2025-08-28 23:58:44,482 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/a2f8f3a6-70bd-4e55-91b8-4c33627fa416 "HTTP/1.1 200 OK"
+2025-08-28 23:58:44,485 - INFO - No XML content found for publication a2f8f3a6-70bd-4e55-91b8-4c33627fa416
+2025-08-28 23:58:44,768 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/a2f8f3a6-70bd-4e55-91b8-4c33627fa416/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-28 23:58:44,769 - WARNING - Pydantic parsing failed: a bytes-like object is required, not 'NoneType', falling back to AI
+2025-08-28 23:58:50,005 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-08-28 23:58:50,012 - WARNING - Failed to parse organization: 1 validation error for ContractOrganizationSchema
+name
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.11/v/string_type
+2025-08-28 23:58:50,012 - WARNING - Failed to parse organization: 1 validation error for ContractOrganizationSchema
+name
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.11/v/string_type
+2025-08-28 23:58:50,012 - ERROR - Error extracting award data via AI: 2 validation errors for ContractSchema
+notice_id
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.11/v/string_type
+contract_id
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.11/v/string_type
+2025-08-28 23:58:50,013 - INFO - Processed 3/242: a2f8f3a6-70bd-4e55-91b8-4c33627fa416
+2025-08-28 23:58:52,296 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/bbb71884-48b5-4a34-bfda-4a024239b80d "HTTP/1.1 200 OK"
+2025-08-28 23:58:52,298 - INFO - No XML content found for publication bbb71884-48b5-4a34-bfda-4a024239b80d
+2025-08-28 23:58:52,561 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/bbb71884-48b5-4a34-bfda-4a024239b80d/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-28 23:58:52,563 - WARNING - Pydantic parsing failed: a bytes-like object is required, not 'NoneType', falling back to AI
+2025-08-29 00:00:46,302 - INFO - Starting backfill from 2020-01-01 to 2020-01-11
+2025-08-29 00:00:48,016 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications/byShortLink/v2-z76di6?page=1&pageSize=100&dispatchDateFrom=2020-01-01&dispatchDateTo=2020-01-11 "HTTP/1.1 200 OK"
+2025-08-29 00:00:49,520 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications/byShortLink/v2-z76di6?page=2&pageSize=100&dispatchDateFrom=2020-01-01&dispatchDateTo=2020-01-11 "HTTP/1.1 200 OK"
+2025-08-29 00:00:52,943 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementSea/v1/search/publications/byShortLink/v2-z76di6?page=3&pageSize=100&dispatchDateFrom=2020-01-01&dispatchDateTo=2020-01-11 "HTTP/1.1 200 OK"
+2025-08-29 00:00:55,096 - INFO - Found 242 publications to process
+2025-08-29 00:00:55,097 - INFO - Resuming with 239 unprocessed publications
+2025-08-29 00:00:55,307 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/bbb71884-48b5-4a34-bfda-4a024239b80d "HTTP/1.1 200 OK"
+2025-08-29 00:00:55,308 - INFO - No XML content found for publication bbb71884-48b5-4a34-bfda-4a024239b80d
+2025-08-29 00:00:55,564 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/bbb71884-48b5-4a34-bfda-4a024239b80d/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-29 00:00:55,567 - INFO - Processed 1/239: bbb71884-48b5-4a34-bfda-4a024239b80d
+2025-08-29 00:00:57,878 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/cf4cf548-96b7-4aa5-bc24-0d747ac1a75e "HTTP/1.1 200 OK"
+2025-08-29 00:00:57,879 - INFO - No XML content found for publication cf4cf548-96b7-4aa5-bc24-0d747ac1a75e
+2025-08-29 00:00:58,159 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/cf4cf548-96b7-4aa5-bc24-0d747ac1a75e/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-29 00:00:58,161 - INFO - Processed 2/239: cf4cf548-96b7-4aa5-bc24-0d747ac1a75e
+2025-08-29 00:01:00,490 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/beba0ea4-1549-4285-97f0-c6ec731e746f "HTTP/1.1 200 OK"
+2025-08-29 00:01:00,492 - INFO - No XML content found for publication beba0ea4-1549-4285-97f0-c6ec731e746f
+2025-08-29 00:01:00,736 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/beba0ea4-1549-4285-97f0-c6ec731e746f/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-29 00:01:00,738 - INFO - Processed 3/239: beba0ea4-1549-4285-97f0-c6ec731e746f
+2025-08-29 00:01:03,054 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/10ec3ce2-3282-4aec-970b-33676336d58e "HTTP/1.1 200 OK"
+2025-08-29 00:01:03,055 - INFO - No XML content found for publication 10ec3ce2-3282-4aec-970b-33676336d58e
+2025-08-29 00:01:03,300 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/10ec3ce2-3282-4aec-970b-33676336d58e/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-29 00:01:03,302 - INFO - Processed 4/239: 10ec3ce2-3282-4aec-970b-33676336d58e
+2025-08-29 00:01:05,574 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/cb4696fa-d685-4461-808c-ceb1b045cbb5 "HTTP/1.1 200 OK"
+2025-08-29 00:01:05,575 - INFO - No XML content found for publication cb4696fa-d685-4461-808c-ceb1b045cbb5
+2025-08-29 00:01:05,880 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/cb4696fa-d685-4461-808c-ceb1b045cbb5/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-29 00:01:05,883 - INFO - Processed 5/239: cb4696fa-d685-4461-808c-ceb1b045cbb5
+2025-08-29 00:01:09,232 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/df7f58d9-5e82-4aad-bbe8-7b368c38700f "HTTP/1.1 200 OK"
+2025-08-29 00:01:09,233 - INFO - No XML content found for publication df7f58d9-5e82-4aad-bbe8-7b368c38700f
+2025-08-29 00:01:09,540 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/df7f58d9-5e82-4aad-bbe8-7b368c38700f/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-29 00:01:09,542 - INFO - Processed 6/239: df7f58d9-5e82-4aad-bbe8-7b368c38700f
+2025-08-29 00:01:11,825 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/2ce5c16a-4bed-4760-b94e-e54aacd6844a "HTTP/1.1 200 OK"
+2025-08-29 00:01:11,827 - INFO - No XML content found for publication 2ce5c16a-4bed-4760-b94e-e54aacd6844a
+2025-08-29 00:01:12,102 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/2ce5c16a-4bed-4760-b94e-e54aacd6844a/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-29 00:01:12,104 - INFO - Processed 7/239: 2ce5c16a-4bed-4760-b94e-e54aacd6844a
+2025-08-29 00:01:14,403 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/bd4be983-415e-46ac-b547-1d69fbcbbe32 "HTTP/1.1 200 OK"
+2025-08-29 00:01:14,404 - INFO - No XML content found for publication bd4be983-415e-46ac-b547-1d69fbcbbe32
+2025-08-29 00:01:15,667 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/bd4be983-415e-46ac-b547-1d69fbcbbe32/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-29 00:01:15,672 - INFO - Processed 8/239: bd4be983-415e-46ac-b547-1d69fbcbbe32
+2025-08-29 00:01:17,944 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/3d8af97c-1139-4cf0-a370-f1a040838f36 "HTTP/1.1 200 OK"
+2025-08-29 00:01:17,945 - INFO - No XML content found for publication 3d8af97c-1139-4cf0-a370-f1a040838f36
+2025-08-29 00:01:18,183 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/3d8af97c-1139-4cf0-a370-f1a040838f36/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-29 00:01:18,185 - INFO - Processed 9/239: 3d8af97c-1139-4cf0-a370-f1a040838f36
+2025-08-29 00:01:20,430 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/f994fbf3-258b-492c-bef7-07267a7e91f7 "HTTP/1.1 200 OK"
+2025-08-29 00:01:20,431 - INFO - No XML content found for publication f994fbf3-258b-492c-bef7-07267a7e91f7
+2025-08-29 00:01:20,646 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/f994fbf3-258b-492c-bef7-07267a7e91f7/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-29 00:01:20,648 - INFO - Processed 10/239: f994fbf3-258b-492c-bef7-07267a7e91f7
+2025-08-29 00:01:22,966 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/6f006263-3221-4d71-9f2e-40010b5ec9d0 "HTTP/1.1 200 OK"
+2025-08-29 00:01:22,967 - INFO - No XML content found for publication 6f006263-3221-4d71-9f2e-40010b5ec9d0
+2025-08-29 00:01:23,204 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/6f006263-3221-4d71-9f2e-40010b5ec9d0/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-29 00:01:23,207 - INFO - Processed 11/239: 6f006263-3221-4d71-9f2e-40010b5ec9d0
+2025-08-29 00:01:25,473 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/1ccd84b1-8ee4-4fd4-91ca-e7aba44dd74d "HTTP/1.1 200 OK"
+2025-08-29 00:01:25,474 - INFO - No XML content found for publication 1ccd84b1-8ee4-4fd4-91ca-e7aba44dd74d
+2025-08-29 00:01:25,711 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/1ccd84b1-8ee4-4fd4-91ca-e7aba44dd74d/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-29 00:01:25,712 - INFO - Processed 12/239: 1ccd84b1-8ee4-4fd4-91ca-e7aba44dd74d
+2025-08-29 00:01:27,964 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/2341f053-1d09-4d66-b475-e646368ce374 "HTTP/1.1 200 OK"
+2025-08-29 00:01:27,965 - INFO - No XML content found for publication 2341f053-1d09-4d66-b475-e646368ce374
+2025-08-29 00:01:28,223 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/2341f053-1d09-4d66-b475-e646368ce374/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-29 00:01:28,226 - INFO - Processed 13/239: 2341f053-1d09-4d66-b475-e646368ce374
+2025-08-29 00:01:30,521 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/4a939b61-b485-48af-bf1e-0eb4cb81141f "HTTP/1.1 200 OK"
+2025-08-29 00:01:30,522 - INFO - No XML content found for publication 4a939b61-b485-48af-bf1e-0eb4cb81141f
+2025-08-29 00:01:31,763 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/4a939b61-b485-48af-bf1e-0eb4cb81141f/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-29 00:01:31,765 - INFO - Processed 14/239: 4a939b61-b485-48af-bf1e-0eb4cb81141f
+2025-08-29 00:01:34,069 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/5f1ebaba-bc31-4fc2-bb72-7878b3cc4219 "HTTP/1.1 200 OK"
+2025-08-29 00:01:34,070 - INFO - No XML content found for publication 5f1ebaba-bc31-4fc2-bb72-7878b3cc4219
+2025-08-29 00:01:34,319 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/5f1ebaba-bc31-4fc2-bb72-7878b3cc4219/archive "HTTP/1.1 500 Internal Server Error"
+2025-08-29 00:01:34,321 - INFO - Processed 15/239: 5f1ebaba-bc31-4fc2-bb72-7878b3cc4219
+2025-08-29 00:01:36,568 - INFO - HTTP Request: GET https://public.pr.fedservices.be/api/eProcurementDos/v1/publication-workspaces/107e949c-0b28-425a-a442-06d0665c110e "HTTP/1.1 200 OK"
+2025-08-29 00:01:36,569 - INFO - No XML content found for publication 107e949c-0b28-425a-a442-06d0665c110e
