@@ -42,6 +42,288 @@ def find_text(element, path, namespaces, default=None):
     return found.text if found is not None else default
 
 
+def extract_data_from_older_version_xml(xml_content: str) -> Optional[ContractSchema]:
+    """
+    Extract contract award information from older XML format (TED_ESENDERS with F03_2014).
+    Returns None if parsing fails.
+    """
+    try:
+        root = ET.fromstring(xml_content)
+
+        # Define namespaces for older format
+        old_namespaces = {
+            "": "http://publications.europa.eu/resource/schema/ted/R2.0.9/reception",
+            "n2016": "http://publications.europa.eu/resource/schema/ted/2016/nuts",
+        }
+
+        # Find the F03 form (contract award notice)
+        form = root.find(".//F03_2014", old_namespaces)
+        if form is None:
+            return None
+
+        # Extract basic information
+        sender = root.find(".//SENDER", old_namespaces)
+        no_doc_ext = (
+            find_text(sender, ".//NO_DOC_EXT", old_namespaces) if sender else None
+        )
+
+        # Extract contracting body information
+        contracting_body = form.find(".//CONTRACTING_BODY", old_namespaces)
+        contracting_authority = None
+
+        if contracting_body:
+            address_elem = contracting_body.find(
+                ".//ADDRESS_CONTRACTING_BODY", old_namespaces
+            )
+            if address_elem:
+                # Extract contracting authority details
+                ca_name = find_text(
+                    address_elem, "OFFICIALNAME", old_namespaces, "Unknown"
+                )
+                ca_business_id = find_text(address_elem, "NATIONALID", old_namespaces)
+                ca_phone = find_text(address_elem, "PHONE", old_namespaces)
+                ca_email = find_text(address_elem, "E_MAIL", old_namespaces)
+                ca_website = find_text(address_elem, "URL_GENERAL", old_namespaces)
+
+                # Extract address
+                ca_address = ContractAddressSchema(
+                    street=find_text(address_elem, "ADDRESS", old_namespaces),
+                    city=find_text(address_elem, "TOWN", old_namespaces),
+                    postal_code=find_text(address_elem, "POSTAL_CODE", old_namespaces),
+                    country=(
+                        address_elem.find("COUNTRY", old_namespaces).get("VALUE")
+                        if address_elem.find("COUNTRY", old_namespaces) is not None
+                        else None
+                    ),
+                    nuts_code=find_text(address_elem, "n2016:NUTS", old_namespaces),
+                )
+
+                # Extract contact person
+                contact_persons = []
+                contact_point = find_text(address_elem, "CONTACT_POINT", old_namespaces)
+                if contact_point:
+                    contact = ContractContactPersonSchema(
+                        name=contact_point,
+                        job_title=None,
+                        phone=ca_phone,
+                        email=ca_email,
+                    )
+                    contact_persons.append(contact)
+
+                contracting_authority = ContractOrganizationSchema(
+                    name=ca_name,
+                    business_id=ca_business_id,
+                    website=ca_website,
+                    phone=ca_phone,
+                    email=ca_email,
+                    company_size=None,
+                    subcontracting=None,
+                    address=ca_address,
+                    contact_persons=contact_persons,
+                )
+
+        # Extract contract object information
+        object_contract = form.find(".//OBJECT_CONTRACT", old_namespaces)
+        reference_number = (
+            find_text(object_contract, "REFERENCE_NUMBER", old_namespaces)
+            if object_contract
+            else None
+        )
+
+        # Extract contract value
+        total_amount = None
+        currency = "EUR"
+        val_total_elem = (
+            object_contract.find(".//VAL_TOTAL", old_namespaces)
+            if object_contract
+            else None
+        )
+        if val_total_elem is not None:
+            total_amount = float(val_total_elem.text) if val_total_elem.text else None
+            currency = val_total_elem.get("CURRENCY", "EUR")
+
+        # Extract procedure information
+        procedure = form.find(".//PROCEDURE", old_namespaces)
+        notice_number_oj = (
+            find_text(procedure, "NOTICE_NUMBER_OJ", old_namespaces)
+            if procedure
+            else None
+        )
+
+        # Extract award contract information
+        award_contract = form.find(".//AWARD_CONTRACT", old_namespaces)
+        winning_publisher = None
+        date_conclusion = None
+        nb_tenders_received = None
+
+        if award_contract:
+            awarded_contract = award_contract.find(
+                ".//AWARDED_CONTRACT", old_namespaces
+            )
+            if awarded_contract:
+                # Extract conclusion date
+                date_conclusion_str = find_text(
+                    awarded_contract, "DATE_CONCLUSION_CONTRACT", old_namespaces
+                )
+                if date_conclusion_str:
+                    try:
+                        date_conclusion = datetime.strptime(
+                            date_conclusion_str, "%Y-%m-%d"
+                        ).date()
+                    except ValueError:
+                        pass
+
+                # Extract tender statistics
+                nb_tenders_elem = awarded_contract.find(
+                    ".//NB_TENDERS_RECEIVED", old_namespaces
+                )
+                if nb_tenders_elem is not None:
+                    nb_tenders_received = (
+                        int(nb_tenders_elem.text) if nb_tenders_elem.text else None
+                    )
+
+                # Extract contractor information
+                contractor_elem = awarded_contract.find(
+                    ".//CONTRACTOR/ADDRESS_CONTRACTOR", old_namespaces
+                )
+                if contractor_elem:
+                    contractor_name = find_text(
+                        contractor_elem, "OFFICIALNAME", old_namespaces, "Unknown"
+                    )
+                    contractor_business_id = find_text(
+                        contractor_elem, "NATIONALID", old_namespaces
+                    )
+
+                    # Extract contractor address
+                    contractor_address = ContractAddressSchema(
+                        street=find_text(contractor_elem, "ADDRESS", old_namespaces),
+                        city=find_text(contractor_elem, "TOWN", old_namespaces),
+                        postal_code=find_text(
+                            contractor_elem, "POSTAL_CODE", old_namespaces
+                        ),
+                        country=(
+                            contractor_elem.find("COUNTRY", old_namespaces).get("VALUE")
+                            if contractor_elem.find("COUNTRY", old_namespaces)
+                            is not None
+                            else None
+                        ),
+                        nuts_code=find_text(
+                            contractor_elem, "n2016:NUTS", old_namespaces
+                        ),
+                    )
+
+                    winning_publisher = ContractOrganizationSchema(
+                        name=contractor_name,
+                        business_id=contractor_business_id,
+                        website=None,
+                        phone=None,
+                        email=None,
+                        company_size=None,
+                        subcontracting="Not applicable",  # Default for old format
+                        address=contractor_address,
+                        contact_persons=[],
+                    )
+
+        # Extract dispatch date and appeals body from complementary info
+        complementary_info = form.find(".//COMPLEMENTARY_INFO", old_namespaces)
+        dispatch_date = None
+        appeals_body = None
+
+        if complementary_info:
+            dispatch_date_str = find_text(
+                complementary_info, "DATE_DISPATCH_NOTICE", old_namespaces
+            )
+            if dispatch_date_str:
+                try:
+                    dispatch_date = datetime.strptime(
+                        dispatch_date_str, "%Y-%m-%d"
+                    ).date()
+                except ValueError:
+                    pass
+
+            # Extract appeals body (review body) information
+            review_body_elem = complementary_info.find(
+                ".//ADDRESS_REVIEW_BODY", old_namespaces
+            )
+            if review_body_elem:
+                appeals_body_name = find_text(
+                    review_body_elem, "OFFICIALNAME", old_namespaces, "Unknown"
+                )
+                appeals_body_city = find_text(review_body_elem, "TOWN", old_namespaces)
+                appeals_body_country = (
+                    review_body_elem.find("COUNTRY", old_namespaces).get("VALUE")
+                    if review_body_elem.find("COUNTRY", old_namespaces) is not None
+                    else None
+                )
+
+                appeals_body_address = ContractAddressSchema(
+                    street=None,
+                    city=appeals_body_city,
+                    postal_code=None,
+                    country=appeals_body_country,
+                    nuts_code=None,
+                )
+
+                appeals_body = ContractOrganizationSchema(
+                    name=appeals_body_name,
+                    business_id=None,
+                    website=None,
+                    phone=None,
+                    email=None,
+                    company_size=None,
+                    subcontracting=None,
+                    address=appeals_body_address,
+                    contact_persons=[],
+                )
+
+        # Create the Contract model
+        contract = ContractSchema(
+            notice_id=no_doc_ext or "OLD-FORMAT",
+            contract_id=notice_number_oj or "OLD-FORMAT",
+            internal_id=reference_number,
+            issue_date=dispatch_date or date_conclusion,
+            notice_type="OLD-FORMAT",
+            total_contract_amount=total_amount,
+            currency=currency,
+            lowest_publication_amount=None,
+            highest_publication_amount=None,
+            number_of_publications_received=nb_tenders_received,
+            number_of_participation_requests=None,
+            electronic_auction_used=False,  # Not typically specified in old format
+            dynamic_purchasing_system="none",
+            framework_agreement="none",
+            contracting_authority=contracting_authority,
+            winning_publisher=winning_publisher,
+            appeals_body=appeals_body,
+            service_provider=None,
+        )
+
+        return contract
+
+    except Exception as e:
+        logging.warning(f"Failed to parse older XML format: {e}")
+        return None
+
+
+def is_old_xml_format(xml_content: str) -> bool:
+    """
+    Detect if XML content is in the older TED_ESENDERS format.
+    """
+    try:
+        # Check for old format indicators
+        if "TED_ESENDERS" in xml_content and "F03_2014" in xml_content:
+            return True
+
+        # Parse and check root element
+        root = ET.fromstring(xml_content)
+        if "TED_ESENDERS" in root.tag:
+            return True
+
+        return False
+    except:
+        return False
+
+
 def parse_organization(org_data: dict) -> Optional[ContractOrganizationSchema]:
     if not org_data or not isinstance(org_data, dict):
         return None
@@ -331,31 +613,46 @@ def extract_data_from_xml(xml_content: str) -> Optional[ContractSchema]:
 
 
 def summarize_publication_contract(
-    xml: str, client: OpenAI = None
+    xml: str, client: OpenAI = None, old_xml_format: bool = False
 ) -> Optional[ContractSchema]:
     """
     Extract award information from publication XML.
-    First tries to parse with BS4, falls back to AI if needed.
+    First tries to parse with new format, then old format, falls back to AI if needed.
 
     Returns:
         Contract: The parsed Contract model or None if parsing fails
     """
-    # First try to extract data using the Pydantic-based XML parser
+    # First try to extract data using the Pydantic-based XML parser for new format
     try:
         if not xml:
             return None
-        
+
         contract = extract_data_from_xml(xml)
 
         if contract:
-            logging.info("Successfully extracted award data using BS4 XML parser")
+            logging.info(
+                "Successfully extracted award data using new format XML parser"
+            )
             return contract
 
     except ValueError as e:
         logging.warning(f"Wrong notice type: {e}")
-        return None
     except Exception as e:
-        logging.warning(f"Pydantic parsing failed: {e}, falling back to AI")
+        logging.warning(f"New format parsing failed: {e}, trying old format")
+
+    # Try old XML format as fallback
+    try:
+        if is_old_xml_format(xml):
+            contract = extract_data_from_older_version_xml(xml)
+            if contract:
+                logging.info(
+                    "Successfully extracted award data using old format XML parser"
+                )
+                return contract
+    except Exception as e:
+        logging.warning(f"Old format parsing failed: {e}, falling back to AI")
+        if old_xml_format:
+            return None
 
     client = client or get_openai_client()
 

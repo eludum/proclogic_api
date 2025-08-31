@@ -16,9 +16,9 @@ from app.ai.recommend import summarize_publication_contract
 from app.config.postgres import get_session
 from app.config.settings import Settings
 from app.schemas.publication_schemas import PublicationSchema
-from app.util.pubproc import get_notice_xml, get_publication_workspace_documents
+from app.util.pubproc import get_notice_xml
 from app.util.pubproc_token import get_token
-from app.util.web_scraper import download_xml_from_procurement_site
+from app.util.web_scraper import scrape_xml_from_procurement_site
 
 # Configure logging
 logging.basicConfig(
@@ -116,7 +116,7 @@ async def process_publication_contract(
         logger.info(f"No XML content found via API for publication {pub.publication_workspace_id}")
         
         # Try web scraping as fallback
-        xml_content = await download_xml_from_procurement_site(pub.publication_workspace_id)
+        xml_content = await scrape_xml_from_procurement_site(pub.publication_workspace_id)
         
         if xml_content:
             logger.info(f"Successfully downloaded XML via web scraping for publication {pub.publication_workspace_id}")

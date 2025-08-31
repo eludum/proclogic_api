@@ -1,26 +1,26 @@
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 
 
-def xml_from_procurement_site(publication_workspace_id: str) -> None:
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=False)
-        context = browser.new_context()
-        page = context.new_page()
-        page.goto(
+async def scrape_xml_from_procurement_site(publication_workspace_id: str) -> str:
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=True)
+        context = await browser.new_context()
+        page = await context.new_page()
+        await page.goto(
             f"https://www.publicprocurement.be/publication-workspaces/{publication_workspace_id}/documents"
         )
-        page.locator("tr:has-text('.xml')").get_by_role("button").nth(1).click()
-        with page.expect_download() as download_info:
-            page.get_by_role("button", name="Download latest version").click()
+        await page.locator("tr:has-text('.xml')").get_by_role("button").nth(1).click()
+        async with page.expect_download() as download_info:
+            await page.get_by_role("button", name="Download latest version").click()
 
-        download = download_info.value
-        download_path = download.path()
+        download = await download_info.value
+        download_path = await download.path()
 
         # Read the downloaded XML content
         with open(download_path, "r", encoding="utf-8") as f:
             xml_content = f.read()
 
-        print(xml_content)
+        await context.close()
+        await browser.close()
 
-        context.close()
-        browser.close()
+        return xml_content
