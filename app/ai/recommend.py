@@ -278,11 +278,11 @@ def extract_data_from_older_version_xml(xml_content: str) -> Optional[ContractSc
 
         # Create the Contract model
         contract = ContractSchema(
-            notice_id=no_doc_ext or "OLD-FORMAT",
-            contract_id=notice_number_oj or "OLD-FORMAT",
-            internal_id=reference_number,
+            notice_id=notice_number_oj or no_doc_ext,
+            contract_id=no_doc_ext,
+            internal_id=reference_number or no_doc_ext,
             issue_date=dispatch_date or date_conclusion,
-            notice_type="OLD-FORMAT",
+            notice_type=None,
             total_contract_amount=total_amount,
             currency=currency,
             lowest_publication_amount=None,
