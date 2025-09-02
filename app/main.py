@@ -36,6 +36,23 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(stdout)],
 )
 
+if settings.SENTRY_DSN and settings.debug_mode is not True:
+    sentry_sdk.init(
+        dsn=str(settings.SENTRY_DSN),
+        # Add data like request headers and IP for users,
+        # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
+        send_default_pii=True,
+        # Set traces_sample_rate to 1.0 to capture 100%
+        # of transactions for tracing.
+        traces_sample_rate=1.0,
+        # Set profile_session_sample_rate to 1.0 to profile 100%
+        # of profile sessions.
+        profile_session_sample_rate=1.0,
+        # Set profile_lifecycle to "trace" to automatically
+        # run the profiler on when there is an active transaction
+        profile_lifecycle="trace",
+    )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -63,23 +80,6 @@ async def lifespan(app: FastAPI):
     else:
         # Make sure we always yield
         yield
-
-
-sentry_sdk.init(
-    dsn="https://b7e320ea5a303ef7238671e327105da4@o4509943753932800.ingest.de.sentry.io/4509950390829136",
-    # Add data like request headers and IP for users,
-    # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
-    send_default_pii=True,
-    # Set traces_sample_rate to 1.0 to capture 100%
-    # of transactions for tracing.
-    traces_sample_rate=1.0,
-    # Set profile_session_sample_rate to 1.0 to profile 100%
-    # of profile sessions.
-    profile_session_sample_rate=1.0,
-    # Set profile_lifecycle to "trace" to automatically
-    # run the profiler on when there is an active transaction
-    profile_lifecycle="trace",
-)
 
 
 proclogic = FastAPI(

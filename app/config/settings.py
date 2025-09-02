@@ -1,4 +1,5 @@
 from typing import List, Optional
+from pydantic import HttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -38,6 +39,8 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_db: int = 0
 
+    SENTRY_DSN: HttpUrl | None = None
+
     template_folder: str = "email_template"
     mail_username: Optional[str] = ""
     mail_password: Optional[str] = ""
@@ -70,4 +73,4 @@ class Settings(BaseSettings):
     ]
 
 
-settings = Settings()
+settings = Settings() # type: ignore
