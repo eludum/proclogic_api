@@ -6,8 +6,6 @@ from requests_oauthlib import OAuth2Session
 from app.config.settings import settings
 
 
-
-
 def get_token():
 
     if settings.pubproc_token and settings.pubproc_token_exp is not None:

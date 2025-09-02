@@ -8,7 +8,6 @@ from fastapi.responses import JSONResponse
 stripe_router = APIRouter()
 
 
-
 stripe.api_key = settings.stripe_secret_key
 endpoint_secret = settings.stripe_webhook_secret
 

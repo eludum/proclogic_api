@@ -28,7 +28,6 @@ from app.util.messages_helper import (
 from app.util.publication_utils.publication_converter import PublicationConverter
 
 
-
 companies_router = APIRouter()
 
 

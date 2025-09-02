@@ -4,8 +4,6 @@ from redis.client import Redis
 from app.config.settings import settings
 
 
-
-
 def get_redis_client() -> Redis:
     """
     Create and return a Redis client connection with text decoding.

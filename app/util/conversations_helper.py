@@ -17,8 +17,6 @@ from app.util.pubproc import get_publication_workspace_documents
 from app.util.redis_utils import prepare_files_for_vector_store
 
 
-
-
 async def process_ai_message(
     conversation: Conversation,
     user_message: str,

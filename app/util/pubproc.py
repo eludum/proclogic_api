@@ -35,8 +35,6 @@ from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
 
-
-
 async def fetch_pubproc_data() -> None:
     logging.info("Starting publication data fetch service")
     while True:

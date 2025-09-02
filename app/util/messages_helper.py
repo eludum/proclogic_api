@@ -6,9 +6,7 @@ import app.crud.notification as crud_notification
 from app.config.postgres import get_session
 
 
-def smart_truncate_title(
-    title: str, max_length: int = 200
-) -> str:
+def smart_truncate_title(title: str, max_length: int = 200) -> str:
     """
     Smart truncation for publication titles, preserving meaning by cutting at word boundaries.
     Leaves room for the notification suffix text.
@@ -69,7 +67,7 @@ async def send_deadline_notification(
         prefix = "Deadline nadert voor '"
         suffix = "'"
         max_title_length = 255 - len(prefix) - len(suffix)
-        
+
         truncated_title = smart_truncate_title(
             publication_title, max_length=max_title_length
         )

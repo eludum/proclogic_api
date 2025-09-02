@@ -7,8 +7,6 @@ from app.config.settings import settings
 from app.util.zip import unzip
 
 
-
-
 def encode_file_to_base64(file_obj: Union[BytesIO, bytes]) -> str:
     """
     Convert a file object or bytes to a base64 encoded string.
@@ -54,7 +52,6 @@ def decode_base64_to_bytesio(base64_str: str, filename: str = None) -> BytesIO:
         logging.error(f"Error decoding base64 to file: {e}")
 
 
-
 def normalize_filename(file_obj: BytesIO, filename: str) -> BytesIO:
     """
     Normalize a file object with a proper filename.
@@ -68,18 +65,19 @@ def normalize_filename(file_obj: BytesIO, filename: str) -> BytesIO:
     content = file_obj.read()
     # Create new BytesIO with the content
     byte_io = BytesIO(content)
-    
+
     # Set name with lowercase extension
     if "." in filename:
         name_parts = filename.rsplit(".", 1)
         byte_io.name = f"{name_parts[0]}.{name_parts[1].lower()}"
     else:
         byte_io.name = filename
-    
+
     # Restore original file position
     file_obj.seek(current_pos)
-    
+
     return byte_io
+
 
 def is_file_allowed_for_assistant_file_search(
     filename: str, accepted_formats: List[str] = None

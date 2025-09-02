@@ -34,7 +34,6 @@ conversations_router = APIRouter()
 security = HTTPBearer()
 
 
-
 def truncate_text(text: str, max_length: int = 1000) -> str:
     """Truncate text to the specified max length."""
     if not text:

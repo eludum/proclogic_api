@@ -28,7 +28,6 @@ from app.util.pubproc import (
 )
 
 
-
 logging.basicConfig(
     level=(
         logging.INFO if settings.debug_mode else logging.ERROR

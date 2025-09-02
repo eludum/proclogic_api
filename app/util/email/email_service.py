@@ -15,8 +15,6 @@ from app.models.publication_models import Publication
 from app.util.publication_utils.publication_converter import PublicationConverter
 
 
-
-
 class ContractEmailService:
     """Service for sending automated emails to contract winners"""
 
