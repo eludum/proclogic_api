@@ -1,7 +1,7 @@
-from app.config.settings import Settings
+from app.config.settings import settings
 from openai import OpenAI
 
-settings = Settings()
+
 
 
 def get_deepseek_client() -> OpenAI:

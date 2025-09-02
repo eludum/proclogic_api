@@ -14,7 +14,7 @@ from pydantic import TypeAdapter
 import app.crud.publication as crud_publication
 from app.ai.recommend import summarize_publication_contract
 from app.config.postgres import get_session
-from app.config.settings import Settings
+from app.config.settings import settings
 from app.schemas.publication_schemas import PublicationSchema
 from app.util.pubproc import get_notice_xml
 from app.util.pubproc_token import get_token
@@ -28,7 +28,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-settings = Settings()
+
 
 # Rate limiting constants
 MAX_REQUESTS_PER_DAY = 24000

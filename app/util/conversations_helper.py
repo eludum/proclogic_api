@@ -8,7 +8,7 @@ from openai import OpenAI
 
 import app.crud.conversation as crud_conversation
 from app.config.postgres import get_session
-from app.config.settings import Settings
+from app.config.settings import settings
 from app.models.company_models import Company
 from app.models.conversation_models import Conversation
 from app.models.publication_models import Publication
@@ -16,7 +16,7 @@ from app.util.publication_utils.publication_converter import PublicationConverte
 from app.util.pubproc import get_publication_workspace_documents
 from app.util.redis_utils import prepare_files_for_vector_store
 
-settings = Settings()
+
 
 
 async def process_ai_message(

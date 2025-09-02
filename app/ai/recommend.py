@@ -7,7 +7,7 @@ from typing import Optional
 from openai import OpenAI
 from pydantic import ValidationError
 from app.ai.openai import get_openai_client
-from app.config.settings import Settings
+from app.config.settings import settings
 from app.schemas.company_schemas import CompanySchema
 from app.schemas.publication_schemas import PublicationSchema
 from app.util.publication_utils.publication_converter import PublicationConverter
@@ -19,7 +19,7 @@ from app.schemas.publication_contract_schemas import (
     ContractSchema,
 )
 
-settings = Settings()
+
 
 
 def handle_json_response_formats(response_text: str) -> dict:

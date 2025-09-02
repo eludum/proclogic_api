@@ -6,9 +6,9 @@ from clerk_backend_api import Clerk, CreateInvitationRequestBody, GetUserListReq
 from sqlalchemy.orm import Session
 
 import app.crud.company as crud_company
-from app.config.settings import Settings
+from app.config.settings import settings
 
-settings = Settings()
+
 
 
 def check_user_company_access(email: str, session: Session) -> Optional[str]:

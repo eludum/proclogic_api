@@ -8,7 +8,7 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-from app.config.settings import Settings
+from app.config.settings import settings
 from app.models.company_models import Company
 from app.models.publication_models import Publication
 from app.schemas.company_schemas import CompanySchema
@@ -33,7 +33,7 @@ from app.util.publication_utils.nuts_codes import (
     get_nuts_code_as_str,
 )
 
-settings = Settings()
+
 
 # Try to download NLTK data, with fallback if it fails
 try:

@@ -1,9 +1,9 @@
 import redis
 from redis.client import Redis
 
-from app.config.settings import Settings
+from app.config.settings import settings
 
-settings = Settings()
+
 
 
 def get_redis_client() -> Redis:

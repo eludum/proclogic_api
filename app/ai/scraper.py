@@ -9,10 +9,10 @@ from bs4 import BeautifulSoup
 from openai import OpenAI
 
 from app.ai.openai import get_openai_client
-from app.config.settings import Settings
+from app.config.settings import settings
 from app.util.publication_utils.cpv_codes import nl_sectors
 
-settings = Settings()
+
 
 
 async def extract_text_from_html(html_content: str) -> str:

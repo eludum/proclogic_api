@@ -3,10 +3,10 @@ import logging
 from io import BytesIO
 from typing import Dict, List, Union
 
-from app.config.settings import Settings
+from app.config.settings import settings
 from app.util.zip import unzip
 
-settings = Settings()
+
 
 
 def encode_file_to_base64(file_obj: Union[BytesIO, bytes]) -> str:

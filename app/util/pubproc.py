@@ -15,7 +15,7 @@ from app.ai.recommend import (
     summarize_publication_without_files,
 )
 from app.config.postgres import get_session
-from app.config.settings import Settings
+from app.config.settings import settings
 from app.crud.notification import (
     cleanup_old_notifications,
     has_recent_deadline_notification,
@@ -34,7 +34,7 @@ from app.util.zip import unzip
 from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
-settings = Settings()
+
 
 
 async def fetch_pubproc_data() -> None:

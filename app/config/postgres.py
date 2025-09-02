@@ -3,9 +3,9 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.config.settings import Settings
+from app.config.settings import settings
 
-settings = Settings()
+
 
 engine = create_engine(settings.postgres_con_url)
 

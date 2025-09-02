@@ -3,9 +3,9 @@ from datetime import datetime
 from oauthlib.oauth2 import BackendApplicationClient
 from requests_oauthlib import OAuth2Session
 
-from app.config.settings import Settings
+from app.config.settings import settings
 
-settings = Settings()
+
 
 
 def get_token():

@@ -13,7 +13,7 @@ import app.crud.conversation as crud_conversation
 import app.crud.publication as crud_publication
 from app.ai.openai import get_openai_client
 from app.config.postgres import get_session
-from app.config.settings import Settings
+from app.config.settings import settings
 from app.models.conversation_models import Conversation
 from app.schemas.conversation_schemas import (
     ChatRequest,
@@ -32,7 +32,7 @@ from app.util.conversations_helper import (
 conversations_router = APIRouter()
 
 security = HTTPBearer()
-settings = Settings()
+
 
 
 def truncate_text(text: str, max_length: int = 1000) -> str:

@@ -1,7 +1,7 @@
 import asyncio
 
 import httpx
-from app.config.settings import Settings
+from app.config.settings import settings
 from app.models.company_models import Company
 from app.models.publication_models import Publication
 from app.schemas.company_schemas import CompanySchema, SectorSchema
@@ -15,7 +15,7 @@ from app.util.pubproc import (
     # get_publication_workspace_forum,
 )
 
-settings = Settings()
+
 
 # TODO: hide stuff for the free part
 
