@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import Any
 import sentry_sdk
 from sys import stdout
 
@@ -28,6 +29,20 @@ from app.util.pubproc import (
 )
 
 
+class EndpointFilter(logging.Filter):
+    def __init__(
+        self,
+        path: str,
+        *args: Any,
+        **kwargs: Any,
+    ):
+        super().__init__(*args, **kwargs)
+        self._path = path
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.getMessage().find(self._path) == -1
+
+
 logging.basicConfig(
     level=(
         logging.INFO if settings.debug_mode else logging.ERROR
@@ -35,6 +50,11 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler(stdout)],
 )
+
+
+uvicorn_logger = logging.getLogger("uvicorn.access")
+uvicorn_logger.addFilter(EndpointFilter(path="/health"))
+
 
 if settings.SENTRY_DSN and settings.debug_mode is not True:
     sentry_sdk.init(

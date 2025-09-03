@@ -4,6 +4,8 @@ import json
 import logging
 import os
 from datetime import date, datetime
+from sys import stdout
+from dateutil.relativedelta import relativedelta
 from typing import List
 
 import httpx
@@ -29,11 +31,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-
 # Rate limiting constants
 MAX_REQUESTS_PER_DAY = 24000
 REQUEST_DELAY = 2  # seconds
-PROGRESS_FILE = "scripts/backfill_progress.json"
+PROGRESS_FILE = "backfill_progress.json"
 
 
 async def retrieve_publications(
@@ -52,7 +53,7 @@ async def retrieve_publications(
         )
         pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
 
-        logger.info(f"Found {len(pubproc_data)} publications to process")
+        logging.info(f"Found {len(pubproc_data)} publications to process")
 
         # Filter out already processed publications
         processed_ids = set(progress.get("processed_publications", []))
@@ -62,11 +63,11 @@ async def retrieve_publications(
             if pub.publication_workspace_id not in processed_ids
         ]
 
-        logger.info(f"Resuming with {len(remaining_pubs)} unprocessed publications")
+        logging.info(f"Resuming with {len(remaining_pubs)} unprocessed publications")
 
         # Check rate limit
         if not check_rate_limit(progress):
-            logger.error("Daily rate limit exceeded. Please try again tomorrow.")
+            logging.error("Daily rate limit exceeded. Please try again tomorrow.")
             return
 
         # Process each publication
@@ -74,7 +75,7 @@ async def retrieve_publications(
             try:
                 # Check rate limit before each request
                 if not check_rate_limit(progress):
-                    logger.error("Daily rate limit reached during processing")
+                    logging.error("Daily rate limit reached during processing")
                     break
 
                 await process_publication_contract(
@@ -86,7 +87,7 @@ async def retrieve_publications(
                 progress["requests_made"] = progress.get("requests_made", 0) + 1
                 save_progress(progress)
 
-                logger.info(
+                logging.info(
                     f"Processed {i+1}/{len(remaining_pubs)}: {pub.publication_workspace_id}"
                 )
 
@@ -95,7 +96,7 @@ async def retrieve_publications(
                     await asyncio.sleep(REQUEST_DELAY)
 
             except Exception as e:
-                logger.error(
+                logging.error(
                     f"Error processing publication {pub.publication_workspace_id}: {e}"
                 )
                 continue
@@ -113,15 +114,15 @@ async def process_publication_contract(
     )
 
     if not xml_content:
-        logger.info(f"No XML content found via API for publication {pub.publication_workspace_id}")
+        logging.info(f"No XML content found via API for publication {pub.publication_workspace_id}")
         
         # Try web scraping as fallback
         xml_content = await scrape_xml_from_procurement_site(pub.publication_workspace_id)
         
         if xml_content:
-            logger.info(f"Successfully downloaded XML via web scraping for publication {pub.publication_workspace_id}")
+            logging.info(f"Successfully downloaded XML via web scraping for publication {pub.publication_workspace_id}")
         else:
-            logger.warning(f"Failed to get XML content for publication {pub.publication_workspace_id}")
+            logging.warning(f"Failed to get XML content for publication {pub.publication_workspace_id}")
 
     if xml_content:
         contract = summarize_publication_contract(xml=xml_content)
@@ -130,11 +131,11 @@ async def process_publication_contract(
             crud_publication.get_or_create_publication(
                 publication_schema=pub, session=session
             )
-            logger.info(f"Successfully processed contract for publication {pub.publication_workspace_id}")
+            logging.info(f"Successfully processed contract for publication {pub.publication_workspace_id}")
         else:
-            logger.info(f"No contract found in XML for publication {pub.publication_workspace_id}")
+            logging.info(f"No contract found in XML for publication {pub.publication_workspace_id}")
     else:
-        logger.error(f"No XML content available for publication {pub.publication_workspace_id}")
+        logging.error(f"No XML content available for publication {pub.publication_workspace_id}")
 
 
 async def get_timeframe_pubproc_search_data(
@@ -200,7 +201,7 @@ def load_progress() -> dict:
                     progress["last_reset_date"] = today
                 return progress
         except Exception as e:
-            logger.warning(f"Could not load progress file: {e}")
+            logging.warning(f"Could not load progress file: {e}")
 
     return {
         "processed_publications": [],
@@ -215,7 +216,7 @@ def save_progress(progress: dict) -> None:
         with open(PROGRESS_FILE, "w") as f:
             json.dump(progress, f, indent=2)
     except Exception as e:
-        logger.error(f"Could not save progress: {e}")
+        logging.error(f"Could not save progress: {e}")
 
 
 def check_rate_limit(progress: dict) -> bool:
@@ -228,12 +229,6 @@ def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Backfill contracts")
     parser.add_argument(
-        "--from-date", required=True, help="Dispatch date from (YYYY-MM-DD)"
-    )
-    parser.add_argument(
-        "--to-date", required=True, help="Dispatch date to (YYYY-MM-DD)"
-    )
-    parser.add_argument(
         "--reset-progress",
         action="store_true",
         help="Reset progress and start from beginning",
@@ -244,21 +239,40 @@ def parse_args():
 async def main():
     args = parse_args()
 
-    try:
-        dispatch_date_from = datetime.strptime(args.from_date, "%Y-%m-%d").date()
-        dispatch_date_to = datetime.strptime(args.to_date, "%Y-%m-%d").date()
-    except ValueError:
-        logger.error("Invalid date format. Use YYYY-MM-DD")
-        return
-
     if args.reset_progress and os.path.exists(PROGRESS_FILE):
         os.remove(PROGRESS_FILE)
-        logger.info("Progress reset")
+        logging.info("Progress reset")
 
-    logger.info(f"Starting backfill from {dispatch_date_from} to {dispatch_date_to}")
+    # Start from January 2020
+    start_date = date(2020, 1, 1)
+    # End at December 2020
+    end_date = date(2021, 1, 1)
+
+    logging.info(f"Starting monthly backfill from {start_date} to {end_date}")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        await retrieve_publications(client, dispatch_date_from, dispatch_date_to)
+        # Loop through each month
+        current_date = start_date
+        while current_date <= end_date:
+            # Calculate the end of the current month
+            next_month = current_date + relativedelta(months=1)
+            month_end = next_month - relativedelta(days=1)
+            
+            # Don't go beyond our target end date
+            if month_end > end_date:
+                month_end = end_date
+            
+            logging.info(f"Processing month: {current_date} to {month_end}")
+            await retrieve_publications(client, current_date, month_end)
+            
+            # Move to the next month
+            current_date = next_month
+            
+            # Break if we've processed December 2020
+            if current_date.year == 2021 and current_date.month == 1:
+                break
+
+            logging.info("done")
 
 
 if __name__ == "__main__":
