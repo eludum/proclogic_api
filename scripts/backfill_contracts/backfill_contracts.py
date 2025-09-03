@@ -128,6 +128,7 @@ async def process_publication_contract(
         contract = summarize_publication_contract(xml=xml_content)
         if contract:
             pub.contract = contract
+            pub.contract.notice_id = pub.contract.notice_id + f"-{pub.publication_workspace_id}"
             crud_publication.get_or_create_publication(
                 publication_schema=pub, session=session
             )
