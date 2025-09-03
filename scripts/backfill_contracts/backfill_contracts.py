@@ -26,14 +26,14 @@ from app.util.web_scraper import scrape_xml_from_procurement_site
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("/home/kl/proclogic_api/scripts/backfill_contracts/contract_backfill.log"), logging.StreamHandler()],
+    handlers=[logging.FileHandler("/home/kl/proclogic_api/scripts/backfill_contracts/contract_backfill_2020_february.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
 
 # Rate limiting constants
 MAX_REQUESTS_PER_DAY = 24000
-REQUEST_DELAY = 2  # seconds
+REQUEST_DELAY = 1  # second
 PROGRESS_FILE = "/home/kl/proclogic_api/scripts/backfill_contracts/backfill_progress.json"
 
 
@@ -245,9 +245,9 @@ async def main():
         logging.info("Progress reset")
 
     # Start from January 2020
-    start_date = date(2020, 1, 1)
+    start_date = date(2020, 2, 1)
     # End at December 2020
-    end_date = date(2020, 1, 31)
+    end_date = date(2020, 2, 20)
 
     logging.info(f"Starting monthly backfill from {start_date} to {end_date}")
 

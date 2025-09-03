@@ -35,6 +35,11 @@ def build_search_filter(search_term: str):
                 func.lower(ContractOrganization.name).like(func.lower(search_pattern))
             )
         ),
+        Publication.contract.has(
+            Contract.winning_publisher.has(
+                func.lower(ContractOrganization.business_id).like(func.lower(search_pattern))
+            )
+        ),
     )
 
 
