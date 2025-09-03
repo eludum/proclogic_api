@@ -1,0 +1,11 @@
+2025-09-03 16:32:04,147 - INFO - Starting monthly backfill from 2020-01-01 to 2020-02-01
+2025-09-03 16:32:04,165 - INFO - Processing month: 2020-01-01 to 2020-01-31
+2025-09-03 16:32:04,165 - INFO - done
+2025-09-03 16:32:04,166 - INFO - Processing month: 2020-02-01 to 2020-02-01
+2025-09-03 16:32:04,166 - INFO - done
+2025-09-03 16:32:31,906 - INFO - Starting monthly backfill from 2020-01-01 to 2020-01-31
+2025-09-03 16:32:31,923 - INFO - Processing month: 2020-01-01 to 2020-01-31
+2025-09-03 16:32:31,923 - INFO - done
+2025-09-03 16:34:08,287 - INFO - Starting monthly backfill from 2020-01-01 to 2020-01-31
+2025-09-03 16:34:08,306 - INFO - Processing month: 2020-01-01 to 2020-01-31
+2025-09-03 16:34:08,306 - INFO - done

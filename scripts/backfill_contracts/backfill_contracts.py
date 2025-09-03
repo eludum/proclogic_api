@@ -246,7 +246,7 @@ async def main():
     # Start from January 2020
     start_date = date(2020, 1, 1)
     # End at December 2020
-    end_date = date(2021, 1, 1)
+    end_date = date(2020, 1, 31)
 
     logging.info(f"Starting monthly backfill from {start_date} to {end_date}")
 
@@ -269,8 +269,8 @@ async def main():
             current_date = next_month
             
             # Break if we've processed December 2020
-            if current_date.year == 2021 and current_date.month == 1:
-                break
+            # if current_date.year == 2021 and current_date.month == 1:
+            #     break
 
             logging.info("done")
 
