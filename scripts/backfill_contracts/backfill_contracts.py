@@ -26,7 +26,7 @@ from app.util.web_scraper import scrape_xml_from_procurement_site
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("contract_backfill.log"), logging.StreamHandler()],
+    handlers=[logging.FileHandler("/home/kl/proclogic_api/scripts/backfill_contracts/contract_backfill.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # Rate limiting constants
 MAX_REQUESTS_PER_DAY = 24000
 REQUEST_DELAY = 2  # seconds
-PROGRESS_FILE = "backfill_progress.json"
+PROGRESS_FILE = "/home/kl/proclogic_api/scripts/backfill_contracts/backfill_progress.json"
 
 
 async def retrieve_publications(
