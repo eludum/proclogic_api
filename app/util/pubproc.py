@@ -410,7 +410,6 @@ async def get_daily_pubproc_search_data(
     today = date.today()
     page_size = 100
 
-    # TODO: go page by page and stop if we hit already processed ones, to limit api usage
     data = {
         "dispatchDateFrom": f"{today.strftime('%Y-%m-%d')}",
         "page": 1,

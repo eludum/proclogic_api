@@ -264,7 +264,7 @@ def get_or_create_contract_organization(
 
     if not organization:
         organization = ContractOrganization(
-            name=org_schema.name,
+            name=org_schema.name[:255],
             business_id=org_schema.business_id,
             website=org_schema.website,
             phone=org_schema.phone,

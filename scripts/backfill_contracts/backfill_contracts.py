@@ -26,7 +26,7 @@ from app.util.web_scraper import scrape_xml_from_procurement_site
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("/home/kl/proclogic_api/scripts/backfill_contracts/contract_backfill_2020_february.log"), logging.StreamHandler()],
+    handlers=[logging.FileHandler("/home/kl/proclogic_api/scripts/backfill_contracts/contract_backfill_2020_january.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -244,10 +244,10 @@ async def main():
         os.remove(PROGRESS_FILE)
         logging.info("Progress reset")
 
-    # Start from January 2020
-    start_date = date(2020, 2, 1)
-    # End at December 2020
-    end_date = date(2020, 2, 20)
+    # Start from 1 January 2020
+    start_date = date(2020, 1, 1)
+    # End at 31 January 2020
+    end_date = date(2020, 1, 31)
 
     logging.info(f"Starting monthly backfill from {start_date} to {end_date}")
 
@@ -269,9 +269,9 @@ async def main():
             # Move to the next month
             current_date = next_month
             
-            # Break if we've processed December 2020
-            # if current_date.year == 2021 and current_date.month == 1:
-            #     break
+            # Break if we've processed March 2025
+            if current_date.year == 2025 and current_date.month == 3:
+                break
 
             logging.info("done")
 
