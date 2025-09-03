@@ -25,3 +25,4 @@ html2text
 stripe
 playwright
 sentry-sdk[fastapi]
+python-dateutil
