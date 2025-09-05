@@ -325,7 +325,7 @@ def get_or_create_contract(
             number_of_participation_requests=contract_schema.number_of_participation_requests,
             electronic_auction_used=contract_schema.electronic_auction_used,
             dynamic_purchasing_system=contract_schema.dynamic_purchasing_system,
-            framework_agreement=contract_schema.framework_agreement,
+            framework_agreement=contract_schema.framework_agreement[:50],
             contracting_authority=contracting_authority,
             winning_publisher=winning_publisher,
             appeals_body=appeals_body,

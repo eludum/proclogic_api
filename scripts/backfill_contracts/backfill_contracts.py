@@ -26,7 +26,12 @@ from app.util.web_scraper import scrape_xml_from_procurement_site
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("/home/kl/proclogic_api/scripts/backfill_contracts/contract_backfill_2021_jan_dec.log"), logging.StreamHandler()],
+    handlers=[
+        logging.FileHandler(
+            "/home/kl/proclogic_api/scripts/backfill_contracts/contract_backfill_2021_jan_dec.log"
+        ),
+        logging.StreamHandler(),
+    ],
 )
 logger = logging.getLogger(__name__)
 
@@ -45,33 +50,31 @@ async def retrieve_publications(
     """
     progress = load_progress()
 
-    with get_session() as session:
-        pubproc_r = await get_timeframe_pubproc_search_data(
-            client=client,
-            dispatch_date_from=dispatch_date_from,
-            dispatch_date_to=dispatch_date_to,
-        )
-        pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
+    pubproc_r = await get_timeframe_pubproc_search_data(
+        client=client,
+        dispatch_date_from=dispatch_date_from,
+        dispatch_date_to=dispatch_date_to,
+    )
+    pubproc_data = TypeAdapter(List[PublicationSchema]).validate_python(pubproc_r)
 
-        logging.info(f"Found {len(pubproc_data)} publications to process")
+    logging.info(f"Found {len(pubproc_data)} publications to process")
 
-        # Filter out already processed publications
-        processed_ids = set(progress.get("processed_publications", []))
-        remaining_pubs = [
-            pub
-            for pub in pubproc_data
-            if pub.publication_workspace_id not in processed_ids
-        ]
+    # Filter out already processed publications
+    processed_ids = set(progress.get("processed_publications", []))
+    remaining_pubs = [
+        pub for pub in pubproc_data if pub.publication_workspace_id not in processed_ids
+    ]
 
-        logging.info(f"Resuming with {len(remaining_pubs)} unprocessed publications")
+    logging.info(f"Resuming with {len(remaining_pubs)} unprocessed publications")
 
-        # Check rate limit
-        if not check_rate_limit(progress):
-            logging.error("Daily rate limit exceeded. Please try again tomorrow.")
-            return
+    # Check rate limit
+    if not check_rate_limit(progress):
+        logging.error("Daily rate limit exceeded. Please try again tomorrow.")
+        return
 
-        # Process each publication
-        for i, pub in enumerate(remaining_pubs):
+    # Process each publication
+    for i, pub in enumerate(remaining_pubs):
+        with get_session() as session:
             try:
                 # Check rate limit before each request
                 if not check_rate_limit(progress):
@@ -99,6 +102,7 @@ async def retrieve_publications(
                 logging.error(
                     f"Error processing publication {pub.publication_workspace_id}: {e}"
                 )
+                session.rollback()
                 continue
 
 
@@ -114,29 +118,45 @@ async def process_publication_contract(
     )
 
     if not xml_content:
-        logging.info(f"No XML content found via API for publication {pub.publication_workspace_id}")
-        
+        logging.info(
+            f"No XML content found via API for publication {pub.publication_workspace_id}"
+        )
+
         # Try web scraping as fallback
-        xml_content = await scrape_xml_from_procurement_site(pub.publication_workspace_id)
-        
+        xml_content = await scrape_xml_from_procurement_site(
+            pub.publication_workspace_id
+        )
+
         if xml_content:
-            logging.info(f"Successfully downloaded XML via web scraping for publication {pub.publication_workspace_id}")
+            logging.info(
+                f"Successfully downloaded XML via web scraping for publication {pub.publication_workspace_id}"
+            )
         else:
-            logging.warning(f"Failed to get XML content for publication {pub.publication_workspace_id}")
+            logging.warning(
+                f"Failed to get XML content for publication {pub.publication_workspace_id}"
+            )
 
     if xml_content:
         contract = summarize_publication_contract(xml=xml_content)
         if contract:
             pub.contract = contract
-            pub.contract.notice_id = pub.contract.notice_id + f"-{pub.publication_workspace_id}"
+            pub.contract.notice_id = (
+                pub.contract.notice_id + f"-{pub.publication_workspace_id}"
+            )
             crud_publication.get_or_create_publication(
                 publication_schema=pub, session=session
             )
-            logging.info(f"Successfully processed contract for publication {pub.publication_workspace_id}")
+            logging.info(
+                f"Successfully processed contract for publication {pub.publication_workspace_id}"
+            )
         else:
-            logging.info(f"No contract found in XML for publication {pub.publication_workspace_id}")
+            logging.info(
+                f"No contract found in XML for publication {pub.publication_workspace_id}"
+            )
     else:
-        logging.error(f"No XML content available for publication {pub.publication_workspace_id}")
+        logging.error(
+            f"No XML content available for publication {pub.publication_workspace_id}"
+        )
 
 
 async def get_timeframe_pubproc_search_data(
@@ -160,7 +180,9 @@ async def get_timeframe_pubproc_search_data(
     }
 
     r = await client.get(
-        settings.pubproc_server + settings.path_sea_api + "/search/publications/byShortLink/v2-z76di6",
+        settings.pubproc_server
+        + settings.path_sea_api
+        + "/search/publications/byShortLink/v2-z76di6",
         params=data,
         headers=headers,
     )
@@ -183,7 +205,9 @@ async def get_timeframe_pubproc_search_data(
                     headers=headers,
                 )
                 await asyncio.sleep(REQUEST_DELAY)
-                publications.extend(r.json()["publicationResultSummary"]["publications"])
+                publications.extend(
+                    r.json()["publicationResultSummary"]["publications"]
+                )
 
     return publications
 
@@ -258,17 +282,17 @@ async def main():
             # Calculate the end of the current month
             next_month = current_date + relativedelta(months=1)
             month_end = next_month - relativedelta(days=1)
-            
+
             # Don't go beyond our target end date
             if month_end > end_date:
                 month_end = end_date
-            
+
             logging.info(f"Processing month: {current_date} to {month_end}")
             await retrieve_publications(client, current_date, month_end)
-            
+
             # Move to the next month
             current_date = next_month
-            
+
             # Break if we've processed March 2025
             # if current_date.year == 2025 and current_date.month == 3:
             #     break
