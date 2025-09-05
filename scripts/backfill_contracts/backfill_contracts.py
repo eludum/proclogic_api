@@ -245,7 +245,7 @@ async def main():
         logging.info("Progress reset")
 
     # Start from 1 March 2020
-    start_date = date(2020, 2, 1)
+    start_date = date(2020, 3, 1)
     # End at 31 December 2020
     end_date = date(2020, 12, 31)
 
