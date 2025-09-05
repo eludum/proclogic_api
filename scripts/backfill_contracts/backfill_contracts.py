@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # Rate limiting constants
 MAX_REQUESTS_PER_DAY = 24000
 REQUEST_DELAY = 1  # second
-PROGRESS_FILE = "/home/kl/proclogic_api/scripts/backfill_contracts/backfill_progress_2020_2020_march_dec.json"
+PROGRESS_FILE = "/home/kl/proclogic_api/scripts/backfill_contracts/backfill_progress_2020_march_dec.json"
 
 
 async def retrieve_publications(
