@@ -220,7 +220,7 @@ def create_contract_address(
         city=address_schema.city,
         postal_code=address_schema.postal_code,
         country=address_schema.country,
-        nuts_code=address_schema.nuts_code,
+        nuts_code=address_schema.nuts_code[:10],
     )
     session.add(address)
     session.flush()
