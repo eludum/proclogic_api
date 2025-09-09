@@ -30,7 +30,7 @@ logging.basicConfig(
     handlers=[
         logging.FileHandler(
             home
-            + "proclogic_api/scripts/backfill_contracts/contract_backfill_2021_jan_dec.log"
+            + "/proclogic_api/scripts/backfill_contracts/contract_backfill_2021_jan_dec.log"
         ),
         logging.StreamHandler(),
     ],
@@ -43,7 +43,7 @@ MAX_REQUESTS_PER_DAY = 24000
 REQUEST_DELAY = 1  # second
 PROGRESS_FILE = (
     home
-    + "proclogic_api/scripts/backfill_contracts/backfill_progress_2021_jan_dec.json"
+    + "/proclogic_api/scripts/backfill_contracts/backfill_progress_2021_jan_dec.json"
 )
 
 
