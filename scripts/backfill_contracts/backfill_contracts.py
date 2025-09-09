@@ -4,7 +4,6 @@ import json
 import logging
 import os
 from datetime import date, datetime
-from sys import stdout
 from dateutil.relativedelta import relativedelta
 from typing import List
 
@@ -22,13 +21,16 @@ from app.util.pubproc import get_notice_xml
 from app.util.pubproc_token import get_token
 from app.util.web_scraper import scrape_xml_from_procurement_site
 
+home = os.path.expanduser("~")
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler(
-            "/home/kl/proclogic_api/scripts/backfill_contracts/contract_backfill_2021_jan_dec.log"
+            home
+            + "proclogic_api/scripts/backfill_contracts/contract_backfill_2021_jan_dec.log"
         ),
         logging.StreamHandler(),
     ],
@@ -39,7 +41,10 @@ logger = logging.getLogger(__name__)
 # Rate limiting constants
 MAX_REQUESTS_PER_DAY = 24000
 REQUEST_DELAY = 1  # second
-PROGRESS_FILE = "/home/kl/proclogic_api/scripts/backfill_contracts/backfill_progress_2021_jan_dec.json"
+PROGRESS_FILE = (
+    home
+    + "proclogic_api/scripts/backfill_contracts/backfill_progress_2021_jan_dec.json"
+)
 
 
 async def retrieve_publications(
@@ -74,36 +79,36 @@ async def retrieve_publications(
 
     # Process each publication
     for i, pub in enumerate(remaining_pubs):
-        with get_session() as session:
-            try:
-                # Check rate limit before each request
-                if not check_rate_limit(progress):
-                    logging.error("Daily rate limit reached during processing")
-                    break
+        try:
+            # Check rate limit before each request
+            if not check_rate_limit(progress):
+                logging.error("Daily rate limit reached during processing")
+                break
 
+            with get_session() as session:
                 await process_publication_contract(
                     client=client, pub=pub, session=session
                 )
 
-                # Update progress
-                progress["processed_publications"].append(pub.publication_workspace_id)
-                progress["requests_made"] = progress.get("requests_made", 0) + 1
-                save_progress(progress)
+            # Update progress
+            progress["processed_publications"].append(pub.publication_workspace_id)
+            progress["requests_made"] = progress.get("requests_made", 0) + 1
+            save_progress(progress)
 
-                logging.info(
-                    f"Processed {i+1}/{len(remaining_pubs)}: {pub.publication_workspace_id}"
-                )
+            logging.info(
+                f"Processed {i+1}/{len(remaining_pubs)}: {pub.publication_workspace_id}"
+            )
 
-                # Add delay between requests
-                if i < len(remaining_pubs) - 1:  # Don't delay after the last request
-                    await asyncio.sleep(REQUEST_DELAY)
+            # Add delay between requests
+            if i < len(remaining_pubs) - 1:  # Don't delay after the last request
+                await asyncio.sleep(REQUEST_DELAY)
 
-            except Exception as e:
-                logging.error(
-                    f"Error processing publication {pub.publication_workspace_id}: {e}"
-                )
-                session.rollback()
-                continue
+        except Exception as e:
+            logging.error(
+                f"Error processing publication {pub.publication_workspace_id}: {e}"
+            )
+            session.rollback()
+            continue
 
 
 async def process_publication_contract(
@@ -141,8 +146,8 @@ async def process_publication_contract(
         if contract:
             pub.contract = contract
             pub.contract.notice_id = (
-                pub.contract.notice_id + f"-{pub.publication_workspace_id}"
-            )
+                pub.contract.notice_id or ""
+            ) + f"-{pub.publication_workspace_id}"
             crud_publication.get_or_create_publication(
                 publication_schema=pub, session=session
             )

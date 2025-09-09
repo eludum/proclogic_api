@@ -220,7 +220,7 @@ def create_contract_address(
         city=address_schema.city,
         postal_code=address_schema.postal_code,
         country=address_schema.country,
-        nuts_code=address_schema.nuts_code[:10],
+        nuts_code=address_schema.nuts_code[:10] if address_schema.nuts_code else None,
     )
     session.add(address)
     session.flush()
@@ -264,7 +264,7 @@ def get_or_create_contract_organization(
 
     if not organization:
         organization = ContractOrganization(
-            name=org_schema.name[:255],
+            name=org_schema.name[:255] if org_schema.name else None,
             business_id=org_schema.business_id,
             website=org_schema.website,
             phone=org_schema.phone,
@@ -325,7 +325,7 @@ def get_or_create_contract(
             number_of_participation_requests=contract_schema.number_of_participation_requests,
             electronic_auction_used=contract_schema.electronic_auction_used,
             dynamic_purchasing_system=contract_schema.dynamic_purchasing_system,
-            framework_agreement=contract_schema.framework_agreement[:50],
+            framework_agreement=contract_schema.framework_agreement[:50] if contract_schema.framework_agreement else None,
             contracting_authority=contracting_authority,
             winning_publisher=winning_publisher,
             appeals_body=appeals_body,
