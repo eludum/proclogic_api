@@ -30,7 +30,7 @@ logging.basicConfig(
     handlers=[
         logging.FileHandler(
             home
-            + "/proclogic_api/scripts/backfill_contracts/contract_backfill_2021_jan_dec.log"
+            + "/proclogic_api/scripts/backfill_contracts/contract_backfill_2022_jan_dec.log"
         ),
         logging.StreamHandler(),
     ],
@@ -43,7 +43,7 @@ MAX_REQUESTS_PER_DAY = 24000
 REQUEST_DELAY = 1  # second
 PROGRESS_FILE = (
     home
-    + "/proclogic_api/scripts/backfill_contracts/backfill_progress_2021_jan_dec.json"
+    + "/proclogic_api/scripts/backfill_contracts/backfill_progress_2022_jan_dec.json"
 )
 
 
@@ -273,10 +273,10 @@ async def main():
         os.remove(PROGRESS_FILE)
         logging.info("Progress reset")
 
-    # Start from 1 Jan 2021
-    start_date = date(2021, 1, 1)
-    # End at 31 December 2021
-    end_date = date(2021, 12, 31)
+    # Start from 1 Jan 2022
+    start_date = date(2022, 1, 1)
+    # End at 31 December 2022
+    end_date = date(2022, 12, 31)
 
     logging.info(f"Starting monthly backfill from {start_date} to {end_date}")
 
