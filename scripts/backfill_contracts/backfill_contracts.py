@@ -292,9 +292,8 @@ async def main():
             if month_end > end_date:
                 month_end = end_date
 
-            # logging.info(f"Processing month: {current_date} to {month_end}")
-            # await retrieve_publications(client, current_date, month_end)
-            print(current_date, month_end)
+            logging.info(f"Processing month: {current_date} to {month_end}")
+            await retrieve_publications(client, current_date, month_end)
 
             # Move to the next month
             current_date = next_month
