@@ -30,7 +30,7 @@ logging.basicConfig(
     handlers=[
         logging.FileHandler(
             home
-            + "/proclogic_api/scripts/backfill_contracts/contract_backfill_2017_2019.log"
+            + "/proclogic_api/scripts/backfill_contracts/contract_backfill_2018_04_01_2019.log"
         ),
         logging.StreamHandler(),
     ],
@@ -43,7 +43,7 @@ MAX_REQUESTS_PER_DAY = 24000
 REQUEST_DELAY = 1  # second
 PROGRESS_FILE = (
     home
-    + "/proclogic_api/scripts/backfill_contracts/backfill_progress_2017_2019.json"
+    + "/proclogic_api/scripts/backfill_contracts/backfill_progress_2018_04_01_2019.json"
 )
 
 
@@ -273,8 +273,8 @@ async def main():
         os.remove(PROGRESS_FILE)
         logging.info("Progress reset")
 
-    # Start from 1 Jul 2025
-    start_date = date(2017, 7, 1)
+    # Start from 1 April 2018
+    start_date = date(2018, 4, 1)
     # End at 31 Dec 2019
     end_date = date(2019, 12, 31)
 
