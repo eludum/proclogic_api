@@ -93,27 +93,23 @@ async def stream_ai_response(
         # Add the new user message
         messages.append({"role": "user", "content": user_message})
 
-        # Create streaming response
+        # Create streaming response - use async loop to prevent blocking
         stream = client.chat.completions.create(
             model=settings.openai_model,
             messages=messages,
             stream=True,
         )
 
-        # Collect chunks for the complete response
-        response_chunks = []
-
         # Stream the response
         for chunk in stream:
             if chunk.choices[0].delta.content is not None:
                 content = chunk.choices[0].delta.content
-                response_chunks.append(content)
                 # Yield each chunk as it comes
                 yield content, []
+                # Allow other tasks to run
+                await asyncio.sleep(0)
 
-        # After streaming is complete, yield the full response
-        full_response = "".join(response_chunks)
-        logging.info(f"Stream AI: Completed streaming response of length {len(full_response)}")
+        logging.info(f"Stream AI: Completed streaming response")
 
     except Exception as e:
         logging.error(f"Stream AI: Error during streaming: {e}")
