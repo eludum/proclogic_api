@@ -736,7 +736,6 @@ def summarize_publication_contract(
             },
         ],
         response_format={"type": "json_object"},
-        temperature=0.1,  # Lower temperature for more factual extraction
     )
 
     try:
@@ -855,7 +854,6 @@ def get_recommendation(
             {"role": "user", "content": prompt},
         ],
         response_format={"type": "json_object"},
-        temperature=0.3,
     )
 
     try:
@@ -929,7 +927,6 @@ def summarize_publication_without_files(
             },
             {"role": "user", "content": prompt},
         ],
-        temperature=0.7,
     )
 
     return completion.choices[0].message.content
@@ -976,126 +973,85 @@ def summarize_publication_with_files(
     """
 
     try:
-        vector_store_id = None
-        assistant_id = "asst_OMvTxo3W1byW40gTiceOzP8B"
-
+        # Build context from files
+        file_context = ""
         if filesmap:
-            # Use the utility function to prepare files for the vector store
             file_objects = prepare_files_for_vector_store(filesmap=filesmap)
-
             if file_objects:
-                vector_store = client.vector_stores.create(
-                    name=f"publication_workspace_{publication.publication_workspace_id}"
-                )
-                vector_store_id = vector_store.id
-
-                file_batch = client.vector_stores.file_batches.upload_and_poll(
-                    vector_store_id=vector_store.id,
-                    files=file_objects,
-                )
-
-                if file_batch.status != "completed":
-                    logging.error("File upload failed.")
-                    # Continue without files rather than failing completely
-                    vector_store_id = None
-
-        # Update assistant with vector store (or empty if no files)
-        if vector_store_id:
-            assistant = client.beta.assistants.update(
-                assistant_id=assistant_id,
-                tool_resources={"file_search": {"vector_store_ids": [vector_store_id]}},
-                response_format={"type": "json_object"},
-            )
-        else:
-            assistant = client.beta.assistants.update(
-                assistant_id=assistant_id,
-                tool_resources={"file_search": {"vector_store_ids": []}},
-                response_format={"type": "json_object"},
-            )
+                file_context = f"\n\nAttached documents (total: {len(file_objects)} files):\n"
+                for idx, file_obj in enumerate(file_objects[:10], 1):  # Limit to first 10
+                    file_context += f"- {getattr(file_obj, 'name', f'Document {idx}')}\n"
+                if len(file_objects) > 10:
+                    file_context += f"... and {len(file_objects) - 10} more files"
 
         # Ensure the prompt isn't too long for the message
-        max_message_length = 200000  # Conservative limit for message content
-        if len(prompt) + len(xml) > max_message_length:
-            # Further truncate if needed
-            available_space = max_message_length - len(prompt) - 1000  # Buffer
+        max_message_length = 100000  # Conservative limit
+        if len(prompt) + len(xml) + len(file_context) > max_message_length:
+            # Truncate XML if needed
+            available_space = max_message_length - len(prompt) - len(file_context) - 1000
             if available_space > 0:
-                xml = xml[:available_space] + "...[XML further truncated]"
+                xml = xml[:available_space] + "...[XML truncated]"
             else:
                 xml = "[XML too long, removed]"
 
-        final_message = (
-            f"Summarize the publication and attached documents. {prompt} XML: {xml}"
-        )
+        final_message = f"Summarize the publication. {prompt}\n{file_context}\nXML: {xml}"
 
         # Double-check final message length
-        if len(final_message) > 250000:  # Leave some buffer
-            # Emergency truncation
-            final_message = (
-                final_message[:250000] + "...[Message truncated due to length limits]"
-            )
+        if len(final_message) > 100000:
+            final_message = final_message[:100000] + "...[Message truncated]"
             logging.warning(
-                f"Emergency message truncation for publication {publication.publication_workspace_id}"
+                f"Message truncation for publication {publication.publication_workspace_id}"
             )
 
-        thread = client.beta.threads.create(
+        # Use Chat Completions API with JSON response format
+        response = client.chat.completions.create(
+            model=settings.openai_model,
             messages=[
                 {
-                    "role": "user",
-                    "content": final_message,
-                }
-            ]
-        )
+                    "role": "system",
+                    "content": """You are a public procurement assistant specialized in summarizing government tenders.
+Your task is to create clear, concise summaries that help businesses quickly understand if a tender is relevant to them.
 
-        run = client.beta.threads.runs.create_and_poll(
-            thread_id=thread.id,
-            assistant_id=assistant_id,
-        )
+IMPORTANT: Always respond in fluent, professional Dutch regardless of the language of the input.
 
-        messages = list(
-            client.beta.threads.messages.list(thread_id=thread.id, run_id=run.id)
-        )
+Return a JSON object with:
+{
+    "summary": "Detailed Dutch summary of the procurement",
+    "estimated_value": number or 0
+}
 
-        if not messages:
-            logging.error("No response from assistant.")
-            return "0", "Geen samenvatting beschikbaar.", ""
+Structure your summary as follows:
+1. Start with a brief introduction of the project (1-2 sentences)
+2. Describe the purpose and key requirements
+3. Mention important deadlines, required accreditations or qualifications
+4. Include relevant budget information if available
+5. End with practical information about submission process
+
+Use a professional, informative tone. Focus on concrete, actionable information.""",
+                },
+                {"role": "user", "content": final_message},
+            ],
+            response_format={"type": "json_object"},
+        )
 
         try:
-            message_content = handle_json_response_formats(
-                messages[0].content[0].text.value
-            )
+            message_content = handle_json_response_formats(response.choices[0].message.content)
         except (json.JSONDecodeError, IndexError, AttributeError) as e:
-            logging.error(f"Error parsing assistant response: {e}")
+            logging.error(f"Error parsing response: {e}")
             return "0", "Fout bij het verwerken van de samenvatting.", ""
 
         summary = message_content.get("summary", "Geen samenvatting beschikbaar.")
         estimated_value = message_content.get("estimated_value", 0)
 
-        # Handle citations safely
-        citations = []
-        try:
-            for i, ann in enumerate(messages[0].content[0].text.annotations):
-                if hasattr(ann, "file_citation") and ann.file_citation:
-                    try:
-                        cited_file = client.files.retrieve(ann.file_citation.file_id)
-                        citations.append(f"[{i}] {cited_file.filename}")
-                    except Exception as cite_error:
-                        logging.warning(f"Error retrieving citation file: {cite_error}")
-                        citations.append(f"[{i}] Reference to document")
-        except (AttributeError, IndexError) as e:
-            logging.warning(f"Error processing citations: {e}")
+        # No citations in Chat Completions API
+        citations_str = ""
 
         # Ensure we return strings, not None
-        estimated_value_str = (
-            str(estimated_value) if estimated_value is not None else "0"
-        )
-        summary_str = (
-            str(summary) if summary is not None else "Geen samenvatting beschikbaar."
-        )
-        citations_str = "\n".join(citations) if citations else ""
+        estimated_value_str = str(estimated_value) if estimated_value is not None else "0"
+        summary_str = str(summary) if summary is not None else "Geen samenvatting beschikbaar."
 
         return estimated_value_str, summary_str, citations_str
 
     except Exception as e:
         logging.error(f"Failed to summarize files: {e}")
-        # Return safe default values instead of None
         return "0", "Fout bij het genereren van samenvatting.", ""

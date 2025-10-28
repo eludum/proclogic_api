@@ -101,26 +101,6 @@ def get_conversation_messages(conversation_id: int, session: Session) -> List[Me
     )
 
 
-def update_conversation_ai_info(
-    conversation_id: int, 
-    assistant_id: str, 
-    thread_id: str, 
-    session: Session
-) -> bool:
-    """Update the assistant_id and thread_id for a conversation."""
-    try:
-        conversation = session.query(Conversation).filter(Conversation.id == conversation_id).first()
-        if not conversation:
-            return False
-            
-        conversation.assistant_id = assistant_id
-        conversation.thread_id = thread_id
-        session.commit()
-        return True
-    except Exception as e:
-        logging.error(f"Error updating conversation AI info: {e}")
-        session.rollback()
-        return False
 
 
 def deactivate_conversation(conversation_id: int, session: Session) -> bool:

@@ -19,8 +19,6 @@ class Conversation(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=func.now(), onupdate=func.now()
     )
-    assistant_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    thread_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     company = relationship("Company", back_populates="conversations")

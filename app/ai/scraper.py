@@ -361,7 +361,6 @@ async def scrape_company_website(
                         "content": f"Here is the text content extracted from {website_url} and related pages:\n\n{combined_content}\n\nExtract the company information.",
                     },
                 ],
-                temperature=0.3,
             )
 
             # Return the raw JSON string
