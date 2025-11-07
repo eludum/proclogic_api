@@ -34,8 +34,6 @@ class ConversationSchema(ConversationBase):
     id: int
     created_at: datetime
     updated_at: datetime
-    assistant_id: Optional[str] = None
-    thread_id: Optional[str] = None
     is_active: bool
     messages: List[MessageSchema] = Field(default_factory=list)
 

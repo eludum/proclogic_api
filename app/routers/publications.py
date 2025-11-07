@@ -5,7 +5,7 @@ import app.crud.company as crud_company
 import app.crud.publication as crud_publication
 import httpx
 from app.config.postgres import get_session
-from app.config.settings import Settings
+from app.config.settings import settings
 from app.crud.publication_mapper import (
     convert_publication_to_out_schema_details_free,
     convert_publication_to_out_schema_details_paid,
@@ -28,7 +28,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer
 from fastapi_pagination import Page, Params
 
-settings = Settings()
+
 publications_router = APIRouter()
 security = HTTPBearer()
 

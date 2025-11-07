@@ -1,13 +1,19 @@
 from typing import List, Optional
-from pydantic_settings import BaseSettings
+from pydantic import HttpUrl
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_ignore_empty=True,
+        extra="ignore",
+    )
     scraper_mode: bool = False
     debug_mode: bool = False
 
     openai_api_key: str
-    openai_model: str = "gpt-4.1-mini"
+    openai_model: str = "gpt-5-mini"
     deepseek_api_key: Optional[str] = None
 
     pubproc_client_id: str
@@ -18,7 +24,7 @@ class Settings(BaseSettings):
     stripe_secret_key: str
     stripe_webhook_secret: str
 
-    mailtrap_token: str
+    mailtrap_token: str = ""
 
     clerk_secret_key: str
     clerk_jwks_url: str = "https://clerk.proclogic.be/.well-known/jwks.json"
@@ -32,6 +38,8 @@ class Settings(BaseSettings):
     redis_host: str = "proclogic-redis"
     redis_port: int = 6379
     redis_db: int = 0
+
+    SENTRY_DSN: HttpUrl | None = None
 
     template_folder: str = "email_template"
     mail_username: Optional[str] = ""
@@ -64,6 +72,5 @@ class Settings(BaseSettings):
         ".txt",
     ]
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+
+settings = Settings() # type: ignore

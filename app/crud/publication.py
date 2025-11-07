@@ -220,7 +220,7 @@ def create_contract_address(
         city=address_schema.city,
         postal_code=address_schema.postal_code,
         country=address_schema.country,
-        nuts_code=address_schema.nuts_code,
+        nuts_code=address_schema.nuts_code[:10] if address_schema.nuts_code else None,
     )
     session.add(address)
     session.flush()
@@ -264,7 +264,7 @@ def get_or_create_contract_organization(
 
     if not organization:
         organization = ContractOrganization(
-            name=org_schema.name,
+            name=org_schema.name[:255] if org_schema.name else None,
             business_id=org_schema.business_id,
             website=org_schema.website,
             phone=org_schema.phone,
@@ -325,7 +325,7 @@ def get_or_create_contract(
             number_of_participation_requests=contract_schema.number_of_participation_requests,
             electronic_auction_used=contract_schema.electronic_auction_used,
             dynamic_purchasing_system=contract_schema.dynamic_purchasing_system,
-            framework_agreement=contract_schema.framework_agreement,
+            framework_agreement=contract_schema.framework_agreement[:50] if contract_schema.framework_agreement else None,
             contracting_authority=contracting_authority,
             winning_publisher=winning_publisher,
             appeals_body=appeals_body,
@@ -1109,9 +1109,12 @@ def get_publications_with_upcoming_deadlines(
             session.query(Publication, CompanyPublicationMatch.company_vat_number)
             .join(CompanyPublicationMatch)
             .filter(
-                Publication.vault_submission_deadline.isnot(None),  # Ensure deadline exists
-                Publication.vault_submission_deadline >= now,       # Not in the past
-                Publication.vault_submission_deadline <= future_date,  # Within time window
+                Publication.vault_submission_deadline.isnot(
+                    None
+                ),  # Ensure deadline exists
+                Publication.vault_submission_deadline >= now,  # Not in the past
+                Publication.vault_submission_deadline
+                <= future_date,  # Within time window
                 CompanyPublicationMatch.is_saved == True,
             )
             .all()
@@ -1123,10 +1126,10 @@ def get_publications_with_upcoming_deadlines(
             # Calculate days left more accurately
             time_diff = publication.vault_submission_deadline - now
             days_left = max(0, time_diff.days)  # Ensure non-negative
-            
+
             if time_diff.total_seconds() > 0 and days_left == 0:
                 days_left = 0
-            
+
             deadlines_with_days.append((publication, company_vat_number, days_left))
 
         return deadlines_with_days
@@ -1134,4 +1137,3 @@ def get_publications_with_upcoming_deadlines(
     except Exception as e:
         logging.error(f"Error getting publications with upcoming deadlines: {e}")
         return []
-    

@@ -1,14 +1,16 @@
 import asyncio
 import logging
-from contextlib import asynccontextmanager
+from typing import Any
+import sentry_sdk
 from sys import stdout
 
 from fastapi import FastAPI
+from fastapi.concurrency import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from fastapi_pagination import add_pagination
 
-from app.config.settings import Settings
+from app.config.settings import settings
 from app.routers.company import companies_router
 from app.routers.conversations import conversations_router
 from app.routers.health import health_router
@@ -20,10 +22,26 @@ from app.routers.stripe import stripe_router
 from app.routers.users import users_router
 from app.routers.email import email_tracking_router
 from app.util.alembic_runner import run_migration
-from app.util.pubproc import (fetch_pubproc_data, gather_notifications,
-                              update_pubproc_data)
+from app.util.pubproc import (
+    fetch_pubproc_data,
+    gather_notifications,
+    update_pubproc_data,
+)
 
-settings = Settings()
+
+class EndpointFilter(logging.Filter):
+    def __init__(
+        self,
+        path: str,
+        *args: Any,
+        **kwargs: Any,
+    ):
+        super().__init__(*args, **kwargs)
+        self._path = path
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.getMessage().find(self._path) == -1
+
 
 logging.basicConfig(
     level=(
@@ -32,6 +50,28 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler(stdout)],
 )
+
+
+uvicorn_logger = logging.getLogger("uvicorn.access")
+uvicorn_logger.addFilter(EndpointFilter(path="/health"))
+
+
+if settings.SENTRY_DSN and settings.debug_mode is not True:
+    sentry_sdk.init(
+        dsn=str(settings.SENTRY_DSN),
+        # Add data like request headers and IP for users,
+        # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
+        send_default_pii=True,
+        # Set traces_sample_rate to 1.0 to capture 100%
+        # of transactions for tracing.
+        traces_sample_rate=1.0,
+        # Set profile_session_sample_rate to 1.0 to profile 100%
+        # of profile sessions.
+        profile_session_sample_rate=1.0,
+        # Set profile_lifecycle to "trace" to automatically
+        # run the profiler on when there is an active transaction
+        profile_lifecycle="trace",
+    )
 
 
 @asynccontextmanager

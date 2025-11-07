@@ -1,21 +1,21 @@
 services:
   postgres:
     image: postgres
-    container_name: postgres
+    container_name: postgres_proc
     ports:
       - 5432:5432
     env_file: .env.postgres
 
   redis:
     image: redis/redis-stack
-    container_name: redis
+    container_name: redis_proc
     ports:
       - 6379:6379
       - 8001:8001
 
   pgadmin:
     image: dpage/pgadmin4
-    container_name: pgadmin
+    container_name: pgadmin_proc
     ports:
       - "8002:80"
     env_file: .env.postgres

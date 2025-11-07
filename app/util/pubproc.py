@@ -15,7 +15,7 @@ from app.ai.recommend import (
     summarize_publication_without_files,
 )
 from app.config.postgres import get_session
-from app.config.settings import Settings
+from app.config.settings import settings
 from app.crud.notification import (
     cleanup_old_notifications,
     has_recent_deadline_notification,
@@ -33,8 +33,6 @@ from app.util.redis_cache import invalidate_publication_cache, redis_cache
 from app.util.zip import unzip
 from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
-
-settings = Settings()
 
 
 async def fetch_pubproc_data() -> None:
@@ -289,10 +287,6 @@ async def process_publication_contract(
         crud_publication.get_or_create_publication(
             publication_schema=pub, session=session
         )
-        await handle_new_contract_created(
-            publication=pub,
-            session=session,
-        )
     else:
         logging.info(
             "No contract found for publication %s", pub.publication_workspace_id
@@ -377,12 +371,15 @@ async def generate_company_recommendations(
 
 async def get_notice_xml(
     client: httpx.AsyncClient, publication_workspace_id: str
-) -> str:
+) -> str | None:
     # TODO: add versions to publications, also key "versions" errors sometimes
     pub_workspace_r = await get_publication_workspace_data(
         client=client, publication_workspace_id=publication_workspace_id
     )
-    return pub_workspace_r["versions"][0]["notice"]["xmlContent"]
+    try:
+        return pub_workspace_r["versions"][0]["notice"]["xmlContent"]
+    except (KeyError, IndexError, TypeError):
+        return None
 
 
 def is_new_notice_version_available(
@@ -409,7 +406,6 @@ async def get_daily_pubproc_search_data(
     today = date.today()
     page_size = 100
 
-    # TODO: go page by page and stop if we hit already processed ones, to limit api usage
     data = {
         "dispatchDateFrom": f"{today.strftime('%Y-%m-%d')}",
         "page": 1,

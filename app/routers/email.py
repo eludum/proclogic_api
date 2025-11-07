@@ -22,11 +22,10 @@ async def get_contract_email_history(
 
     with get_session() as session:
         # Get email tracking records
-        email_records = crud_email.get_email_tracking_by_contract(
+        email_records = crud_email.get_email_wtracking_by_contract(
             contract_id=contract_id, session=session
         )
 
         return [
             EmailTrackingResponse.model_validate(record) for record in email_records
         ]
-    

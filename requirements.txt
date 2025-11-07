@@ -2,7 +2,6 @@ fastapi[all]
 uvicorn[standard]
 gunicorn
 fastapi-mail
-pydantic
 openai
 asyncio
 httpx
@@ -24,3 +23,6 @@ fastapi-pagination
 beautifulsoup4
 html2text
 stripe
+playwright
+sentry-sdk[fastapi]
+python-dateutil

@@ -9,9 +9,9 @@ import logging
 from clerk_backend_api import Clerk
 from contextlib import contextmanager
 
-from app.config.settings import Settings
+from app.config.settings import settings
 
-settings = Settings()
+
 security = HTTPBearer()
 
 # JWKS cache

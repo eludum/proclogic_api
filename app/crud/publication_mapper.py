@@ -1,7 +1,7 @@
 import asyncio
 
 import httpx
-from app.config.settings import Settings
+from app.config.settings import settings
 from app.models.company_models import Company
 from app.models.publication_models import Publication
 from app.schemas.company_schemas import CompanySchema, SectorSchema
@@ -15,7 +15,6 @@ from app.util.pubproc import (
     # get_publication_workspace_forum,
 )
 
-settings = Settings()
 
 # TODO: hide stuff for the free part
 
@@ -51,15 +50,19 @@ async def convert_publication_to_out_schema_details_paid(
     # fire and forget, fetch the docs but keep it running
     asyncio.create_task(
         get_publication_workspace_documents(
-            client=httpx.AsyncClient(), publication_workspace_id=publication.publication_workspace_id
-    ))
+            client=httpx.AsyncClient(),
+            publication_workspace_id=publication.publication_workspace_id,
+        )
+    )
     documents = []
     external_links = []
     async with httpx.AsyncClient() as client:
         documents = await get_publication_workspace_document_list(
             client, publication.publication_workspace_id
         )
-        external_links = await get_publication_workspace_document_external_urls(client, publication.publication_workspace_id)
+        external_links = await get_publication_workspace_document_external_urls(
+            client, publication.publication_workspace_id
+        )
         # forum = await get_publication_workspace_forum(
         #     client, publication.publication_workspace_id
         # )

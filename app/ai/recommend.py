@@ -7,7 +7,7 @@ from typing import Optional
 from openai import OpenAI
 from pydantic import ValidationError
 from app.ai.openai import get_openai_client
-from app.config.settings import Settings
+from app.config.settings import settings
 from app.schemas.company_schemas import CompanySchema
 from app.schemas.publication_schemas import PublicationSchema
 from app.util.publication_utils.publication_converter import PublicationConverter
@@ -19,7 +19,7 @@ from app.schemas.publication_contract_schemas import (
     ContractSchema,
 )
 
-settings = Settings()
+
 
 
 def handle_json_response_formats(response_text: str) -> dict:
@@ -40,6 +40,288 @@ def find_text(element, path, namespaces, default=None):
         return default
     found = element.find(path, namespaces)
     return found.text if found is not None else default
+
+
+def extract_data_from_older_version_xml(xml_content: str) -> Optional[ContractSchema]:
+    """
+    Extract contract award information from older XML format (TED_ESENDERS with F03_2014).
+    Returns None if parsing fails.
+    """
+    try:
+        root = ET.fromstring(xml_content)
+
+        # Define namespaces for older format
+        old_namespaces = {
+            "": "http://publications.europa.eu/resource/schema/ted/R2.0.9/reception",
+            "n2016": "http://publications.europa.eu/resource/schema/ted/2016/nuts",
+        }
+
+        # Find the F03 form (contract award notice)
+        form = root.find(".//F03_2014", old_namespaces)
+        if form is None:
+            return None
+
+        # Extract basic information
+        sender = root.find(".//SENDER", old_namespaces)
+        no_doc_ext = (
+            find_text(sender, ".//NO_DOC_EXT", old_namespaces) if sender else None
+        )
+
+        # Extract contracting body information
+        contracting_body = form.find(".//CONTRACTING_BODY", old_namespaces)
+        contracting_authority = None
+
+        if contracting_body:
+            address_elem = contracting_body.find(
+                ".//ADDRESS_CONTRACTING_BODY", old_namespaces
+            )
+            if address_elem:
+                # Extract contracting authority details
+                ca_name = find_text(
+                    address_elem, "OFFICIALNAME", old_namespaces, "Unknown"
+                )
+                ca_business_id = find_text(address_elem, "NATIONALID", old_namespaces)
+                ca_phone = find_text(address_elem, "PHONE", old_namespaces)
+                ca_email = find_text(address_elem, "E_MAIL", old_namespaces)
+                ca_website = find_text(address_elem, "URL_GENERAL", old_namespaces)
+
+                # Extract address
+                ca_address = ContractAddressSchema(
+                    street=find_text(address_elem, "ADDRESS", old_namespaces),
+                    city=find_text(address_elem, "TOWN", old_namespaces),
+                    postal_code=find_text(address_elem, "POSTAL_CODE", old_namespaces),
+                    country=(
+                        address_elem.find("COUNTRY", old_namespaces).get("VALUE")
+                        if address_elem.find("COUNTRY", old_namespaces) is not None
+                        else None
+                    ),
+                    nuts_code=find_text(address_elem, "n2016:NUTS", old_namespaces),
+                )
+
+                # Extract contact person
+                contact_persons = []
+                contact_point = find_text(address_elem, "CONTACT_POINT", old_namespaces)
+                if contact_point:
+                    contact = ContractContactPersonSchema(
+                        name=contact_point,
+                        job_title=None,
+                        phone=ca_phone,
+                        email=ca_email,
+                    )
+                    contact_persons.append(contact)
+
+                contracting_authority = ContractOrganizationSchema(
+                    name=ca_name,
+                    business_id=ca_business_id,
+                    website=ca_website,
+                    phone=ca_phone,
+                    email=ca_email,
+                    company_size=None,
+                    subcontracting=None,
+                    address=ca_address,
+                    contact_persons=contact_persons,
+                )
+
+        # Extract contract object information
+        object_contract = form.find(".//OBJECT_CONTRACT", old_namespaces)
+        reference_number = (
+            find_text(object_contract, "REFERENCE_NUMBER", old_namespaces)
+            if object_contract
+            else None
+        )
+
+        # Extract contract value
+        total_amount = None
+        currency = "EUR"
+        val_total_elem = (
+            object_contract.find(".//VAL_TOTAL", old_namespaces)
+            if object_contract
+            else None
+        )
+        if val_total_elem is not None:
+            total_amount = float(val_total_elem.text) if val_total_elem.text else None
+            currency = val_total_elem.get("CURRENCY", "EUR")
+
+        # Extract procedure information
+        procedure = form.find(".//PROCEDURE", old_namespaces)
+        notice_number_oj = (
+            find_text(procedure, "NOTICE_NUMBER_OJ", old_namespaces)
+            if procedure
+            else None
+        )
+
+        # Extract award contract information
+        award_contract = form.find(".//AWARD_CONTRACT", old_namespaces)
+        winning_publisher = None
+        date_conclusion = None
+        nb_tenders_received = None
+
+        if award_contract:
+            awarded_contract = award_contract.find(
+                ".//AWARDED_CONTRACT", old_namespaces
+            )
+            if awarded_contract:
+                # Extract conclusion date
+                date_conclusion_str = find_text(
+                    awarded_contract, "DATE_CONCLUSION_CONTRACT", old_namespaces
+                )
+                if date_conclusion_str:
+                    try:
+                        date_conclusion = datetime.strptime(
+                            date_conclusion_str, "%Y-%m-%d"
+                        ).date()
+                    except ValueError:
+                        pass
+
+                # Extract tender statistics
+                nb_tenders_elem = awarded_contract.find(
+                    ".//NB_TENDERS_RECEIVED", old_namespaces
+                )
+                if nb_tenders_elem is not None:
+                    nb_tenders_received = (
+                        int(nb_tenders_elem.text) if nb_tenders_elem.text else None
+                    )
+
+                # Extract contractor information
+                contractor_elem = awarded_contract.find(
+                    ".//CONTRACTOR/ADDRESS_CONTRACTOR", old_namespaces
+                )
+                if contractor_elem:
+                    contractor_name = find_text(
+                        contractor_elem, "OFFICIALNAME", old_namespaces, "Unknown"
+                    )
+                    contractor_business_id = find_text(
+                        contractor_elem, "NATIONALID", old_namespaces
+                    )
+
+                    # Extract contractor address
+                    contractor_address = ContractAddressSchema(
+                        street=find_text(contractor_elem, "ADDRESS", old_namespaces),
+                        city=find_text(contractor_elem, "TOWN", old_namespaces),
+                        postal_code=find_text(
+                            contractor_elem, "POSTAL_CODE", old_namespaces
+                        ),
+                        country=(
+                            contractor_elem.find("COUNTRY", old_namespaces).get("VALUE")
+                            if contractor_elem.find("COUNTRY", old_namespaces)
+                            is not None
+                            else None
+                        ),
+                        nuts_code=find_text(
+                            contractor_elem, "n2016:NUTS", old_namespaces
+                        ),
+                    )
+
+                    winning_publisher = ContractOrganizationSchema(
+                        name=contractor_name,
+                        business_id=contractor_business_id,
+                        website=None,
+                        phone=None,
+                        email=None,
+                        company_size=None,
+                        subcontracting="Not applicable",  # Default for old format
+                        address=contractor_address,
+                        contact_persons=[],
+                    )
+
+        # Extract dispatch date and appeals body from complementary info
+        complementary_info = form.find(".//COMPLEMENTARY_INFO", old_namespaces)
+        dispatch_date = None
+        appeals_body = None
+
+        if complementary_info:
+            dispatch_date_str = find_text(
+                complementary_info, "DATE_DISPATCH_NOTICE", old_namespaces
+            )
+            if dispatch_date_str:
+                try:
+                    dispatch_date = datetime.strptime(
+                        dispatch_date_str, "%Y-%m-%d"
+                    ).date()
+                except ValueError:
+                    pass
+
+            # Extract appeals body (review body) information
+            review_body_elem = complementary_info.find(
+                ".//ADDRESS_REVIEW_BODY", old_namespaces
+            )
+            if review_body_elem:
+                appeals_body_name = find_text(
+                    review_body_elem, "OFFICIALNAME", old_namespaces, "Unknown"
+                )
+                appeals_body_city = find_text(review_body_elem, "TOWN", old_namespaces)
+                appeals_body_country = (
+                    review_body_elem.find("COUNTRY", old_namespaces).get("VALUE")
+                    if review_body_elem.find("COUNTRY", old_namespaces) is not None
+                    else None
+                )
+
+                appeals_body_address = ContractAddressSchema(
+                    street=None,
+                    city=appeals_body_city,
+                    postal_code=None,
+                    country=appeals_body_country,
+                    nuts_code=None,
+                )
+
+                appeals_body = ContractOrganizationSchema(
+                    name=appeals_body_name,
+                    business_id=None,
+                    website=None,
+                    phone=None,
+                    email=None,
+                    company_size=None,
+                    subcontracting=None,
+                    address=appeals_body_address,
+                    contact_persons=[],
+                )
+
+        # Create the Contract model
+        contract = ContractSchema(
+            notice_id=notice_number_oj or no_doc_ext,
+            contract_id=no_doc_ext,
+            internal_id=reference_number or no_doc_ext,
+            issue_date=dispatch_date or date_conclusion,
+            notice_type=None,
+            total_contract_amount=total_amount,
+            currency=currency,
+            lowest_publication_amount=None,
+            highest_publication_amount=None,
+            number_of_publications_received=nb_tenders_received,
+            number_of_participation_requests=None,
+            electronic_auction_used=False,  # Not typically specified in old format
+            dynamic_purchasing_system="none",
+            framework_agreement="none",
+            contracting_authority=contracting_authority,
+            winning_publisher=winning_publisher,
+            appeals_body=appeals_body,
+            service_provider=None,
+        )
+
+        return contract
+
+    except Exception as e:
+        logging.warning(f"Failed to parse older XML format: {e}")
+        return None
+
+
+def is_old_xml_format(xml_content: str) -> bool:
+    """
+    Detect if XML content is in the older TED_ESENDERS format.
+    """
+    try:
+        # Check for old format indicators
+        if "TED_ESENDERS" in xml_content and "F03_2014" in xml_content:
+            return True
+
+        # Parse and check root element
+        root = ET.fromstring(xml_content)
+        if "TED_ESENDERS" in root.tag:
+            return True
+
+        return False
+    except:
+        return False
 
 
 def parse_organization(org_data: dict) -> Optional[ContractOrganizationSchema]:
@@ -331,28 +613,46 @@ def extract_data_from_xml(xml_content: str) -> Optional[ContractSchema]:
 
 
 def summarize_publication_contract(
-    xml: str, client: OpenAI = None
+    xml: str, client: OpenAI = None, old_xml_format: bool = False
 ) -> Optional[ContractSchema]:
     """
     Extract award information from publication XML.
-    First tries to parse with ElementTree and Pydantic models, falls back to AI if needed.
+    First tries to parse with new format, then old format, falls back to AI if needed.
 
     Returns:
         Contract: The parsed Contract model or None if parsing fails
     """
-    # First try to extract data using the Pydantic-based XML parser
+    # First try to extract data using the Pydantic-based XML parser for new format
     try:
+        if not xml:
+            return None
+
         contract = extract_data_from_xml(xml)
 
         if contract:
-            logging.info("Successfully extracted award data using Pydantic XML parser")
+            logging.info(
+                "Successfully extracted award data using new format XML parser"
+            )
             return contract
 
     except ValueError as e:
         logging.warning(f"Wrong notice type: {e}")
-        return None
     except Exception as e:
-        logging.warning(f"Pydantic parsing failed: {e}, falling back to AI")
+        logging.warning(f"New format parsing failed: {e}, trying old format")
+
+    # Try old XML format as fallback
+    try:
+        if is_old_xml_format(xml):
+            contract = extract_data_from_older_version_xml(xml)
+            if contract:
+                logging.info(
+                    "Successfully extracted award data using old format XML parser"
+                )
+                return contract
+    except Exception as e:
+        logging.warning(f"Old format parsing failed: {e}, falling back to AI")
+        if old_xml_format:
+            return None
 
     client = client or get_openai_client()
 
@@ -436,7 +736,6 @@ def summarize_publication_contract(
             },
         ],
         response_format={"type": "json_object"},
-        temperature=0.1,  # Lower temperature for more factual extraction
     )
 
     try:
@@ -555,7 +854,6 @@ def get_recommendation(
             {"role": "user", "content": prompt},
         ],
         response_format={"type": "json_object"},
-        temperature=0.3,
     )
 
     try:
@@ -629,7 +927,6 @@ def summarize_publication_without_files(
             },
             {"role": "user", "content": prompt},
         ],
-        temperature=0.7,
     )
 
     return completion.choices[0].message.content
@@ -676,126 +973,85 @@ def summarize_publication_with_files(
     """
 
     try:
-        vector_store_id = None
-        assistant_id = "asst_OMvTxo3W1byW40gTiceOzP8B"
-
+        # Build context from files
+        file_context = ""
         if filesmap:
-            # Use the utility function to prepare files for the vector store
             file_objects = prepare_files_for_vector_store(filesmap=filesmap)
-
             if file_objects:
-                vector_store = client.vector_stores.create(
-                    name=f"publication_workspace_{publication.publication_workspace_id}"
-                )
-                vector_store_id = vector_store.id
-
-                file_batch = client.vector_stores.file_batches.upload_and_poll(
-                    vector_store_id=vector_store.id,
-                    files=file_objects,
-                )
-
-                if file_batch.status != "completed":
-                    logging.error("File upload failed.")
-                    # Continue without files rather than failing completely
-                    vector_store_id = None
-
-        # Update assistant with vector store (or empty if no files)
-        if vector_store_id:
-            assistant = client.beta.assistants.update(
-                assistant_id=assistant_id,
-                tool_resources={"file_search": {"vector_store_ids": [vector_store_id]}},
-                response_format={"type": "json_object"},
-            )
-        else:
-            assistant = client.beta.assistants.update(
-                assistant_id=assistant_id,
-                tool_resources={"file_search": {"vector_store_ids": []}},
-                response_format={"type": "json_object"},
-            )
+                file_context = f"\n\nAttached documents (total: {len(file_objects)} files):\n"
+                for idx, file_obj in enumerate(file_objects[:10], 1):  # Limit to first 10
+                    file_context += f"- {getattr(file_obj, 'name', f'Document {idx}')}\n"
+                if len(file_objects) > 10:
+                    file_context += f"... and {len(file_objects) - 10} more files"
 
         # Ensure the prompt isn't too long for the message
-        max_message_length = 200000  # Conservative limit for message content
-        if len(prompt) + len(xml) > max_message_length:
-            # Further truncate if needed
-            available_space = max_message_length - len(prompt) - 1000  # Buffer
+        max_message_length = 100000  # Conservative limit
+        if len(prompt) + len(xml) + len(file_context) > max_message_length:
+            # Truncate XML if needed
+            available_space = max_message_length - len(prompt) - len(file_context) - 1000
             if available_space > 0:
-                xml = xml[:available_space] + "...[XML further truncated]"
+                xml = xml[:available_space] + "...[XML truncated]"
             else:
                 xml = "[XML too long, removed]"
 
-        final_message = (
-            f"Summarize the publication and attached documents. {prompt} XML: {xml}"
-        )
+        final_message = f"Summarize the publication. {prompt}\n{file_context}\nXML: {xml}"
 
         # Double-check final message length
-        if len(final_message) > 250000:  # Leave some buffer
-            # Emergency truncation
-            final_message = (
-                final_message[:250000] + "...[Message truncated due to length limits]"
-            )
+        if len(final_message) > 100000:
+            final_message = final_message[:100000] + "...[Message truncated]"
             logging.warning(
-                f"Emergency message truncation for publication {publication.publication_workspace_id}"
+                f"Message truncation for publication {publication.publication_workspace_id}"
             )
 
-        thread = client.beta.threads.create(
+        # Use Chat Completions API with JSON response format
+        response = client.chat.completions.create(
+            model=settings.openai_model,
             messages=[
                 {
-                    "role": "user",
-                    "content": final_message,
-                }
-            ]
-        )
+                    "role": "system",
+                    "content": """You are a public procurement assistant specialized in summarizing government tenders.
+Your task is to create clear, concise summaries that help businesses quickly understand if a tender is relevant to them.
 
-        run = client.beta.threads.runs.create_and_poll(
-            thread_id=thread.id,
-            assistant_id=assistant_id,
-        )
+IMPORTANT: Always respond in fluent, professional Dutch regardless of the language of the input.
 
-        messages = list(
-            client.beta.threads.messages.list(thread_id=thread.id, run_id=run.id)
-        )
+Return a JSON object with:
+{
+    "summary": "Detailed Dutch summary of the procurement",
+    "estimated_value": number or 0
+}
 
-        if not messages:
-            logging.error("No response from assistant.")
-            return "0", "Geen samenvatting beschikbaar.", ""
+Structure your summary as follows:
+1. Start with a brief introduction of the project (1-2 sentences)
+2. Describe the purpose and key requirements
+3. Mention important deadlines, required accreditations or qualifications
+4. Include relevant budget information if available
+5. End with practical information about submission process
+
+Use a professional, informative tone. Focus on concrete, actionable information.""",
+                },
+                {"role": "user", "content": final_message},
+            ],
+            response_format={"type": "json_object"},
+        )
 
         try:
-            message_content = handle_json_response_formats(
-                messages[0].content[0].text.value
-            )
+            message_content = handle_json_response_formats(response.choices[0].message.content)
         except (json.JSONDecodeError, IndexError, AttributeError) as e:
-            logging.error(f"Error parsing assistant response: {e}")
+            logging.error(f"Error parsing response: {e}")
             return "0", "Fout bij het verwerken van de samenvatting.", ""
 
         summary = message_content.get("summary", "Geen samenvatting beschikbaar.")
         estimated_value = message_content.get("estimated_value", 0)
 
-        # Handle citations safely
-        citations = []
-        try:
-            for i, ann in enumerate(messages[0].content[0].text.annotations):
-                if hasattr(ann, "file_citation") and ann.file_citation:
-                    try:
-                        cited_file = client.files.retrieve(ann.file_citation.file_id)
-                        citations.append(f"[{i}] {cited_file.filename}")
-                    except Exception as cite_error:
-                        logging.warning(f"Error retrieving citation file: {cite_error}")
-                        citations.append(f"[{i}] Reference to document")
-        except (AttributeError, IndexError) as e:
-            logging.warning(f"Error processing citations: {e}")
+        # No citations in Chat Completions API
+        citations_str = ""
 
         # Ensure we return strings, not None
-        estimated_value_str = (
-            str(estimated_value) if estimated_value is not None else "0"
-        )
-        summary_str = (
-            str(summary) if summary is not None else "Geen samenvatting beschikbaar."
-        )
-        citations_str = "\n".join(citations) if citations else ""
+        estimated_value_str = str(estimated_value) if estimated_value is not None else "0"
+        summary_str = str(summary) if summary is not None else "Geen samenvatting beschikbaar."
 
         return estimated_value_str, summary_str, citations_str
 
     except Exception as e:
         logging.error(f"Failed to summarize files: {e}")
-        # Return safe default values instead of None
         return "0", "Fout bij het genereren van samenvatting.", ""

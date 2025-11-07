@@ -12,7 +12,7 @@ from app.ai.openai import get_openai_client
 from app.ai.recommend import get_recommendation
 from app.ai.scraper import scrape_company_website
 from app.config.postgres import get_session
-from app.config.settings import Settings
+from app.config.settings import settings
 from app.crud.publication_mapper import convert_company_to_schema
 from app.models.publication_models import CompanyPublicationMatch, Publication
 from app.schemas.company_schemas import (
@@ -27,7 +27,6 @@ from app.util.messages_helper import (
 )
 from app.util.publication_utils.publication_converter import PublicationConverter
 
-settings = Settings()
 
 companies_router = APIRouter()
 

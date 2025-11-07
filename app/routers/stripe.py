@@ -1,13 +1,12 @@
 import logging
 import stripe
-from app.config.settings import Settings
+from app.config.settings import settings
 from clerk_backend_api import Clerk, CreateInvitationRequestBody
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 stripe_router = APIRouter()
 
-settings = Settings()
 
 stripe.api_key = settings.stripe_secret_key
 endpoint_secret = settings.stripe_webhook_secret

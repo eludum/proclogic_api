@@ -6,9 +6,7 @@ from clerk_backend_api import Clerk, CreateInvitationRequestBody, GetUserListReq
 from sqlalchemy.orm import Session
 
 import app.crud.company as crud_company
-from app.config.settings import Settings
-
-settings = Settings()
+from app.config.settings import settings
 
 
 def check_user_company_access(email: str, session: Session) -> Optional[str]:
@@ -48,7 +46,9 @@ def add_user_to_company(company_vat_number: str, email: str, session: Session) -
         # Create Clerk invitation
         with Clerk(bearer_auth=settings.clerk_secret_key) as clerk:
             invitation = clerk.invitations.create(
-                request=CreateInvitationRequestBody(email_address=email, public_metadata={"onboardingComplete": True})
+                request=CreateInvitationRequestBody(
+                    email_address=email, public_metadata={"onboardingComplete": True}
+                )
             )
 
             if not invitation:
@@ -96,8 +96,8 @@ def remove_user_from_company(
         try:
             with Clerk(bearer_auth=settings.clerk_secret_key) as clerk:
                 clerk_users = clerk.users.list(
-                        request=GetUserListRequest(email_address=[email]),
-                    )
+                    request=GetUserListRequest(email_address=[email]),
+                )
                 if clerk_users != []:
                     user_id = clerk_users[0].id
                     clerk.users.delete(user_id=user_id)

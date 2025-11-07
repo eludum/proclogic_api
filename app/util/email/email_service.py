@@ -8,13 +8,11 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.config.settings import Settings
+from app.config.settings import settings
 from app.models.email_models import ContractEmailTracking
 from app.models.publication_contract_models import Contract
 from app.models.publication_models import Publication
 from app.util.publication_utils.publication_converter import PublicationConverter
-
-settings = Settings()
 
 
 class ContractEmailService:
