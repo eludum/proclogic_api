@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     stripe_secret_key: str
     stripe_webhook_secret: str
 
-    mailtrap_token: str
+    mailtrap_token: str = ""
 
     clerk_secret_key: str
     clerk_jwks_url: str = "https://clerk.proclogic.be/.well-known/jwks.json"

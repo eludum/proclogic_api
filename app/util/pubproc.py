@@ -287,10 +287,6 @@ async def process_publication_contract(
         crud_publication.get_or_create_publication(
             publication_schema=pub, session=session
         )
-        await handle_new_contract_created(
-            publication=pub,
-            session=session,
-        )
     else:
         logging.info(
             "No contract found for publication %s", pub.publication_workspace_id
