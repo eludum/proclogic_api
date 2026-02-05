@@ -75,7 +75,6 @@ async def process_ai_message(
     return response_text, None
 
 
-# TODO: fix streaming to be true streaming (see SDK)
 async def stream_ai_response(
     conversation: Conversation,
     user_message: str,
