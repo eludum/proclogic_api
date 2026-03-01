@@ -48,29 +48,9 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
                         # Special handling for document data
                         if key_prefix == "pubproc:documents" and isinstance(data, dict):
                             # Convert base64 back to file objects
-                            reconstructed_files = {}
-                            for filename, file_data in data.items():
-                                if (
-                                    isinstance(file_data, dict)
-                                    and "content_base64" in file_data
-                                ):
-                                    # Create BytesIO from base64
-                                    file_obj = decode_base64_to_bytesio(
-                                        file_data["content_base64"]
-                                    )
-
-                                    # Set additional metadata
-                                    if "name" in file_data:
-                                        file_obj.name = file_data["name"]
-                                    else:
-                                        file_obj.name = filename
-
-                                    reconstructed_files[filename] = file_obj
-                                else:
-                                    # Handle older cache format or malformed data
-                                    reconstructed_files[filename] = file_data
-
-                            return reconstructed_files
+                            # Store as base64 dict to avoid BytesIO sharing issues
+                            # We'll return the dict as-is, and let the endpoint create fresh BytesIO
+                            return data
                         else:
                             # Return other data types as is
                             return data
