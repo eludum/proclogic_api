@@ -36,7 +36,7 @@ from app.schemas.publication_schemas import (
     PublicationSchema,
 )
 from sqlalchemy import and_, case, desc, func, literal_column, or_, select
-from sqlalchemy.orm import Session, aliased, joinedload
+from sqlalchemy.orm import Session, aliased, joinedload, subqueryload
 from sqlalchemy.sql import exists
 
 
@@ -555,53 +555,41 @@ def get_publication_by_workspace_id(
             session.query(Publication)
             .filter(Publication.publication_workspace_id == publication_workspace_id)
             .options(
+                # Use joinedload for direct relationships
                 joinedload(Publication.cpv_main_code),
-                joinedload(Publication.dossier).joinedload(Dossier.descriptions),
-                joinedload(Publication.dossier).joinedload(Dossier.titles),
-                joinedload(Publication.dossier).joinedload(
+                joinedload(Publication.dossier).subqueryload(Dossier.descriptions),
+                joinedload(Publication.dossier).subqueryload(Dossier.titles),
+                joinedload(Publication.dossier).subqueryload(
                     Dossier.enterprise_categories
                 ),
-                joinedload(Publication.organisation).joinedload(
+                joinedload(Publication.organisation).subqueryload(
                     Organisation.organisation_names
                 ),
-                joinedload(Publication.cpv_additional_codes),
-                joinedload(Publication.lots).joinedload(Lot.descriptions),
-                joinedload(Publication.lots).joinedload(Lot.titles),
-                joinedload(Publication.company_matches),
-                joinedload(Publication.contract)
-                .joinedload(Contract.contracting_authority)
-                .joinedload(ContractOrganization.address),
-                joinedload(Publication.contract)
-                .joinedload(Contract.contracting_authority)
-                .joinedload(ContractOrganization.contact_persons),
-                joinedload(Publication.contract)
-                .joinedload(Contract.winning_publisher)
-                .joinedload(ContractOrganization.address),
-                joinedload(Publication.contract)
-                .joinedload(Contract.winning_publisher)
-                .joinedload(ContractOrganization.contact_persons),
-                joinedload(Publication.contract)
-                .joinedload(Contract.appeals_body)
-                .joinedload(ContractOrganization.address),
-                joinedload(Publication.contract)
-                .joinedload(Contract.appeals_body)
-                .joinedload(ContractOrganization.contact_persons),
-                joinedload(Publication.contract)
-                .joinedload(Contract.service_provider)
-                .joinedload(ContractOrganization.address),
-                joinedload(Publication.contract)
-                .joinedload(Contract.service_provider)
-                .joinedload(ContractOrganization.contact_persons),
+                # Use subqueryload for collections to avoid cartesian products
+                subqueryload(Publication.cpv_additional_codes),
+                subqueryload(Publication.lots).subqueryload(Lot.descriptions),
+                subqueryload(Publication.lots).subqueryload(Lot.titles),
+                subqueryload(Publication.company_matches),
+                # Load contract and its organizations separately
+                joinedload(Publication.contract),
             )
             .first()
         )
 
-        # Force loading of all relationships before closing session
-        if publication:
-            # Access relationships to load them
-            _ = publication.company_matches
-            _ = publication.cpv_additional_codes
-            _ = publication.lots
+        # Load contract organizations in separate queries to avoid timeout
+        if publication and publication.contract:
+            if publication.contract.contracting_authority:
+                _ = publication.contract.contracting_authority.address
+                _ = publication.contract.contracting_authority.contact_persons
+            if publication.contract.winning_publisher:
+                _ = publication.contract.winning_publisher.address
+                _ = publication.contract.winning_publisher.contact_persons
+            if publication.contract.appeals_body:
+                _ = publication.contract.appeals_body.address
+                _ = publication.contract.appeals_body.contact_persons
+            if publication.contract.service_provider:
+                _ = publication.contract.service_provider.address
+                _ = publication.contract.service_provider.contact_persons
 
         return publication
     except Exception as e:
@@ -1072,19 +1060,20 @@ def get_paginated_publications_free(
     # Add other sorting options as needed
 
     # Apply pagination and eager loading
+    # Use subqueryload for collections to avoid cartesian products
     publications = (
         query.options(
             joinedload(Publication.cpv_main_code),
-            joinedload(Publication.dossier).joinedload(Dossier.descriptions),
-            joinedload(Publication.dossier).joinedload(Dossier.titles),
-            joinedload(Publication.dossier).joinedload(Dossier.enterprise_categories),
-            joinedload(Publication.organisation).joinedload(
+            joinedload(Publication.dossier).subqueryload(Dossier.descriptions),
+            joinedload(Publication.dossier).subqueryload(Dossier.titles),
+            joinedload(Publication.dossier).subqueryload(Dossier.enterprise_categories),
+            joinedload(Publication.organisation).subqueryload(
                 Organisation.organisation_names
             ),
-            joinedload(Publication.cpv_additional_codes),
-            joinedload(Publication.lots).joinedload(Lot.descriptions),
-            joinedload(Publication.lots).joinedload(Lot.titles),
-            joinedload(Publication.company_matches),
+            subqueryload(Publication.cpv_additional_codes),
+            subqueryload(Publication.lots).subqueryload(Lot.descriptions),
+            subqueryload(Publication.lots).subqueryload(Lot.titles),
+            subqueryload(Publication.company_matches),
         )
         .offset((page - 1) * size)
         .limit(size)

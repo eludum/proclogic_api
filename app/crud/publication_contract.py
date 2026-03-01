@@ -2,10 +2,10 @@ import logging
 from typing import List, Optional, Tuple
 
 from sqlalchemy import and_, extract, func, or_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, subqueryload
 
 from app.models.publication_contract_models import Contract, ContractOrganization
-from app.models.publication_models import Publication
+from app.models.publication_models import Dossier, Publication
 
 
 def build_search_filter(search_term: str):
@@ -210,14 +210,21 @@ def get_paginated_contracts(
             else:
                 query = query.order_by(Publication.publication_date.asc())
 
-        # Apply pagination with basic eager loading
-        # Note: Complex relationships will be loaded lazily when accessed
+        # Apply pagination with optimized eager loading to prevent N+1 queries
+        # Use subqueryload for collections to avoid cartesian products
         publications = (
             query.options(
-                joinedload(Publication.dossier),
+                # Load dossier and its nested relationships
+                joinedload(Publication.dossier).subqueryload(Dossier.titles),
+                joinedload(Publication.dossier).subqueryload(Dossier.descriptions),
+                # Load organisation
                 joinedload(Publication.organisation),
+                # Load CPV code
                 joinedload(Publication.cpv_main_code),
-                joinedload(Publication.contract),
+                # Load contract with organizations
+                joinedload(Publication.contract).joinedload(Contract.winning_publisher),
+                joinedload(Publication.contract).joinedload(Contract.contracting_authority),
+                joinedload(Publication.contract).joinedload(Contract.service_provider),
             )
             .offset((page - 1) * size)
             .limit(size)

@@ -43,8 +43,8 @@ class DossierSchema(BaseModel):
 
 class LotSchema(BaseModel):
     descriptions: List[DescriptionSchema]
-    reserved_execution: List[str]
-    reserved_participation: List[str]
+    reserved_execution: Optional[List[str]] = None
+    reserved_participation: Optional[List[str]] = None
     titles: List[DescriptionSchema]
 
     model_config = ConfigDict(from_attributes=True, alias_generator=to_camel)
