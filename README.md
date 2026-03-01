@@ -5,9 +5,8 @@
 
 </div>
 
-<div align="center">
 # ProcLogic API
-</div>
+
 **The first fully open-source public tender platform - Backend API**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
