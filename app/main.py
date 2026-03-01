@@ -76,6 +76,10 @@ if settings.SENTRY_DSN and settings.debug_mode is not True:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Pre-warm JWKS cache for faster first request
+    from app.util.clerk import warm_jwks_cache
+    await warm_jwks_cache()
+
     if settings.scraper_mode:
         # Create a list to track your background tasks
         # run_migration()
@@ -123,16 +127,17 @@ proclogic.include_router(kanban_router)
 proclogic.include_router(stripe_router)
 proclogic.include_router(email_tracking_router)
 
-# TODO: fix cors
-# origins = [
-#     "http://localhost:3000",
-#     settings.frontend_url,
-# ]
+# Configure CORS with specific origins to avoid preflight overhead
+origins = [
+    "http://localhost:3000",
+    "https://app.proclogic.be",
+    "https://proclogic.be",
+]
 
 proclogic.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept"],
 )

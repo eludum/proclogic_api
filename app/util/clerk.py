@@ -4,7 +4,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import jwt, jwk
 from jose.exceptions import JWTError
 from pydantic import BaseModel
-import requests
+import httpx
 import logging
 from clerk_backend_api import Clerk
 from contextlib import contextmanager
@@ -23,11 +23,29 @@ class AuthUser(BaseModel):
     email: Optional[str] = None
 
 
-def get_jwks():
-    """Get the JSON Web Key Set from Clerk"""
+async def warm_jwks_cache():
+    """Pre-warm JWKS cache at startup - call this from lifespan"""
     global _jwks_cache
     if _jwks_cache is None:
-        logging.info("Fetching JWKS from Clerk")
+        try:
+            logging.info("Pre-warming JWKS cache from Clerk")
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(settings.clerk_jwks_url)
+                if response.status_code == 200:
+                    _jwks_cache = response.json()
+                    logging.info("JWKS cache pre-warmed successfully")
+                else:
+                    logging.error(f"Failed to pre-warm JWKS: {response.status_code}")
+        except Exception as e:
+            logging.error(f"Error pre-warming JWKS cache: {str(e)}")
+
+
+def get_jwks():
+    """Get the JSON Web Key Set from Clerk (synchronous fallback)"""
+    global _jwks_cache
+    if _jwks_cache is None:
+        logging.warning("JWKS cache miss - fetching synchronously (startup pre-warming may have failed)")
+        import requests
         response = requests.get(settings.clerk_jwks_url)
         if response.status_code != 200:
             logging.error(f"Failed to get JWKS: {response.status_code}")
@@ -85,7 +103,10 @@ def get_clerk_client():
 
 
 async def get_auth_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Authenticate the user and return their user information"""
+    """Authenticate the user and return their user information with Redis caching"""
+    from app.config.redis_manager import get_redis_client
+    import pickle
+
     token = credentials.credentials
     payload = decode_token(token)
 
@@ -95,7 +116,19 @@ async def get_auth_user(credentials: HTTPAuthorizationCredentials = Depends(secu
         logging.error("No user ID found in token payload")
         raise HTTPException(status_code=401, detail="User ID not found in token")
 
-    # Get additional user details from Clerk
+    # Try to get from Redis cache first
+    redis_client = get_redis_client()
+    cache_key = f"clerk:user:{user_id}"
+
+    try:
+        cached_user = redis_client.get(cache_key)
+        if cached_user:
+            user_data = pickle.loads(cached_user)
+            return AuthUser(**user_data)
+    except Exception as e:
+        logging.warning(f"Redis cache read failed for user {user_id}: {str(e)}")
+
+    # Cache miss - fetch from Clerk
     try:
         with get_clerk_client() as clerk:
             user = clerk.users.get(user_id=user_id)
@@ -119,8 +152,18 @@ async def get_auth_user(credentials: HTTPAuthorizationCredentials = Depends(secu
                 logging.error(f"No email found for user: {user_id}")
                 raise HTTPException(status_code=400, detail="User email not available")
 
-            # Return with user_id and email
-            return AuthUser(user_id=user_id, email=email)
+            # Cache the result for 1 hour (3600 seconds)
+            auth_user = AuthUser(user_id=user_id, email=email)
+            try:
+                redis_client.set(
+                    cache_key,
+                    pickle.dumps({"user_id": user_id, "email": email}),
+                    ex=3600
+                )
+            except Exception as e:
+                logging.warning(f"Redis cache write failed for user {user_id}: {str(e)}")
+
+            return auth_user
 
     except HTTPException:
         # Re-raise HTTP exceptions

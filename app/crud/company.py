@@ -233,35 +233,35 @@ def remove_email_from_company(
         return None
 
 
-def get_company_by_vat_number(vat_number: str, session: Session) -> Optional[Company]:
-    """Retrieve a company by its VAT number."""
+def get_company_by_vat_number(vat_number: str, session: Session, load_matches: bool = False) -> Optional[Company]:
+    """Retrieve a company by its VAT number. Set load_matches=True to eager load publication matches."""
     try:
-        return (
-            session.query(Company)
-            .options(
-                joinedload(Company.interested_sectors),
-                joinedload(Company.publication_matches),
-            )
-            .filter(Company.vat_number == vat_number)
-            .first()
+        query = session.query(Company).options(
+            joinedload(Company.interested_sectors),
         )
+
+        # Only load matches if explicitly requested (they can be thousands of records)
+        if load_matches:
+            query = query.options(joinedload(Company.publication_matches))
+
+        return query.filter(Company.vat_number == vat_number).first()
     except Exception as e:
         logging.error("Error getting company: %s", e)
         return None
 
 
-def get_company_by_email(email: str, session: Session) -> Optional[Company]:
-    """Retrieve a company by its email."""
+def get_company_by_email(email: str, session: Session, load_matches: bool = False) -> Optional[Company]:
+    """Retrieve a company by its email. Set load_matches=True to eager load publication matches."""
     try:
-        return (
-            session.query(Company)
-            .options(
-                joinedload(Company.interested_sectors),
-                joinedload(Company.publication_matches),
-            )
-            .filter(Company.emails.any(email))  # Use .any() for array contains
-            .first()
+        query = session.query(Company).options(
+            joinedload(Company.interested_sectors),
         )
+
+        # Only load matches if explicitly requested (they can be thousands of records)
+        if load_matches:
+            query = query.options(joinedload(Company.publication_matches))
+
+        return query.filter(Company.emails.any(email)).first()  # Use .any() for array contains
     except Exception as e:
         logging.error("Error getting company: %s", e)
         return None
@@ -457,17 +457,18 @@ def mark_publication_as_viewed(
         return False
 
 
-def get_all_companies(session: Session) -> List[Company]:
-    """Retrieve all companies."""
+def get_all_companies(session: Session, load_matches: bool = False) -> List[Company]:
+    """Retrieve all companies. Set load_matches=True to eager load publication matches."""
     try:
-        return (
-            session.query(Company)
-            .options(
-                joinedload(Company.interested_sectors),
-                joinedload(Company.publication_matches),
-            )
-            .all()
+        query = session.query(Company).options(
+            joinedload(Company.interested_sectors),
         )
+
+        # Only load matches if explicitly requested (they can be thousands of records per company)
+        if load_matches:
+            query = query.options(joinedload(Company.publication_matches))
+
+        return query.all()
     except Exception as e:
         logging.error("Error getting all companies: %s", e)
         return []
