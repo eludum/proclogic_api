@@ -1,6 +1,21 @@
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/eludum/proclogic_api/main/assets/proclogic.svg" alt="ProcLogic Logo" width="120" height="120">
+
+
+</div>
+
 # ProcLogic API
 
-> The first fully open source public tender platform - Backend API
+**The first fully open-source public tender platform - Backend API**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)](https://fastapi.tiangolo.com)
+
+</div>
+
+---
 
 ProcLogic API is the backend service powering the ProcLogic platform. It provides a comprehensive REST API for managing public procurement tenders, user authentication, subscriptions, AI-powered chat, and more.
 
@@ -473,3 +488,19 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - Issues: [GitHub Issues](https://github.com/eludum/proclogic_api/issues)
 - Email: info@proclogic.be
+
+---
+
+<div align="center">
+
+### Part of KoseLogic
+
+<a href="https://koselogic.be" target="_blank">
+  <img src="https://raw.githubusercontent.com/eludum/proclogic_api/main/assets/koselogic.svg" alt="KoseLogic" width="200">
+</a>
+
+**[koselogic.be](https://koselogic.be)**
+
+ProcLogic is developed by KoseLogic
+
+</div>
