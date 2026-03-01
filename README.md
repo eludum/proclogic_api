@@ -49,7 +49,25 @@ pip install -r requirements.txt
 playwright install  # Install browser binaries for web scraping
 ```
 
-### 4. Set up environment variables
+### 4. Obtain BOSA public procurement API Credentials
+
+Before setting up environment variables, you need to obtain API credentials from the Belgian public procurement system (BOSA):
+
+**⚠️ Important**: You must contact BOSA to get your `PUBPROC_CLIENT_ID` and `PUBPROC_CLIENT_SECRET`.
+
+**Steps to obtain credentials:**
+
+1. Visit the [BOSA e-Procurement Helpdesk](https://bosa.belgium.be/nl/services/helpdesk-e-procurement)
+2. Navigate to **Partners and Media**
+3. Go to **Onboarding for the API**
+4. Follow the onboarding process to request your API credentials
+5. BOSA will provide you with:
+   - Client ID (`PUBPROC_CLIENT_ID`)
+   - Client Secret (`PUBPROC_CLIENT_SECRET`)
+
+**Note**: The API credentials are required to access Belgian public procurement data. Without these, the application will not be able to fetch tender publications.
+
+### 5. Set up environment variables
 
 Create a `.env` file in the root directory (see `env_example`):
 
@@ -65,9 +83,10 @@ CLERK_JWKS_URL=https://your-clerk-instance/.well-known/jwks.json
 OPENAI_API_KEY=sk-...
 
 # PubProc Integration (Belgian public procurement system)
+# ⚠️ Obtain these credentials from BOSA (see step 4 above)
 PUBPROC_SERVER=https://enot.publicprocurement.be
-PUBPROC_CLIENT_ID=your-client-id
-PUBPROC_CLIENT_SECRET=your-client-secret
+PUBPROC_CLIENT_ID=your-client-id-from-bosa
+PUBPROC_CLIENT_SECRET=your-client-secret-from-bosa
 
 # Stripe Payments
 STRIPE_SECRET_KEY=sk_test_...
@@ -88,7 +107,7 @@ DEBUG_MODE=true  # Enable debug mode for development
 
 **Important**: Never commit `.env` to version control. It's already in `.gitignore`.
 
-### 5. Set up PostgreSQL database
+### 6. Set up PostgreSQL database
 
 #### Option A: Using Docker Compose (recommended)
 
@@ -125,13 +144,13 @@ psql -c "CREATE USER proclogic WITH PASSWORD 'your-password';"
 psql -c "GRANT ALL PRIVILEGES ON DATABASE proclogic TO proclogic;"
 ```
 
-### 6. Run database migrations
+### 7. Run database migrations
 
 ```bash
 alembic upgrade head
 ```
 
-### 7. Start the development server
+### 8. Start the development server
 
 ```bash
 fastapi dev app/main.py
@@ -151,8 +170,8 @@ The API will be available at:
 | `CLERK_JWKS_URL` | Clerk JWKS endpoint for JWT validation | No | Auto-generated |
 | `OPENAI_API_KEY` | OpenAI API key for AI features | Yes | - |
 | `PUBPROC_SERVER` | Public procurement API server | No | Belgian endpoint |
-| `PUBPROC_CLIENT_ID` | OAuth client ID for procurement system | Yes | - |
-| `PUBPROC_CLIENT_SECRET` | OAuth client secret | Yes | - |
+| `PUBPROC_CLIENT_ID` | OAuth client ID for procurement system (obtain from BOSA) | Yes | - |
+| `PUBPROC_CLIENT_SECRET` | OAuth client secret (obtain from BOSA) | Yes | - |
 | `STRIPE_SECRET_KEY` | Stripe secret key for payments | Yes | - |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signature secret | Yes | - |
 | `REDIS_HOST` | Redis server hostname | No | `localhost` |
