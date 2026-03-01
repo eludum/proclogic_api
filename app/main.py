@@ -76,13 +76,21 @@ if settings.SENTRY_DSN and settings.debug_mode is not True:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Run database migrations on startup
+    logging.info("Running database migrations...")
+    try:
+        run_migration()
+        logging.info("Database migrations completed successfully")
+    except Exception as e:
+        logging.error(f"Migration failed: {str(e)}")
+        # Continue startup even if migrations fail (they might already be applied)
+
     # Pre-warm JWKS cache for faster first request
     from app.util.clerk import warm_jwks_cache
     await warm_jwks_cache()
 
     if settings.scraper_mode:
         # Create a list to track your background tasks
-        # run_migration()
         background_tasks = []
         try:
             # Create individual tasks and track them in the list
