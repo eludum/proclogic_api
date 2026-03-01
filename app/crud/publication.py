@@ -196,8 +196,8 @@ def get_or_create_dossier(dossier_schema: DossierSchema, session: Session) -> Do
 
 def create_lot(lot_schema: LotSchema, session: Session) -> Lot:
     lot = Lot(
-        reserved_execution=lot_schema.reserved_execution,
-        reserved_participation=lot_schema.reserved_participation,
+        reserved_execution=lot_schema.reserved_execution or [],
+        reserved_participation=lot_schema.reserved_participation or [],
         descriptions=get_or_create_descriptions(
             descriptions_schema=lot_schema.descriptions, session=session
         ),
