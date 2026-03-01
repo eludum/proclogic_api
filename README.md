@@ -5,8 +5,9 @@
 
 </div>
 
+<div align="center">
 # ProcLogic API
-
+</div>
 **The first fully open-source public tender platform - Backend API**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -489,15 +490,16 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Issues: [GitHub Issues](https://github.com/eludum/proclogic_api/issues)
 - Email: info@proclogic.be
 
-<div align="center">
+--
 
-## Part of KoseLogic
+<div align="center">
 
 <a href="https://koselogic.be" target="_blank">
   <img src="https://raw.githubusercontent.com/eludum/proclogic_api/main/assets/koselogic.svg" alt="KoseLogic" width="200">
 </a>
 
-<br>
+
+
 
 **[koselogic.be](https://koselogic.be)**
 
