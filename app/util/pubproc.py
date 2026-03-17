@@ -1,7 +1,8 @@
 import asyncio
 import logging
 import uuid
-from datetime import date
+from datetime import date, datetime
+from io import BytesIO
 from typing import List
 
 import app.crud.company as crud_company
@@ -30,7 +31,6 @@ from app.util.messages_helper import (
 from app.util.publication_utils.publication_converter import PublicationConverter
 from app.util.pubproc_token import get_token
 from app.util.redis_cache import invalidate_publication_cache, redis_cache
-from app.util.zip import unzip
 from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
@@ -471,6 +471,12 @@ async def get_publication_workspace_data(
 async def get_publication_workspace_document_list(
     client: httpx.AsyncClient, publication_workspace_id: str
 ) -> List[str]:
+    """
+    Get a list of all document filenames (including all versions) for a publication workspace.
+
+    Returns:
+        List of versioned filenames in the format: "filename_v1_timestamp.ext"
+    """
     token = get_token()
     headers = {
         "Authorization": f"Bearer {token}",
@@ -484,12 +490,40 @@ async def get_publication_workspace_document_list(
         headers=headers,
     )
 
-    data = r.json()
+    if r.status_code != 200:
+        logging.error(
+            f"Failed to get document list for {publication_workspace_id}: {r.status_code}"
+        )
+        return []
 
+    data = r.json()
     documents = []
-    for file in data:
-        filename = file["versions"][0]["document"]["originalFileName"]
-        documents.append(filename)
+
+    for doc in data:
+        versions = doc.get("versions", [])
+
+        # Sort versions by createdAt to ensure consistent ordering
+        sorted_versions = sorted(versions, key=lambda v: v.get("createdAt", ""))
+
+        # Generate versioned filenames for each version
+        for version_index, version in enumerate(sorted_versions, start=1):
+            document_info = version.get("document", {})
+            original_filename = document_info.get("originalFileName", "unknown")
+            created_at = version.get("createdAt", "")
+
+            # Create versioned filename with timestamp
+            name_parts = original_filename.rsplit(".", 1)
+            base_name = name_parts[0]
+            extension = name_parts[1] if len(name_parts) > 1 else ""
+
+            # Format timestamp for filename (replace : with -)
+            timestamp = created_at.split(".")[0].replace(":", "-")
+
+            versioned_filename = f"{base_name}_v{version_index}_{timestamp}"
+            if extension:
+                versioned_filename += f".{extension}"
+
+            documents.append(versioned_filename)
 
     return documents
 
@@ -519,42 +553,176 @@ async def get_publication_workspace_document_external_urls(
     return urls
 
 
-@redis_cache("pubproc:documents")
-async def get_publication_workspace_documents(
-    client: httpx.AsyncClient, publication_workspace_id: str
-) -> dict:
+async def get_document_version_download_url(
+    client: httpx.AsyncClient, version_id: str
+) -> str | None:
+    """
+    Get the download URL for a specific document version.
+
+    Args:
+        client: httpx async client
+        version_id: The publication workspace document version ID
+
+    Returns:
+        Download URL string or None if request fails
+    """
     token = get_token()
     headers = {
         "Authorization": f"Bearer {token}",
         "BelGov-Trace-Id": generate_uuid(),
     }
 
-    # TODO: send notification if saved and docs change
-    # add external links
-
     try:
-        # Add a 5-minute timeout for large files
         r = await client.get(
             settings.pubproc_server
             + settings.path_dos_api
-            + f"/publication-workspaces/{publication_workspace_id}/archive",
+            + f"/publication-workspace-document-versions/{version_id}/download-url",
             headers=headers,
-            timeout=300,  # 5 minutes
         )
 
         if r.status_code != 200:
-            return {}
+            logging.error(
+                f"Failed to get download URL for version {version_id}: {r.status_code}"
+            )
+            return None
 
-        # Process the zip file
-        return unzip(
-            zip_bytes=r.content, publication_workspace_id=publication_workspace_id
-        )
+        data = r.json()
+        return data.get("url")
+
+    except Exception as e:
+        logging.error(f"Error getting download URL for version {version_id}: {str(e)}")
+        return None
+
+
+async def download_document_from_url(
+    client: httpx.AsyncClient, url: str, filename: str
+) -> BytesIO | None:
+    """
+    Download a document from a URL and return as BytesIO.
+
+    Args:
+        client: httpx async client
+        url: The download URL
+        filename: The filename to assign to the BytesIO object
+
+    Returns:
+        BytesIO object with the file content or None if download fails
+    """
+    try:
+        r = await client.get(url, timeout=300)  # 5 minutes timeout
+
+        if r.status_code != 200:
+            logging.error(f"Failed to download document {filename}: {r.status_code}")
+            return None
+
+        file_data = BytesIO(r.content)
+        file_data.name = filename
+        return file_data
 
     except asyncio.TimeoutError:
-        logging.error(
-            f"Timeout while downloading archive for {publication_workspace_id}"
+        logging.error(f"Timeout while downloading document {filename}")
+        return None
+    except Exception as e:
+        logging.error(f"Error downloading document {filename}: {str(e)}")
+        return None
+
+
+@redis_cache("pubproc:documents")
+async def get_publication_workspace_documents(
+    client: httpx.AsyncClient, publication_workspace_id: str
+) -> dict:
+    """
+    Get all documents and their versions for a publication workspace.
+    Documents are downloaded individually with versioned filenames.
+
+    Returns:
+        Dict mapping filename -> BytesIO object
+        Format: {
+            "document_v1_2026-02-25T23-03-12.pdf": BytesIO(...),
+            "document_v2_2026-03-17T01-10-57.pdf": BytesIO(...),
+        }
+    """
+    token = get_token()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "BelGov-Trace-Id": generate_uuid(),
+    }
+
+    try:
+        # Get the document list
+        r = await client.get(
+            settings.pubproc_server
+            + settings.path_dos_api
+            + f"/publication-workspaces/{publication_workspace_id}/documents",
+            headers=headers,
         )
-        return {}
+
+        if r.status_code != 200:
+            logging.error(
+                f"Failed to get document list for {publication_workspace_id}: {r.status_code}"
+            )
+            return {}
+
+        documents_data = r.json()
+        file_map = {}
+
+        # Process each document and its versions
+        for doc in documents_data:
+            versions = doc.get("versions", [])
+
+            # Sort versions by createdAt to ensure consistent ordering
+            sorted_versions = sorted(
+                versions, key=lambda v: v.get("createdAt", "")
+            )
+
+            # Download each version
+            for version_index, version in enumerate(sorted_versions, start=1):
+                version_id = version.get("id")
+                document_info = version.get("document", {})
+                original_filename = document_info.get("originalFileName", "unknown")
+                created_at = version.get("createdAt", "")
+
+                if not version_id:
+                    continue
+
+                # Get download URL for this version
+                download_url = await get_document_version_download_url(
+                    client=client, version_id=version_id
+                )
+
+                if not download_url:
+                    logging.warning(
+                        f"Could not get download URL for version {version_id}"
+                    )
+                    continue
+
+                # Create versioned filename with timestamp
+                # Format: original_name_v1_2026-02-25T23-03-12.ext
+                name_parts = original_filename.rsplit(".", 1)
+                base_name = name_parts[0]
+                extension = name_parts[1] if len(name_parts) > 1 else ""
+
+                # Format timestamp for filename (replace : with -)
+                timestamp = created_at.split(".")[0].replace(":", "-")
+
+                versioned_filename = f"{base_name}_v{version_index}_{timestamp}"
+                if extension:
+                    versioned_filename += f".{extension}"
+
+                # Download the document
+                file_data = await download_document_from_url(
+                    client=client, url=download_url, filename=versioned_filename
+                )
+
+                if file_data:
+                    file_map[versioned_filename] = file_data
+                else:
+                    logging.warning(
+                        f"Failed to download document version {version_id}"
+                    )
+
+        return file_map
+
     except Exception as e:
         logging.error(
             f"Error downloading documents for {publication_workspace_id}: {str(e)}"
