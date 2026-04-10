@@ -492,16 +492,13 @@ async def get_publication_document(
 
     # Handle both cache format (dict with base64) and fresh format (BytesIO)
     if isinstance(file_data_raw, dict) and "content_base64" in file_data_raw:
-        # From cache - create a fresh BytesIO object for this request
         from app.util.redis_utils import decode_base64_to_bytesio
         file_data = decode_base64_to_bytesio(
             file_data_raw["content_base64"],
             filename=file_data_raw.get("name", filename)
         )
     else:
-        # Fresh BytesIO object
         file_data = file_data_raw
-        # Reset position to start of file
         file_data.seek(0)
 
     # Determine content type

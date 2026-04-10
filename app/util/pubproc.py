@@ -472,10 +472,7 @@ async def get_publication_workspace_document_list(
     client: httpx.AsyncClient, publication_workspace_id: str
 ) -> List[str]:
     """
-    Get a list of all document filenames (including all versions) for a publication workspace.
-
-    Returns:
-        List of versioned filenames in the format: "filename_v1_timestamp.ext"
+    Get a list of document filenames (latest version only) for a publication workspace.
     """
     token = get_token()
     headers = {
@@ -501,29 +498,14 @@ async def get_publication_workspace_document_list(
 
     for doc in data:
         versions = doc.get("versions", [])
+        if not versions:
+            continue
 
-        # Sort versions by createdAt to ensure consistent ordering
-        sorted_versions = sorted(versions, key=lambda v: v.get("createdAt", ""))
-
-        # Generate versioned filenames for each version
-        for version_index, version in enumerate(sorted_versions, start=1):
-            document_info = version.get("document", {})
-            original_filename = document_info.get("originalFileName", "unknown")
-            created_at = version.get("createdAt", "")
-
-            # Create versioned filename with timestamp
-            name_parts = original_filename.rsplit(".", 1)
-            base_name = name_parts[0]
-            extension = name_parts[1] if len(name_parts) > 1 else ""
-
-            # Format timestamp for filename (replace : with -)
-            timestamp = created_at.split(".")[0].replace(":", "-")
-
-            versioned_filename = f"{base_name}_v{version_index}_{timestamp}"
-            if extension:
-                versioned_filename += f".{extension}"
-
-            documents.append(versioned_filename)
+        # Take only the latest version (last by createdAt)
+        latest_version = max(versions, key=lambda v: v.get("createdAt", ""))
+        document_info = latest_version.get("document", {})
+        original_filename = document_info.get("originalFileName", "unknown")
+        documents.append(original_filename)
 
     return documents
 
@@ -587,7 +569,7 @@ async def get_document_version_download_url(
             return None
 
         data = r.json()
-        return data.get("url")
+        return data.get("value")
 
     except Exception as e:
         logging.error(f"Error getting download URL for version {version_id}: {str(e)}")
@@ -632,15 +614,10 @@ async def get_publication_workspace_documents(
     client: httpx.AsyncClient, publication_workspace_id: str
 ) -> dict:
     """
-    Get all documents and their versions for a publication workspace.
-    Documents are downloaded individually with versioned filenames.
+    Get the latest version of each document for a publication workspace.
 
     Returns:
-        Dict mapping filename -> BytesIO object
-        Format: {
-            "document_v1_2026-02-25T23-03-12.pdf": BytesIO(...),
-            "document_v2_2026-03-17T01-10-57.pdf": BytesIO(...),
-        }
+        Dict mapping original filename -> BytesIO object
     """
     token = get_token()
     headers = {
@@ -649,7 +626,6 @@ async def get_publication_workspace_documents(
     }
 
     try:
-        # Get the document list
         r = await client.get(
             settings.pubproc_server
             + settings.path_dos_api
@@ -666,60 +642,43 @@ async def get_publication_workspace_documents(
         documents_data = r.json()
         file_map = {}
 
-        # Process each document and its versions
         for doc in documents_data:
             versions = doc.get("versions", [])
+            if not versions:
+                continue
 
-            # Sort versions by createdAt to ensure consistent ordering
-            sorted_versions = sorted(
+            # Take only the latest version
+            latest_version = max(
                 versions, key=lambda v: v.get("createdAt", "")
             )
 
-            # Download each version
-            for version_index, version in enumerate(sorted_versions, start=1):
-                version_id = version.get("id")
-                document_info = version.get("document", {})
-                original_filename = document_info.get("originalFileName", "unknown")
-                created_at = version.get("createdAt", "")
+            version_id = latest_version.get("id")
+            document_info = latest_version.get("document", {})
+            original_filename = document_info.get("originalFileName", "unknown")
 
-                if not version_id:
-                    continue
+            if not version_id:
+                continue
 
-                # Get download URL for this version
-                download_url = await get_document_version_download_url(
-                    client=client, version_id=version_id
+            download_url = await get_document_version_download_url(
+                client=client, version_id=version_id
+            )
+
+            if not download_url:
+                logging.warning(
+                    f"Could not get download URL for version {version_id}"
                 )
+                continue
 
-                if not download_url:
-                    logging.warning(
-                        f"Could not get download URL for version {version_id}"
-                    )
-                    continue
+            file_data = await download_document_from_url(
+                client=client, url=download_url, filename=original_filename
+            )
 
-                # Create versioned filename with timestamp
-                # Format: original_name_v1_2026-02-25T23-03-12.ext
-                name_parts = original_filename.rsplit(".", 1)
-                base_name = name_parts[0]
-                extension = name_parts[1] if len(name_parts) > 1 else ""
-
-                # Format timestamp for filename (replace : with -)
-                timestamp = created_at.split(".")[0].replace(":", "-")
-
-                versioned_filename = f"{base_name}_v{version_index}_{timestamp}"
-                if extension:
-                    versioned_filename += f".{extension}"
-
-                # Download the document
-                file_data = await download_document_from_url(
-                    client=client, url=download_url, filename=versioned_filename
+            if file_data:
+                file_map[original_filename] = file_data
+            else:
+                logging.warning(
+                    f"Failed to download document version {version_id}"
                 )
-
-                if file_data:
-                    file_map[versioned_filename] = file_data
-                else:
-                    logging.warning(
-                        f"Failed to download document version {version_id}"
-                    )
 
         return file_map
 
