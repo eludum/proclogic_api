@@ -216,10 +216,10 @@ def create_contract_address(
     address_schema: ContractAddressSchema, session: Session
 ) -> ContractAddress:
     address = ContractAddress(
-        street=address_schema.street,
-        city=address_schema.city,
-        postal_code=address_schema.postal_code,
-        country=address_schema.country,
+        street=address_schema.street[:255] if address_schema.street else None,
+        city=address_schema.city[:100] if address_schema.city else None,
+        postal_code=address_schema.postal_code[:20] if address_schema.postal_code else None,
+        country=address_schema.country[:100] if address_schema.country else None,
         nuts_code=address_schema.nuts_code[:10] if address_schema.nuts_code else None,
     )
     session.add(address)
@@ -232,10 +232,10 @@ def create_contract_contact_person(
     session: Session,
 ) -> ContractContactPerson:
     person = ContractContactPerson(
-        name=person_schema.name,
-        job_title=person_schema.job_title,
-        phone=person_schema.phone,
-        email=person_schema.email,
+        name=person_schema.name[:255] if person_schema.name else None,
+        job_title=person_schema.job_title[:255] if person_schema.job_title else None,
+        phone=person_schema.phone[:50] if person_schema.phone else None,
+        email=person_schema.email[:255] if person_schema.email else None,
     )
 
     session.add(person)
@@ -265,12 +265,12 @@ def get_or_create_contract_organization(
     if not organization:
         organization = ContractOrganization(
             name=org_schema.name[:255] if org_schema.name else None,
-            business_id=org_schema.business_id,
-            website=org_schema.website,
-            phone=org_schema.phone,
-            email=org_schema.email,
-            company_size=org_schema.company_size,
-            subcontracting=org_schema.subcontracting,
+            business_id=org_schema.business_id[:50] if org_schema.business_id else None,
+            website=org_schema.website[:255] if org_schema.website else None,
+            phone=org_schema.phone[:50] if org_schema.phone else None,
+            email=org_schema.email[:255] if org_schema.email else None,
+            company_size=org_schema.company_size[:50] if org_schema.company_size else None,
+            subcontracting=org_schema.subcontracting[:100] if org_schema.subcontracting else None,
             address=address,
             contact_persons=contact_persons,
         )
