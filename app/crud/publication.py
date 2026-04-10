@@ -1064,16 +1064,16 @@ def get_paginated_publications_free(
     publications = (
         query.options(
             joinedload(Publication.cpv_main_code),
-            joinedload(Publication.dossier).subqueryload(Dossier.descriptions),
-            joinedload(Publication.dossier).subqueryload(Dossier.titles),
-            joinedload(Publication.dossier).subqueryload(Dossier.enterprise_categories),
-            joinedload(Publication.organisation).subqueryload(
+            joinedload(Publication.dossier).joinedload(Dossier.descriptions),
+            joinedload(Publication.dossier).joinedload(Dossier.titles),
+            joinedload(Publication.dossier).joinedload(Dossier.enterprise_categories),
+            joinedload(Publication.organisation).joinedload(
                 Organisation.organisation_names
             ),
-            subqueryload(Publication.cpv_additional_codes),
-            subqueryload(Publication.lots).subqueryload(Lot.descriptions),
-            subqueryload(Publication.lots).subqueryload(Lot.titles),
-            subqueryload(Publication.company_matches),
+            joinedload(Publication.cpv_additional_codes),
+            joinedload(Publication.lots).joinedload(Lot.descriptions),
+            joinedload(Publication.lots).joinedload(Lot.titles),
+            joinedload(Publication.company_matches),
         )
         .offset((page - 1) * size)
         .limit(size)
