@@ -47,13 +47,16 @@ async def convert_publication_to_out_schema_details_paid(
     Convert a publication with detailed info to output schema with company-specific data
     Returns the basic data immediately without waiting for documents
     """
-    # fire and forget, fetch the docs but keep it running
-    asyncio.create_task(
-        get_publication_workspace_documents(
-            client=httpx.AsyncClient(),
-            publication_workspace_id=publication.publication_workspace_id,
-        )
-    )
+    # Fire and forget to warm the document cache with its own managed client
+    async def _warm_document_cache(workspace_id: str) -> None:
+        async with httpx.AsyncClient() as cache_client:
+            await get_publication_workspace_documents(
+                client=cache_client,
+                publication_workspace_id=workspace_id,
+            )
+
+    asyncio.create_task(_warm_document_cache(publication.publication_workspace_id))
+
     documents = []
     external_links = []
     async with httpx.AsyncClient() as client:
