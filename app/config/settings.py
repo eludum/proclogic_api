@@ -1,5 +1,4 @@
 from typing import List, Optional
-from pydantic import HttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -38,8 +37,6 @@ class Settings(BaseSettings):
     redis_host: str = "proclogic-redis"
     redis_port: int = 6379
     redis_db: int = 0
-
-    SENTRY_DSN: HttpUrl | None = None
 
     template_folder: str = "email_template"
     mail_username: Optional[str] = ""

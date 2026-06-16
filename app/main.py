@@ -1,12 +1,12 @@
 import asyncio
 import logging
 from typing import Any
-import sentry_sdk
 from sys import stdout
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.concurrency import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer
 from fastapi_pagination import add_pagination
 
@@ -56,22 +56,15 @@ uvicorn_logger = logging.getLogger("uvicorn.access")
 uvicorn_logger.addFilter(EndpointFilter(path="/health"))
 
 
-if settings.SENTRY_DSN and settings.debug_mode is not True:
-    sentry_sdk.init(
-        dsn=str(settings.SENTRY_DSN),
-        # Add data like request headers and IP for users,
-        # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
-        send_default_pii=True,
-        # Set traces_sample_rate to 1.0 to capture 100%
-        # of transactions for tracing.
-        traces_sample_rate=1.0,
-        # Set profile_session_sample_rate to 1.0 to profile 100%
-        # of profile sessions.
-        profile_session_sample_rate=1.0,
-        # Set profile_lifecycle to "trace" to automatically
-        # run the profiler on when there is an active transaction
-        profile_lifecycle="trace",
-    )
+# Error reporting goes through our own monitoring stack, not a hosted tracker.
+# In production the pods run in the k3s cluster where Promtail ships container
+# stdout/stderr to Loki. The Loki rule `ProclogicErrorOccurred`
+# (koselogic_iac/monitoring/alert-rules/loki-rules.yml) matches
+# error/exception/traceback lines from namespace "proclogic" and routes an email
+# alert through Alertmanager to info@koselogic.be. See the exception handler
+# registered on the app below, which guarantees every unhandled request
+# exception is logged at ERROR level with a full traceback.
+logger = logging.getLogger("proclogic")
 
 
 @asynccontextmanager
@@ -149,3 +142,20 @@ proclogic.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept"],
 )
+
+
+@proclogic.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Log unhandled exceptions to stdout so Promtail/Loki capture them and
+    Alertmanager emails an alert (see the ProclogicErrorOccurred Loki rule).
+    Returns a generic 500 so internals are never leaked to the client."""
+    logger.error(
+        "Unhandled exception on %s %s",
+        request.method,
+        request.url.path,
+        exc_info=exc,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error"},
+    )

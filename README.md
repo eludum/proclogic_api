@@ -30,7 +30,7 @@ ProcLogic API is the backend service powering the ProcLogic platform. It provide
 - **Notifications**: Email notifications via Mailtrap/SMTP
 - **Caching**: Redis-based caching for performance
 - **Database**: PostgreSQL with SQLAlchemy ORM
-- **Error Tracking**: Sentry integration for monitoring
+- **Error Tracking**: Structured stdout logging captured by the self-hosted Grafana Loki stack, with Alertmanager email alerts on errors
 
 ## Prerequisites
 
@@ -116,7 +116,6 @@ MAILTRAP_TOKEN=your-mailtrap-token
 MAIL_FROM=info@yourdomain.com
 
 # Optional
-SENTRY_DSN=https://...  # For error tracking
 DEBUG_MODE=true  # Enable debug mode for development
 ```
 
@@ -193,9 +192,27 @@ The API will be available at:
 | `REDIS_PORT` | Redis server port | No | `6379` |
 | `MAILTRAP_TOKEN` | Email service API token | No | - |
 | `MAIL_FROM` | Sender email address | No | `info@proclogic.be` |
-| `SENTRY_DSN` | Sentry error tracking DSN | No | - |
 | `DEBUG_MODE` | Enable debug logging | No | `false` |
 | `SCRAPER_MODE` | Run as background scraper worker | No | `false` |
+
+## Monitoring & Error Alerting
+
+The API does not use a hosted error tracker. In production it runs as pods in the
+KoseLogic k3s cluster, where the self-hosted observability stack (Grafana, Loki,
+Prometheus, Alertmanager — see `koselogic_iac/monitoring`) handles error tracking:
+
+- The app logs to **stdout** (`logging.StreamHandler`). Promtail ships every
+  pod's stdout/stderr to Loki, tagged with `namespace="proclogic"`.
+- A global FastAPI exception handler (in `app/main.py`) logs every unhandled
+  request exception at `ERROR` level with a full traceback.
+- The Loki rule `ProclogicErrorOccurred`
+  (`koselogic_iac/monitoring/alert-rules/loki-rules.yml`) fires on any
+  error/exception/traceback line and routes an email alert through Alertmanager
+  to `info@koselogic.be`.
+- Uptime is monitored separately via Blackbox probes against `/health`.
+
+No application configuration is required — just ensure the app logs to stdout
+(the default). View logs and dashboards at `https://grafana.koselogic.be`.
 
 ## API Documentation
 
