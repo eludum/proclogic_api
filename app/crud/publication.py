@@ -36,7 +36,7 @@ from app.schemas.publication_schemas import (
     PublicationSchema,
 )
 from sqlalchemy import and_, case, desc, func, literal_column, or_, select
-from sqlalchemy.orm import Session, aliased, joinedload, subqueryload
+from sqlalchemy.orm import Session, aliased, joinedload, selectinload, subqueryload
 from sqlalchemy.sql import exists
 
 
@@ -921,20 +921,28 @@ def get_paginated_publications_for_company(
             # Default sort by publication date
             query = query.order_by(desc(Publication.publication_date))
 
-    # Apply pagination and eager loading
+    # Apply pagination and eager loading.
+    # selectinload (not joinedload) for the *collection* relationships: chaining
+    # joinedload across several one-to-many collections builds a cartesian
+    # product (descriptions x titles x lots x company_matches x ...), which blew
+    # this query up to ~12s on the live table and tripped the gateway timeout
+    # (502). selectinload emits one extra SELECT per relationship instead —
+    # ~0.5s here. joinedload is kept only for the scalar cpv_main_code.
     query = (
         query.options(
             joinedload(Publication.cpv_main_code),
-            joinedload(Publication.dossier).joinedload(Dossier.descriptions),
-            joinedload(Publication.dossier).joinedload(Dossier.titles),
-            joinedload(Publication.dossier).joinedload(Dossier.enterprise_categories),
-            joinedload(Publication.organisation).joinedload(
+            selectinload(Publication.dossier).selectinload(Dossier.descriptions),
+            selectinload(Publication.dossier).selectinload(Dossier.titles),
+            selectinload(Publication.dossier).selectinload(
+                Dossier.enterprise_categories
+            ),
+            selectinload(Publication.organisation).selectinload(
                 Organisation.organisation_names
             ),
-            joinedload(Publication.cpv_additional_codes),
-            joinedload(Publication.lots).joinedload(Lot.descriptions),
-            joinedload(Publication.lots).joinedload(Lot.titles),
-            joinedload(Publication.company_matches),
+            selectinload(Publication.cpv_additional_codes),
+            selectinload(Publication.lots).selectinload(Lot.descriptions),
+            selectinload(Publication.lots).selectinload(Lot.titles),
+            selectinload(Publication.company_matches),
         )
         .offset((page - 1) * size)
         .limit(size)
@@ -1059,21 +1067,28 @@ def get_paginated_publications_free(
             query = query.order_by(Publication.publication_date)
     # Add other sorting options as needed
 
-    # Apply pagination and eager loading
-    # Use subqueryload for collections to avoid cartesian products
+    # Apply pagination and eager loading.
+    # selectinload (not joinedload) for the *collection* relationships: chaining
+    # joinedload across several one-to-many collections builds a cartesian
+    # product (descriptions x titles x lots x company_matches x ...), which blew
+    # this query up to ~12s on the live table and tripped the gateway timeout
+    # (502). selectinload emits one extra SELECT per relationship instead —
+    # ~0.5s here. joinedload is kept only for the scalar cpv_main_code.
     publications = (
         query.options(
             joinedload(Publication.cpv_main_code),
-            joinedload(Publication.dossier).joinedload(Dossier.descriptions),
-            joinedload(Publication.dossier).joinedload(Dossier.titles),
-            joinedload(Publication.dossier).joinedload(Dossier.enterprise_categories),
-            joinedload(Publication.organisation).joinedload(
+            selectinload(Publication.dossier).selectinload(Dossier.descriptions),
+            selectinload(Publication.dossier).selectinload(Dossier.titles),
+            selectinload(Publication.dossier).selectinload(
+                Dossier.enterprise_categories
+            ),
+            selectinload(Publication.organisation).selectinload(
                 Organisation.organisation_names
             ),
-            joinedload(Publication.cpv_additional_codes),
-            joinedload(Publication.lots).joinedload(Lot.descriptions),
-            joinedload(Publication.lots).joinedload(Lot.titles),
-            joinedload(Publication.company_matches),
+            selectinload(Publication.cpv_additional_codes),
+            selectinload(Publication.lots).selectinload(Lot.descriptions),
+            selectinload(Publication.lots).selectinload(Lot.titles),
+            selectinload(Publication.company_matches),
         )
         .offset((page - 1) * size)
         .limit(size)
