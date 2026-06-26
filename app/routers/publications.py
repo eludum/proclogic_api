@@ -487,19 +487,9 @@ async def get_publication_document(
     if not documents or filename not in documents:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # Get the file object - it could be BytesIO (fresh) or dict (from cache)
-    file_data_raw = documents[filename]
-
-    # Handle both cache format (dict with base64) and fresh format (BytesIO)
-    if isinstance(file_data_raw, dict) and "content_base64" in file_data_raw:
-        from app.util.redis_utils import decode_base64_to_bytesio
-        file_data = decode_base64_to_bytesio(
-            file_data_raw["content_base64"],
-            filename=file_data_raw.get("name", filename)
-        )
-    else:
-        file_data = file_data_raw
-        file_data.seek(0)
+    # The cache decorator always returns {filename: BytesIO}, fresh or cached.
+    file_data = documents[filename]
+    file_data.seek(0)
 
     # Determine content type
     content_type = "application/octet-stream"  # Default

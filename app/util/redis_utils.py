@@ -32,6 +32,23 @@ def encode_file_to_base64(file_obj: Union[BytesIO, bytes]) -> str:
         raise
 
 
+def read_file_bytes(file_obj: Union[BytesIO, bytes]) -> bytes:
+    """
+    Read the raw bytes from a file-like object (or pass through bytes), restoring
+    the stream position so the caller can still read the object afterwards.
+
+    Used by the document cache to store raw bytes instead of base64 — base64
+    inflates payloads by ~33%, which is exactly what bloated Redis.
+    """
+    if hasattr(file_obj, "read") and callable(file_obj.read):
+        current_pos = file_obj.tell()
+        file_obj.seek(0)
+        content = file_obj.read()
+        file_obj.seek(current_pos)
+        return content
+    return file_obj
+
+
 def decode_base64_to_bytesio(base64_str: str, filename: str = None) -> BytesIO:
     """
     Convert a base64 encoded string to a BytesIO object.

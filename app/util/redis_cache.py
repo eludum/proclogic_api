@@ -1,23 +1,57 @@
 import pickle
 from functools import wraps
+from io import BytesIO
 from typing import Callable
 import logging
 
 from app.config.redis_manager import get_redis_client
 from app.util.redis_utils import (
     decode_base64_to_bytesio,
-    encode_file_to_base64,
+    read_file_bytes,
 )
 
-# Cache TTL in seconds (7 days default)
-# TODO: increase, check daily for saved publications?
+# Cache TTL in seconds (24 hours).
+# TODO: revisit cadence — re-check saved publications daily?
 CACHE_TTL = 24 * 60 * 60
+
+# Hard ceiling on a single cached entry. The pubproc:documents cache used to
+# store whole document sets (hundreds of MB each) with no limit, which grew
+# Redis into its memory cap and got it OOMKilled (~every 11h). We now store raw
+# bytes (no base64 inflation) and skip caching any entry above this size —
+# oversized document sets are simply re-fetched on demand instead of cached.
+MAX_CACHE_ENTRY_BYTES = 25 * 1024 * 1024  # 25 MiB
+
+
+def _restore_documents(data: dict) -> dict:
+    """
+    Rebuild a {filename: BytesIO} map from a cached document entry so callers
+    receive the same shape on a cache hit as on a miss. Handles both the new
+    raw-bytes format and the legacy base64 format (older entries / fallback).
+    """
+    restored = {}
+    for filename, payload in data.items():
+        if isinstance(payload, dict) and "content_bytes" in payload:
+            file_obj = BytesIO(payload["content_bytes"])
+            file_obj.name = payload.get("name", filename)
+            restored[filename] = file_obj
+        elif isinstance(payload, dict) and "content_base64" in payload:
+            restored[filename] = decode_base64_to_bytesio(
+                payload["content_base64"], filename=payload.get("name", filename)
+            )
+        else:
+            # Already a usable object — leave as-is.
+            restored[filename] = payload
+    return restored
 
 
 def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
     """
     Decorator for caching async function results in Redis.
-    Files will be stored as base64 encoded strings.
+
+    For pubproc:documents the file map is stored as raw bytes and transparently
+    rebuilt into {filename: BytesIO} on read, so callers see an identical shape
+    whether the result came fresh or from cache. Entries larger than
+    MAX_CACHE_ENTRY_BYTES are not cached.
     """
 
     def decorator(func: Callable):
@@ -44,16 +78,9 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
                 if cached_data:
                     try:
                         data = pickle.loads(cached_data)
-
-                        # Special handling for document data
                         if key_prefix == "pubproc:documents" and isinstance(data, dict):
-                            # Convert base64 back to file objects
-                            # Store as base64 dict to avoid BytesIO sharing issues
-                            # We'll return the dict as-is, and let the endpoint create fresh BytesIO
-                            return data
-                        else:
-                            # Return other data types as is
-                            return data
+                            return _restore_documents(data)
+                        return data
                     except Exception as e:
                         logging.warning(f"Error unpickling data from cache: {str(e)}")
             except Exception as e:
@@ -62,34 +89,52 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
             # Cache miss or error - call the original function
             result = await func(*args, **kwargs)
 
-            # Cache the result if we got something
-            if result:
-                try:
-                    if key_prefix == "pubproc:documents" and isinstance(result, dict):
-                        # For document data, encode files to base64
-                        serialized_files = {}
-                        for filename, file_obj in result.items():
-                            try:
-                                # Store as a dict with base64 and metadata
-                                serialized_files[filename] = {
-                                    "content_base64": encode_file_to_base64(file_obj),
-                                    "name": getattr(file_obj, "name", filename),
-                                }
-                            except Exception as e:
-                                logging.warning(
-                                    f"Error serializing {filename}: {str(e)}"
-                                )
-                                continue
+            if not result:
+                return result
 
-                        if serialized_files:
-                            redis_client.set(
-                                cache_key, pickle.dumps(serialized_files), ex=ttl
+            # Cache the result, skipping anything over the size cap.
+            try:
+                if key_prefix == "pubproc:documents" and isinstance(result, dict):
+                    # Store document files as RAW bytes (not base64).
+                    serialized_files = {}
+                    total_bytes = 0
+                    for filename, file_obj in result.items():
+                        try:
+                            content = read_file_bytes(file_obj)
+                        except Exception as e:
+                            logging.warning(
+                                f"Error reading {filename} for cache: {str(e)}"
                             )
+                            continue
+                        serialized_files[filename] = {
+                            "content_bytes": content,
+                            "name": getattr(file_obj, "name", filename),
+                        }
+                        total_bytes += len(content)
+
+                    if not serialized_files:
+                        pass
+                    elif total_bytes > MAX_CACHE_ENTRY_BYTES:
+                        logging.info(
+                            f"Skip caching {cache_key}: {total_bytes} bytes "
+                            f"exceeds {MAX_CACHE_ENTRY_BYTES} cap"
+                        )
                     else:
-                        # For all other data types
-                        redis_client.set(cache_key, pickle.dumps(result), ex=ttl)
-                except Exception as e:
-                    logging.warning(f"Cache storage failed for {cache_key}: {str(e)}")
+                        redis_client.set(
+                            cache_key, pickle.dumps(serialized_files), ex=ttl
+                        )
+                else:
+                    # For all other data types
+                    payload = pickle.dumps(result)
+                    if len(payload) > MAX_CACHE_ENTRY_BYTES:
+                        logging.info(
+                            f"Skip caching {cache_key}: {len(payload)} bytes "
+                            f"exceeds {MAX_CACHE_ENTRY_BYTES} cap"
+                        )
+                    else:
+                        redis_client.set(cache_key, payload, ex=ttl)
+            except Exception as e:
+                logging.warning(f"Cache storage failed for {cache_key}: {str(e)}")
 
             return result
 
