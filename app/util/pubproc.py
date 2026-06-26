@@ -31,6 +31,7 @@ from app.util.messages_helper import (
 from app.util.publication_utils.publication_converter import PublicationConverter
 from app.util.pubproc_token import get_token
 from app.util.redis_cache import invalidate_publication_cache, redis_cache
+from app.util.redis_utils import NamedSpooledFile
 from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
@@ -578,26 +579,29 @@ async def get_document_version_download_url(
 
 async def download_document_from_url(
     client: httpx.AsyncClient, url: str, filename: str
-) -> BytesIO | None:
+):
     """
-    Download a document from a URL and return as BytesIO.
+    Download a document from a URL into a disk-spilling file object.
 
-    Args:
-        client: httpx async client
-        url: The download URL
-        filename: The filename to assign to the BytesIO object
-
-    Returns:
-        BytesIO object with the file content or None if download fails
+    Streams the response (instead of buffering the whole body via r.content) into
+    a NamedSpooledFile, so large files go to disk rather than RAM and a
+    publication's documents don't all sit in memory at once. Returns a file-like
+    object (with .name set) or None if the download fails.
     """
     try:
-        r = await client.get(url, timeout=300)  # 5 minutes timeout
+        # Small files stay in memory; anything over 2 MiB spills to disk.
+        file_data = NamedSpooledFile(max_size=2 * 1024 * 1024)
+        async with client.stream("GET", url, timeout=300) as r:  # 5 min timeout
+            if r.status_code != 200:
+                file_data.close()
+                logging.error(
+                    f"Failed to download document {filename}: {r.status_code}"
+                )
+                return None
+            async for chunk in r.aiter_bytes(65536):
+                file_data.write(chunk)
 
-        if r.status_code != 200:
-            logging.error(f"Failed to download document {filename}: {r.status_code}")
-            return None
-
-        file_data = BytesIO(r.content)
+        file_data.seek(0)
         file_data.name = filename
         return file_data
 

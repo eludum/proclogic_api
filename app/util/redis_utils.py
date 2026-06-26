@@ -1,10 +1,29 @@
 import base64
 import logging
+import tempfile
 from io import BytesIO
 from typing import Dict, List, Union
 
 from app.config.settings import settings
 from app.util.zip import unzip
+
+
+class NamedSpooledFile(tempfile.SpooledTemporaryFile):
+    """A SpooledTemporaryFile that carries a settable ``.name`` so it's a drop-in
+    for ``BytesIO`` everywhere we pass documents around.
+
+    Small files stay in RAM; anything past ``max_size`` spills to disk. Document
+    downloads use this so a publication's files don't all sit in memory at once —
+    that's what OOMKilled the scraper.
+    """
+
+    @property
+    def name(self):
+        return getattr(self, "_doc_name", None)
+
+    @name.setter
+    def name(self, value):
+        self._doc_name = value
 
 
 def encode_file_to_base64(file_obj: Union[BytesIO, bytes]) -> str:
@@ -69,31 +88,30 @@ def decode_base64_to_bytesio(base64_str: str, filename: str = None) -> BytesIO:
         logging.error(f"Error decoding base64 to file: {e}")
 
 
-def normalize_filename(file_obj: BytesIO, filename: str) -> BytesIO:
+def normalize_filename(file_obj, filename: str):
     """
-    Normalize a file object with a proper filename.
-    Returns the normalized BytesIO object.
+    Give a file object a normalized name (lowercase extension) and rewind it,
+    WITHOUT copying its contents into memory (the old version did a full
+    ``BytesIO(file_obj.read())`` copy per file, which blew up memory for large
+    document sets). Returns the same object with ``.name`` set.
     """
-    # Save current position
-    current_pos = file_obj.tell()
-    # Reset file position
-    file_obj.seek(0)
-    # Get content
-    content = file_obj.read()
-    # Create new BytesIO with the content
-    byte_io = BytesIO(content)
-
-    # Set name with lowercase extension
     if "." in filename:
-        name_parts = filename.rsplit(".", 1)
-        byte_io.name = f"{name_parts[0]}.{name_parts[1].lower()}"
+        base, ext = filename.rsplit(".", 1)
+        norm = f"{base}.{ext.lower()}"
     else:
-        byte_io.name = filename
+        norm = filename
 
-    # Restore original file position
-    file_obj.seek(current_pos)
-
-    return byte_io
+    try:
+        file_obj.seek(0)
+        file_obj.name = norm
+        return file_obj
+    except Exception:
+        # Fallback only if .name can't be set on this object (shouldn't happen
+        # for BytesIO / NamedSpooledFile).
+        file_obj.seek(0)
+        byte_io = BytesIO(file_obj.read())
+        byte_io.name = norm
+        return byte_io
 
 
 def is_file_allowed_for_assistant_file_search(
