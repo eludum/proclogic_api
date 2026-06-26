@@ -44,6 +44,23 @@ def _restore_documents(data: dict) -> dict:
     return restored
 
 
+def _file_obj_size(file_obj) -> int:
+    """Return a document payload's size in bytes WITHOUT reading it into memory.
+
+    For disk-spilling file objects (NamedSpooledFile) this seeks to the end
+    rather than materializing the bytes — measuring an oversized document set to
+    decide it's not cacheable must not cost the very memory we're trying to save
+    (a full read of an uncapped set is what OOMKilled the 512Mi API container).
+    """
+    if hasattr(file_obj, "seek") and hasattr(file_obj, "tell"):
+        current_pos = file_obj.tell()
+        file_obj.seek(0, 2)  # SEEK_END
+        size = file_obj.tell()
+        file_obj.seek(current_pos)
+        return size
+    return len(file_obj)
+
+
 def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
     """
     Decorator for caching async function results in Redis.
@@ -95,24 +112,22 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
             # Cache the result, skipping anything over the size cap.
             try:
                 if key_prefix == "pubproc:documents" and isinstance(result, dict):
-                    # Store document files as RAW bytes (not base64).
-                    serialized_files = {}
+                    # Measure the whole document set FIRST, straight from the
+                    # disk-spilling file objects, before pulling any bytes into
+                    # RAM. Large tenders routinely exceed the cap and are never
+                    # cacheable; reading such a set into memory only to discard
+                    # it is what OOMKilled the 512Mi API container, so bail out
+                    # before materializing anything.
                     total_bytes = 0
                     for filename, file_obj in result.items():
                         try:
-                            content = read_file_bytes(file_obj)
+                            total_bytes += _file_obj_size(file_obj)
                         except Exception as e:
                             logging.warning(
-                                f"Error reading {filename} for cache: {str(e)}"
+                                f"Error sizing {filename} for cache: {str(e)}"
                             )
-                            continue
-                        serialized_files[filename] = {
-                            "content_bytes": content,
-                            "name": getattr(file_obj, "name", filename),
-                        }
-                        total_bytes += len(content)
 
-                    if not serialized_files:
+                    if total_bytes == 0:
                         pass
                     elif total_bytes > MAX_CACHE_ENTRY_BYTES:
                         logging.info(
@@ -120,9 +135,25 @@ def redis_cache(key_prefix: str, ttl: int = CACHE_TTL, id_arg_index: int = 1):
                             f"exceeds {MAX_CACHE_ENTRY_BYTES} cap"
                         )
                     else:
-                        redis_client.set(
-                            cache_key, pickle.dumps(serialized_files), ex=ttl
-                        )
+                        # Under the cap — now it's safe to read the raw bytes
+                        # into memory and store them.
+                        serialized_files = {}
+                        for filename, file_obj in result.items():
+                            try:
+                                content = read_file_bytes(file_obj)
+                            except Exception as e:
+                                logging.warning(
+                                    f"Error reading {filename} for cache: {str(e)}"
+                                )
+                                continue
+                            serialized_files[filename] = {
+                                "content_bytes": content,
+                                "name": getattr(file_obj, "name", filename),
+                            }
+                        if serialized_files:
+                            redis_client.set(
+                                cache_key, pickle.dumps(serialized_files), ex=ttl
+                            )
                 else:
                     # For all other data types
                     payload = pickle.dumps(result)
