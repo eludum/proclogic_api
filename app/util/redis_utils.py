@@ -158,8 +158,11 @@ def prepare_files_for_vector_store(filesmap: Dict[str, BytesIO]) -> List[BytesIO
             if ".zip" in file_name:
                 file_data.seek(0)
 
+                # Pass the (disk-spilling) file object straight to unzip — never
+                # file_data.read(), which would pull the whole archive into RAM
+                # and OOMKill the scraper on large tenders.
                 unzipped_files = unzip(
-                    zip_bytes=file_data.read(), publication_workspace_id="filename"
+                    zip_file=file_data, publication_workspace_id=file_name
                 )
 
                 for filename_unzipped, file_data_unzipped in unzipped_files.items():
