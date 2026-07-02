@@ -1,5 +1,6 @@
 import logging
 import shutil
+import tempfile
 from os import path
 from typing import IO, Dict
 import zipfile
@@ -8,6 +9,16 @@ import zipfile
 # Mirrors the download path's NamedSpooledFile threshold in redis_utils so a
 # large tender's files never all sit in memory at once.
 _MEMBER_SPILL_THRESHOLD = 2 * 1024 * 1024
+
+# Extraction spills members to the tempdir, which lives on the container overlay
+# — the same xvda that holds the local-path Prometheus/Loki PVs on kl-prod-1. So
+# bound how much one archive may write: keep the spill filesystem above
+# _MIN_FREE_DISK and never extract more than _MAX_ARCHIVE_UNCOMPRESSED (kept
+# under the pod's ephemeral-storage limit so the kubelet never has to evict us).
+# ZIP central-directory sizes let us decide before writing a single byte.
+_MIN_FREE_DISK = 4 * 1024 * 1024 * 1024
+_MAX_ARCHIVE_UNCOMPRESSED = 6 * 1024 * 1024 * 1024
+_MiB = 1024 * 1024
 
 
 def unzip(
@@ -36,6 +47,26 @@ def unzip(
     try:
         zip_file.seek(0)
         with zipfile.ZipFile(zip_file) as zf:
+            # Pre-flight: refuse an archive that wouldn't fit on disk with room
+            # to spare, BEFORE writing anything. Central-directory file_size is
+            # the uncompressed size, so this needs no decompression.
+            declared_total = sum(info.file_size for info in zf.infolist())
+            free = shutil.disk_usage(tempfile.gettempdir()).free
+            budget = min(free - _MIN_FREE_DISK, _MAX_ARCHIVE_UNCOMPRESSED)
+            if declared_total > budget:
+                logging.error(
+                    "Refusing to extract %s: %d MiB uncompressed exceeds the "
+                    "%d MiB disk budget (free=%d MiB, reserve=%d MiB, cap=%d "
+                    "MiB) — skipping to protect the node disk.",
+                    publication_workspace_id,
+                    declared_total // _MiB,
+                    max(budget, 0) // _MiB,
+                    free // _MiB,
+                    _MIN_FREE_DISK // _MiB,
+                    _MAX_ARCHIVE_UNCOMPRESSED // _MiB,
+                )
+                return {}
+
             for file_name in zf.namelist():
                 # Get just the base filename without folder path
                 base_file_name = path.basename(file_name)
