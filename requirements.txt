@@ -19,6 +19,9 @@ python-dotenv
 nltk
 clerk-backend-api
 python-jose
+# security floor: 47.0.0 ships a vulnerable OpenSSL (GHSA-537c-gmf6-5ccf). clerk-backend-api
+# caps cryptography <49, so free resolution lands on 47.0.0; pin the floor to the fixed 48.0.1.
+cryptography>=48.0.1
 fastapi-pagination
 beautifulsoup4
 html2text
