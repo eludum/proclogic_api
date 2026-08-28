@@ -21,6 +21,7 @@ from app.schemas.conversation_schemas import (
     ConversationSchema,
     ConversationSummary,
 )
+from app.mcp.context import ToolContext
 from app.util.clerk import AuthUser, get_auth_user
 from app.util.conversations_helper import (
     process_ai_message,
@@ -190,6 +191,12 @@ async def chat_with_publication(
             company=company,
             publication=publication,
             client=client,
+            ctx=ToolContext(
+                user_id=auth_user.user_id,
+                email=auth_user.email,
+                company_vat=company.vat_number,
+                company_name=company.name,
+            ),
         )
 
         # Save the AI response
@@ -402,6 +409,16 @@ async def websocket_conversation(
                         session=session,
                     )
 
+                # Identity for tool calls. Built from the verified token and the
+                # company it resolves to, never from anything the model says, so
+                # tenant-scoped tools cannot be talked into another company's data.
+                tool_context = ToolContext(
+                    user_id=auth_user.user_id,
+                    email=auth_user.email,
+                    company_vat=company.vat_number,
+                    company_name=company.name,
+                )
+
                 # Send confirmation
                 pub_title = get_publication_title(publication)
                 await websocket.send_json(
@@ -508,6 +525,21 @@ async def websocket_conversation(
                     # Process with AI
                     response_chunks = []
                     citations = []
+                    stream_failed = False
+
+                    async def send_tool_event(event_type: str, payload: dict):
+                        """Tell the client what Procy is doing mid-turn.
+
+                        Additive: the frontend switch ignores frame types it does
+                        not recognise, so an older client simply sees nothing.
+                        """
+                        try:
+                            await websocket.send_json(
+                                {"type": event_type, "data": payload}
+                            )
+                        except Exception:
+                            # Purely informational; never let it end the turn.
+                            pass
 
                     # Stream the response
                     try:
@@ -517,6 +549,8 @@ async def websocket_conversation(
                             company=company_refresh,
                             publication=publication_refresh,
                             client=client,
+                            ctx=tool_context,
+                            on_event=send_tool_event,
                         ):
                             if chunk:
                                 response_chunks.append(chunk)
@@ -549,6 +583,31 @@ async def websocket_conversation(
                         )
                         # Don't try to send more data but continue to save what we have
                         break
+                    except Exception as stream_error:
+                        # Generation failed. Report it as an error frame and do
+                        # NOT persist anything: a half-generated turn, or an
+                        # apology string, saved as an assistant message would
+                        # become a permanent part of this conversation and be
+                        # replayed into every future prompt.
+                        stream_failed = True
+                        logging.error(
+                            f"Connection {connection_id}: AI streaming failed: {stream_error}",
+                            exc_info=stream_error,
+                        )
+                        try:
+                            await websocket.send_json(
+                                {
+                                    "type": "error",
+                                    "data": {
+                                        "detail": "Er is een fout opgetreden bij het genereren van het antwoord. Probeer het opnieuw."
+                                    },
+                                }
+                            )
+                        except Exception:
+                            pass
+
+                    if stream_failed:
+                        continue
 
                     # Process full response
                     full_response = "".join(response_chunks)
@@ -620,17 +679,11 @@ async def websocket_conversation(
                         }
                     )
 
-                    # Try to save error message to database
-                    try:
-                        with get_session() as session:
-                            crud_conversation.add_message(
-                                conversation_id=conversation_id,
-                                role="assistant",
-                                content="Sorry, er is een fout opgetreden bij het verwerken van je verzoek. Probeer het opnieuw.",
-                                session=session,
-                            )
-                    except Exception:
-                        pass
+                    # Deliberately NOT persisted. An error string saved as an
+                    # assistant message becomes permanent conversation history
+                    # and is replayed into every later prompt, teaching the model
+                    # that apologising is a normal turn. The client already has
+                    # the error frame above.
 
                 finally:
                     is_processing = False

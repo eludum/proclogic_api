@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import date
 from typing import List, Optional
 
 import app.crud.company as crud_company
@@ -12,7 +12,8 @@ from app.crud.publication_mapper import (
     convert_publications_to_out_schema_list_free,
     convert_publications_to_out_schema_list_paid,
 )
-from app.crud.publication_related import get_related_awarded_contracts
+from app.ai.retrieval_agent import find_similar_awards
+from app.mcp.context import build_context_async
 from app.schemas.publication_out_schemas import PublicationOut
 from app.schemas.publication_related_schemas import (
     RelatedContentResponse,
@@ -20,8 +21,6 @@ from app.schemas.publication_related_schemas import (
 )
 from app.util.clerk import AuthUser, get_auth_user
 from app.util.kanban_integration import remove_unsaved_publication_from_kanban
-from app.util.publication_utils.cpv_codes import get_cpv_sector_name
-from app.util.publication_utils.publication_converter import PublicationConverter
 from app.util.pubproc import get_publication_workspace_documents
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import StreamingResponse
@@ -364,24 +363,26 @@ async def get_related_content(
     contracts_limit: int = Query(
         10, ge=1, le=20, description="Number of related contracts to return"
     ),
+    refresh: bool = Query(
+        False, description="Bypass the cache and re-run the search"
+    ),
     auth_user: Optional[AuthUser] = Depends(get_auth_user),
 ) -> RelatedContentResponse:
     """
-    Get related contracts and active publications for a specific publication.
+    Get awarded contracts comparable to this publication.
 
-    This endpoint finds:
-    - Related awarded contracts based on CPV codes, organization, region, and keywords
-    - Related active publications that are similar to the selected publication
+    The results are found by searching the award database, not inferred from
+    metadata: a retrieval agent queries the contracts with its own search terms,
+    ranks what it finds, and explains each match. Every item returned is a real
+    award row -- ``similarity_score`` and ``similarity_reason`` are the only
+    fields the model contributes, and the score is a genuine 0-100 relevance
+    rather than the open-ended point total this endpoint used to return.
 
-    Similarity is calculated based on:
-    - CPV code matching (highest priority)
-    - Same contracting authority
-    - Geographic overlap (NUTS codes)
-    - Keyword similarity
-    - Value range similarity
+    Results are cached per publication; pass ``refresh=true`` to recompute. If
+    the agent is unavailable or times out, this falls back to the deterministic
+    scorer so the section still renders.
     """
     with get_session() as session:
-        # Get the source publication
         publication = crud_publication.get_publication_by_workspace_id(
             publication_workspace_id=publication_workspace_id, session=session
         )
@@ -389,67 +390,37 @@ async def get_related_content(
         if not publication:
             raise HTTPException(status_code=404, detail="Publication not found")
 
-        # Get user's company if authenticated
-        company = None
-        if auth_user and auth_user.email:
-            company = crud_company.get_company_by_email(
-                email=auth_user.email, session=session
-            )
+    ctx = None
+    if auth_user:
+        ctx = await build_context_async(auth_user.user_id, auth_user.email)
 
-        # Get related contracts
-        related_contracts_data = get_related_awarded_contracts(
-            publication=publication, session=session, limit=contracts_limit
+    similar = await find_similar_awards(
+        workspace_id=publication_workspace_id,
+        limit=contracts_limit,
+        ctx=ctx,
+        use_cache=not refresh,
+    )
+
+    related_contracts = [
+        RelatedContractItem(
+            publication_id=item["workspace_id"],
+            title=item.get("title") or "Untitled",
+            award_date=item.get("award_date"),
+            winner=item.get("winner") or "Unknown",
+            value=item.get("value") or 0.0,
+            sector=item.get("sector") or "N/A",
+            cpv_code=item.get("cpv_code") or "",
+            buyer=item.get("buyer") or "Unknown",
+            similarity_score=item.get("similarity_score") or 0.0,
+            similarity_reason=item.get("similarity_reason") or "",
         )
+        for item in similar
+    ]
 
-        # Convert to response format
-        related_contracts = []
-        for pub, score, reason in related_contracts_data:
-            if pub.contract:
-                contract_value = 0
-                winner = "Unknown"
-                award_date = None
-
-                # Extract contract details based on your contract model
-                if (
-                    hasattr(pub.contract, "total_contract_amount")
-                    and pub.contract.total_contract_amount
-                ):
-                    contract_value = pub.contract.total_contract_amount
-
-                if (
-                    hasattr(pub.contract, "winning_publisher")
-                    and pub.contract.winning_publisher
-                ):
-                    winner = pub.contract.winning_publisher.name
-
-                if hasattr(pub.contract, "issue_date") and pub.contract.issue_date:
-                    award_date = datetime.combine(
-                        pub.contract.issue_date, datetime.min.time()
-                    )
-                else:
-                    award_date = pub.publication_date
-
-                related_contracts.append(
-                    RelatedContractItem(
-                        publication_id=pub.publication_workspace_id,
-                        title=PublicationConverter.get_descr_as_str(pub.dossier.titles),
-                        award_date=award_date,
-                        winner=winner,
-                        value=contract_value,
-                        sector=get_cpv_sector_name(pub.cpv_main_code.code, "nl"),
-                        cpv_code=pub.cpv_main_code.code,
-                        buyer=PublicationConverter.get_org_name_as_str(
-                            pub.organisation.organisation_names
-                        ),
-                        similarity_score=score,
-                        similarity_reason=reason,
-                    )
-                )
-
-        return RelatedContentResponse(
-            related_contracts=related_contracts,
-            total_contracts=len(related_contracts),
-        )
+    return RelatedContentResponse(
+        related_contracts=related_contracts,
+        total_contracts=len(related_contracts),
+    )
 
 
 @publications_router.get(

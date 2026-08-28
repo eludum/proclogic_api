@@ -45,6 +45,56 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_db: int = 0
 
+    # --- MCP / AI data access -------------------------------------------------
+    # The MCP server exposes the procurement database as tools. It is mounted at
+    # /mcp for external clients, and the same tool registry backs Procy's chat
+    # tool loop and the similar-awards retrieval agent.
+    mcp_enabled: bool = True
+    # "inprocess" dispatches straight to the handler; "http" drives a real MCP
+    # client session against /mcp. Both go through the same registry, so "http"
+    # exercises exactly what an external client sees.
+    mcp_transport: str = "inprocess"
+    # Bearer token used only when mcp_transport="http". Without it the http
+    # transport cannot authenticate against /mcp and falls back to inprocess.
+    mcp_service_token: str = ""
+    # Hosts and origins the MCP transport will accept. The SDK enables DNS
+    # rebinding protection by default and, left alone, would allow only
+    # localhost -- which rejects every real request to api.proclogic.be.
+    mcp_allowed_hosts: List[str] = [
+        "api.proclogic.be",
+        "localhost:*",
+        "127.0.0.1:*",
+    ]
+    mcp_allowed_origins: List[str] = [
+        "https://app.proclogic.be",
+        "https://proclogic.be",
+        "http://localhost:*",
+        "http://127.0.0.1:*",
+    ]
+
+    # Raw read-only SQL tool. Fails closed: without postgres_ro_con_url the tool
+    # is never registered, so it can never fall back to the read-write engine.
+    mcp_sql_tool_enabled: bool = True
+    postgres_ro_con_url: Optional[str] = None
+    mcp_sql_row_limit: int = 200
+    mcp_sql_statement_timeout_ms: int = 5000
+
+    # Retrieval agent caps. The agent may call tools this many times before it is
+    # forced to answer, and may never consider more than max_candidates rows.
+    retrieval_agent_max_rounds: int = 4
+    retrieval_agent_max_candidates: int = 60
+    retrieval_agent_timeout_seconds: float = 20.0
+    # How many tool-calling rounds Procy may take before it must answer.
+    chat_agent_max_rounds: int = 5
+    # Messages of history replayed into a chat turn. Unbounded replay was
+    # affordable when every turn was one call; with tool results in the loop
+    # it is not.
+    chat_history_max_messages: int = 30
+    similar_awards_cache_ttl: int = 604800  # 7 days
+
+    # Used to build absolute links when Procy cites a publication or a gunning.
+    frontend_base_url: str = "https://app.proclogic.be"
+
     template_folder: str = "email_template"
     mail_username: Optional[str] = ""
     mail_password: Optional[str] = ""

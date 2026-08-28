@@ -11,6 +11,9 @@ from fastapi.security import HTTPBearer
 from fastapi_pagination import add_pagination
 
 from app.config.settings import settings
+from app.mcp.server import MOUNT_PATH as MCP_MOUNT_PATH
+from app.mcp.server import build_asgi_app as build_mcp_app
+from app.mcp.server import mcp_lifespan
 from app.routers.company import companies_router
 from app.routers.conversations import conversations_router
 from app.routers.health import health_router
@@ -129,33 +132,36 @@ async def lifespan(app: FastAPI):
     # having, since the scraper is the pod that has actually been OOM-killed.
     heartbeat_task = asyncio.create_task(_log_heartbeat())
 
-    try:
-        if settings.scraper_mode:
-            # Create a list to track your background tasks
-            background_tasks = []
-            try:
-                # Create individual tasks and track them in the list
-                background_tasks.append(asyncio.create_task(fetch_pubproc_data()))
-                background_tasks.append(asyncio.create_task(update_pubproc_data()))
-                background_tasks.append(asyncio.create_task(gather_notifications()))
+    # Runs the MCP session manager for the lifetime of the app. A no-op when MCP
+    # is disabled or the package is missing, so no branch is needed here.
+    async with mcp_lifespan():
+        try:
+            if settings.scraper_mode:
+                # Create a list to track your background tasks
+                background_tasks = []
+                try:
+                    # Create individual tasks and track them in the list
+                    background_tasks.append(asyncio.create_task(fetch_pubproc_data()))
+                    background_tasks.append(asyncio.create_task(update_pubproc_data()))
+                    background_tasks.append(asyncio.create_task(gather_notifications()))
 
-                # Yield control back to the application
+                    # Yield control back to the application
+                    yield
+                finally:
+                    # On shutdown, cancel all tasks and properly wait for them to complete
+                    for task in background_tasks:
+                        if not task.done():
+                            task.cancel()
+
+                    # Wait for all tasks to be cancelled properly
+                    if background_tasks:
+                        await asyncio.gather(*background_tasks, return_exceptions=True)
+            else:
+                # Make sure we always yield
                 yield
-            finally:
-                # On shutdown, cancel all tasks and properly wait for them to complete
-                for task in background_tasks:
-                    if not task.done():
-                        task.cancel()
-
-                # Wait for all tasks to be cancelled properly
-                if background_tasks:
-                    await asyncio.gather(*background_tasks, return_exceptions=True)
-        else:
-            # Make sure we always yield
-            yield
-    finally:
-        heartbeat_task.cancel()
-        await asyncio.gather(heartbeat_task, return_exceptions=True)
+        finally:
+            heartbeat_task.cancel()
+            await asyncio.gather(heartbeat_task, return_exceptions=True)
 
 
 proclogic = FastAPI(
@@ -178,6 +184,14 @@ proclogic.include_router(notifications_router)
 proclogic.include_router(kanban_router)
 proclogic.include_router(stripe_router)
 proclogic.include_router(email_tracking_router)
+
+# The MCP server, exposing the procurement database as tools for any MCP client.
+# Its ASGI app authenticates every request with the same Clerk bearer token the
+# REST API requires -- this URL is on the public internet.
+if settings.mcp_enabled:
+    _mcp_app = build_mcp_app()
+    if _mcp_app is not None:
+        proclogic.mount(MCP_MOUNT_PATH, _mcp_app)
 
 # Configure CORS with specific origins to avoid preflight overhead
 origins = [

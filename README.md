@@ -213,6 +213,12 @@ The API will be available at:
 | `MAIL_FROM` | Sender email address | No | `info@proclogic.be` |
 | `DEBUG_MODE` | Enable debug logging and expose `/docs` | No | `false` |
 | `SCRAPER_MODE` | Run as background scraper worker | No | `false` |
+| `MCP_ENABLED` | Mount the MCP server at `/mcp` and give Procy its database tools | No | `true` |
+| `MCP_TRANSPORT` | `inprocess` (dispatch directly) or `http` (drive a real MCP client against `/mcp`) | No | `inprocess` |
+| `MCP_SERVICE_TOKEN` | Bearer token used only when `MCP_TRANSPORT=http` | No | - |
+| `MCP_SQL_TOOL_ENABLED` | Offer the read-only SQL tool (also needs `POSTGRES_RO_CON_URL`) | No | `true` |
+| `POSTGRES_RO_CON_URL` | Connection string for a **read-only** role. Without it the SQL tool is not registered at all | No | - |
+| `FRONTEND_BASE_URL` | Used to build the links Procy cites | No | `https://app.proclogic.be` |
 
 Settings are declared in `app/config/settings.py` (pydantic-settings). Anything without a default is required at import time — the process fails fast on a missing value rather than erroring at first use.
 
@@ -277,7 +283,7 @@ All endpoints require a Clerk bearer token except `/health`, the Stripe webhook,
 - `GET /publications/publication/{workspace_id}/` - Publication details
 - `GET /publications/free/publication/{workspace_id}/` - Public publication details
 - `POST /publications/publication/{workspace_id}/save` | `/unsave` | `/viewed` - Track user interaction
-- `GET /publications/publication/{workspace_id}/related` - Related publications and content
+- `GET /publications/publication/{workspace_id}/related` - Comparable awarded contracts, found by searching the award database (see **AI database access** below). `?refresh=true` recomputes.
 - `GET /publications/publication/{workspace_id}/document/{filename}` - Download a tender document
 
 **Conversations (AI chat)**
@@ -287,9 +293,13 @@ All endpoints require a Clerk bearer token except `/health`, the Stripe webhook,
 - `DELETE /conversations/{conversation_id}` - Delete a conversation
 - `GET /publications/{workspace_id}/conversation` - Conversation for a publication
 
-**Contracts**
+**Contracts (award analytics)**
 - `GET /contracts` - Paginated awarded contracts
 - `GET /contracts/summary` - Award totals and aggregates
+- `GET /contracts/by-sector` | `/by-region` | `/by-winner` | `/by-supplier` | `/by-buyer` - Grouped counts and values
+- `GET /contracts/timeseries?granularity=month|quarter|year` - Awards over time
+
+  All of these share one filter set: `search`, `year`, `quarter`, `month`, `sector_code`, `cpv_code`, `region`, `winner`, `supplier`, `buyer`, `min_value`, `max_value`.
 - `GET /email/contract/{contract_id}` - Winner-email tracking records
 
 **Kanban**
@@ -310,6 +320,128 @@ All endpoints require a Clerk bearer token except `/health`, the Stripe webhook,
 
 **Billing**
 - `POST /stripe/webhook` - Stripe subscription/payment webhook
+
+## AI database access (MCP)
+
+Procy used to be blind to the database. Its prompt carried one publication and
+the company profile, there was no tool-calling anywhere in the codebase, and any
+question about comparable gunningen, market values or who tends to win was
+answered from the model's own memory — which is to say, invented.
+
+`/publications/.../related` had the opposite problem: it was real data, ranked by
+a hand-tuned `CASE` sum (same buyer +50, shared keyword +35, CPV +25) that never
+compared the *text* of two tenders, and whose point total was rendered to users
+as a "% match".
+
+Both are now served by one tool layer.
+
+### The registry
+
+Every tool is defined once in `app/mcp/registry.py` — name, JSON schema, handler
+— and three callers dispatch against it, so they cannot drift apart:
+
+| Caller | Path |
+|---|---|
+| External MCP clients | `app/mcp/server.py`, mounted at `/mcp` (Streamable HTTP) |
+| Procy's chat loop | `app/util/conversations_helper.py` |
+| The retrieval agent | `app/ai/retrieval_agent.py` |
+
+`MCP_TRANSPORT` selects how internal callers reach a tool. The default,
+`inprocess`, dispatches straight to the handler; `http` drives a real MCP client
+session against `/mcp`, which is useful for verifying the server but makes the
+API issue an authenticated HTTP request to itself once per tool call.
+
+### Tools
+
+**Gunningen** — `search_awards`, `get_award`, `award_market_stats`,
+`awards_by_sector`, `awards_by_region`, `awards_by_winner`, `awards_by_supplier`,
+`awards_by_buyer`, `awards_timeseries`, `find_similar_awards`
+
+**Tenders** — `search_publications`, `get_publication`,
+`find_similar_publications`, `publications_with_upcoming_deadlines`
+
+**Entities** — `search_organisations`, `get_organisation_profile`, `lookup_cpv`,
+`lookup_nuts`
+
+**Caller-scoped** — `get_my_company_profile`, `my_publications`
+
+**Escape hatch** — `describe_schema`, `run_sql_readonly`
+
+Every tool that returns a tender or an award includes a `url`, so Procy cites
+pages the user can open rather than describing results vaguely.
+
+### How "vergelijkbare gunningen" is produced
+
+`app/ai/retrieval_agent.py`:
+
+1. A deterministic query builds a broad candidate pool (Dutch full-text over the
+   award text, plus CPV proximity). Recall only.
+2. The model reads that pool and issues **its own** searches against the same
+   database, reformulating in Dutch, widening the CPV or dropping the value band
+   until it has enough. Capped at `RETRIEVAL_AGENT_MAX_ROUNDS` rounds and
+   `RETRIEVAL_AGENT_MAX_CANDIDATES` candidates.
+3. It ranks what it found and explains each choice.
+4. The response is rebuilt from the database rows.
+
+The model selects and explains; it never supplies data. Any workspace id it
+returns that did not come out of a tool result is dropped before assembly, so a
+gunning that does not exist cannot reach the frontend. `similarity_score` is now
+a real 0–100 relevance rather than an open-ended point total.
+
+Results are cached in Redis per publication for `SIMILAR_AWARDS_CACHE_TTL`
+seconds and invalidated with the rest of a publication's cache. On timeout or
+model failure the endpoint falls back to the old deterministic scorer, so the
+section degrades to its previous behaviour rather than to an empty state.
+
+### Security
+
+`/mcp` is on the public internet and reads a database, so:
+
+- Every request must carry the same Clerk bearer token the REST API requires.
+  The verified identity becomes the `ToolContext` that tenant-scoped tools filter
+  on — it is never taken from anything the model produced.
+- `run_sql_readonly` runs **only** against `POSTGRES_RO_CON_URL`. Grant that role
+  `SELECT` on the procurement tables and nothing else; it must have no access to
+  `companies`, `conversations`, `messages`, `kanban_*`, `notifications` or
+  `company_publication_matches`. **If the URL is unset the tool is not registered
+  at all** — it never falls back to the read-write engine.
+- The statement parser in `app/mcp/tools/sql.py` (single `SELECT`, no DDL/DML, no
+  file functions, forced row cap) is defence in depth, not the boundary. Do not
+  weaken the grants on the strength of it.
+
+Creating the read-only role:
+
+```sql
+CREATE USER proclogic_ro WITH PASSWORD '...';
+GRANT CONNECT ON DATABASE proclogic TO proclogic_ro;
+GRANT USAGE ON SCHEMA public TO proclogic_ro;
+GRANT SELECT ON publications, contracts, contract_organizations,
+    contract_addresses, contract_contact_persons, descriptions, dossiers, lots,
+    cpv_codes, organisations, organisation_names, enterprise_categories,
+    publication_cpv_additional_codes, publication_lots
+    TO proclogic_ro;
+```
+
+### Full-text search
+
+Migration `c4d5e6f7a8b9` adds `publications.searchable_content` — dossier and lot
+titles and descriptions, organisation names, keywords, AI summaries, and the
+winner — with a GIN index on `to_tsvector('dutch', ...)` and a trigram index for
+substring fallback. It is written at ingest by `get_or_create_publication`.
+
+It is deliberately not a generated column: Postgres generated columns may only
+reference the same row, and this aggregates across `descriptions` and
+`organisation_names`.
+
+Rows that predate the migration have a NULL, which is invisible to full-text
+search. Backfill once:
+
+```bash
+python -m scripts.backfill_searchable_content.backfill_searchable_content
+```
+
+Safe to re-run and to interrupt; `--all` rebuilds every row rather than only the
+missing ones.
 
 ## Project Structure
 
@@ -372,6 +504,55 @@ proclogic_api/
 ## Database Migrations
 
 Migrations are applied automatically when the app starts; a failure is logged and startup continues. The commands below are for authoring and manual control.
+
+### Provisioning a new environment
+
+`run_migration()` (`app/util/alembic_runner.py`) takes one of two paths:
+
+- **Existing database** — the normal `alembic upgrade head`.
+- **Empty database** — the schema is created from the models and stamped at head.
+
+The second path exists because the initial revision `8a03694dc199` is an empty
+`pass` and nothing else ever created the tables, so `alembic upgrade head`
+against a fresh database ran every later revision against tables that did not
+exist and failed on the first `ALTER TABLE`. Provisioning a new environment was
+impossible; the schema had only ever been created out of band. Production is not
+empty, so it is unaffected and takes the upgrade path exactly as before.
+
+### Backfills
+
+Two one-off scripts, both safe to re-run:
+
+```bash
+# Fill publications.searchable_content for rows predating migration c4d5e6f7a8b9.
+# Without this, historical tenders are invisible to full-text search.
+python -m scripts.backfill_searchable_content.backfill_searchable_content
+
+# Classify legacy `descriptions` rows as titles or descriptions (migration
+# d5e6f7a8b9c0). Dry-run by default -- read the sample before committing.
+python -m scripts.backfill_description_kind.backfill_description_kind
+python -m scripts.backfill_description_kind.backfill_description_kind --commit
+```
+
+### Titles vs. descriptions
+
+`Dossier.titles`/`Dossier.descriptions` (and the same pair on `Lot`) used to be
+two relationships over one foreign key with no discriminator, so both returned
+*every* row for the parent and `get_publication_title` returned whichever came
+last — often the description. Migration `d5e6f7a8b9c0` adds `descriptions.kind`.
+
+Rows created before it carry `kind='unknown'` and belong to both collections,
+which reproduces the old behaviour exactly, so applying the migration changes
+nothing for existing data. Newly ingested rows are precise; run the backfill
+above to classify the historical ones.
+
+Related: `create_descriptions` no longer reuses an existing row with matching
+text. It used to, and because a description row carries a single
+`dossier_reference_number` and `lot_id`, "reusing" one actually *moved* it —
+silently stripping the text from whichever parent had it before. Since
+`update_publication` rebuilds a publication's lots on every notice update, and
+phrases like "Onderhoud groenzones" repeat across tenders, republished notices
+quietly emptied each other's lots.
 
 ### Create a new migration
 

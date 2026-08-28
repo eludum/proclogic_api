@@ -2,6 +2,7 @@ fastapi[all]
 uvicorn[standard]
 gunicorn
 openai==3.5.0
+mcp
 httpx
 python-multipart
 redis

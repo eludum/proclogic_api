@@ -187,3 +187,18 @@ def invalidate_publication_cache(publication_workspace_id: str):
     # Delete keys
     if keys_to_delete:
         redis_client.delete(*keys_to_delete)
+
+    # A republished notice can change what counts as similar to it, so the
+    # cached comparable-awards list has to go too. Imported locally: the
+    # retrieval agent pulls in the whole tool layer, which is far too much to
+    # drag into every module that caches a publication.
+    try:
+        from app.ai.retrieval_agent import invalidate_similar_awards_cache
+
+        invalidate_similar_awards_cache(publication_workspace_id)
+    except Exception as exc:
+        logging.warning(
+            "Could not invalidate similar-awards cache for %s: %s",
+            publication_workspace_id,
+            exc,
+        )
