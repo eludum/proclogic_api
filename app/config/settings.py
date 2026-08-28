@@ -11,6 +11,14 @@ class Settings(BaseSettings):
     scraper_mode: bool = False
     debug_mode: bool = False
 
+    # Liveness canary for the log pipeline itself. proclogic only logs on error
+    # or on pod start — 40 active hours out of 337 measured over 14 days, with
+    # 44h stretches of legitimate silence — so "healthy and quiet" and "the log
+    # path is broken" look identical from the outside. One line on this interval
+    # gives koselogic_iac's ProclogicLogIngestAbsent rule something to miss.
+    # 0 disables it.
+    log_heartbeat_seconds: int = 1800
+
     openai_api_key: str
     openai_model: str = "gpt-5-mini"
 
