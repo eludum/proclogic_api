@@ -1,26 +1,43 @@
-fastapi[all]
-uvicorn[standard]
-gunicorn
+# Direct dependencies, pinned.
+#
+# Versions here are what `pip install -r` resolved to inside python:slim on
+# 2026-08-29 -- i.e. exactly what the next unpinned build would have pulled
+# anyway. Pinning them changes nothing about what ships; it stops the NEXT
+# rebuild from silently picking up a new major of FastAPI, SQLAlchemy or
+# Pydantic on an unrelated deploy.
+#
+# The image installs requirements.lock.txt, not this file. This is the list you
+# edit; the lock is generated. To change a dependency:
+#
+#   1. edit the pin here
+#   2. regenerate the lock:
+#        docker run --rm -v "$PWD/requirements.txt:/tmp/r.txt:ro" -v "$PWD:/out" \
+#          python:3.14-slim sh -c 'pip install -q -r /tmp/r.txt && pip freeze > /out/requirements.lock.txt'
+#   3. run the app against it before merging
+
+fastapi[all]==0.141.1
+uvicorn[standard]==0.52.4
+gunicorn==26.2.0
 openai==3.5.0
-mcp
-httpx
-python-multipart
-redis
-pydantic
-pydantic-settings
-sqlalchemy
-psycopg2-binary
-alembic
-requests-oauthlib
-asyncpg
-numpy
-python-dotenv
-nltk
-clerk-backend-api
-python-jose[cryptography]
-fastapi-pagination
-beautifulsoup4
-html2text
-stripe
-playwright
-python-dateutil
+mcp==2.1.1
+httpx==0.28.1
+python-multipart==0.0.32
+redis==8.1.0
+pydantic==2.13.5
+pydantic-settings==2.15.0
+sqlalchemy==2.0.52
+psycopg2-binary==2.9.12
+alembic==1.19.1
+requests-oauthlib==2.0.0
+asyncpg==0.31.0
+numpy==2.5.2
+python-dotenv==1.2.3
+nltk==3.10.3
+clerk-backend-api==7.0.0
+python-jose[cryptography]==3.5.0
+fastapi-pagination==0.15.16
+beautifulsoup4==4.15.0
+html2text==2025.4.15
+stripe==15.6.0
+playwright==1.62.0
+python-dateutil==2.9.0.post0
