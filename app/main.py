@@ -56,12 +56,9 @@ uvicorn_logger = logging.getLogger("uvicorn.access")
 uvicorn_logger.addFilter(EndpointFilter(path="/health"))
 
 
-# Error reporting goes through our own monitoring stack, not a hosted tracker.
-# In production the pods run in the k3s cluster where Promtail ships container
-# stdout/stderr to Loki. The Loki rule `ProclogicErrorOccurred`
-# (koselogic_iac/monitoring/alert-rules/loki-rules.yml) matches
-# error/exception/traceback lines from namespace "proclogic" and routes an email
-# alert through Alertmanager to info@koselogic.be. See the exception handler
+# Error reporting is log-based: there is no hosted tracker or APM agent. Every
+# error line goes to stdout, where the deployment's log pipeline collects it and
+# alerts on error/exception/traceback matches. See the exception handler
 # registered on the app below, which guarantees every unhandled request
 # exception is logged at ERROR level with a full traceback.
 logger = logging.getLogger("proclogic")
@@ -146,9 +143,9 @@ proclogic.add_middleware(
 
 @proclogic.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    """Log unhandled exceptions to stdout so Promtail/Loki capture them and
-    Alertmanager emails an alert (see the ProclogicErrorOccurred Loki rule).
-    Returns a generic 500 so internals are never leaked to the client."""
+    """Log unhandled exceptions to stdout so the log pipeline captures them and
+    can alert on them. Returns a generic 500 so internals are never leaked to
+    the client."""
     logger.error(
         "Unhandled exception on %s %s",
         request.method,

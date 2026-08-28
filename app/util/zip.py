@@ -10,11 +10,11 @@ import zipfile
 # large tender's files never all sit in memory at once.
 _MEMBER_SPILL_THRESHOLD = 2 * 1024 * 1024
 
-# Extraction spills members to the tempdir, which lives on the container overlay
-# — the same xvda that holds the local-path Prometheus/Loki PVs on kl-prod-1. So
-# bound how much one archive may write: keep the spill filesystem above
-# _MIN_FREE_DISK and never extract more than _MAX_ARCHIVE_UNCOMPRESSED (kept
-# under the pod's ephemeral-storage limit so the kubelet never has to evict us).
+# Extraction spills members to the tempdir, which in a container is the shared
+# overlay/host disk — other workloads on the node write there too. So bound how
+# much one archive may write: keep the spill filesystem above _MIN_FREE_DISK and
+# never extract more than _MAX_ARCHIVE_UNCOMPRESSED (keep this under whatever
+# ephemeral-storage limit the deployment sets, so the runtime never evicts us).
 # ZIP central-directory sizes let us decide before writing a single byte.
 _MIN_FREE_DISK = 4 * 1024 * 1024 * 1024
 _MAX_ARCHIVE_UNCOMPRESSED = 6 * 1024 * 1024 * 1024

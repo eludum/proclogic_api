@@ -33,7 +33,7 @@ ProcLogic API is the backend service powering the ProcLogic platform. It provide
 - **Document Handling**: Streamed download and extraction of tender document archives
 - **Caching**: Redis-based caching for search results and document sets
 - **Database**: PostgreSQL with SQLAlchemy ORM; Alembic migrations run automatically at startup
-- **Error Tracking**: Structured stdout logging captured by the self-hosted Grafana Loki stack, with Alertmanager email alerts on errors
+- **Error Tracking**: Structured stdout logging plus a global exception handler, ready for any log-shipping/alerting stack
 
 ## Prerequisites
 
@@ -218,22 +218,22 @@ Settings are declared in `app/config/settings.py` (pydantic-settings). Anything 
 
 ## Monitoring & Error Alerting
 
-The API does not use a hosted error tracker. In production it runs as pods in the
-KoseLogic k3s cluster, where the self-hosted observability stack (Grafana, Loki,
-Prometheus, Alertmanager — see `koselogic_iac/monitoring`) handles error tracking:
+The API ships no hosted error tracker and no APM agent. Error reporting is
+log-based, so it plugs into whatever log pipeline you already run:
 
-- The app logs to **stdout** (`logging.StreamHandler`). Promtail ships every
-  pod's stdout/stderr to Loki, tagged with `namespace="proclogic"`.
+- The app logs to **stdout** (`logging.StreamHandler`), unbuffered in the
+  container, so any log shipper can collect it. The level is `ERROR` by default
+  and `INFO` when `DEBUG_MODE=true`.
 - A global FastAPI exception handler (in `app/main.py`) logs every unhandled
-  request exception at `ERROR` level with a full traceback.
-- The Loki rule `ProclogicErrorOccurred`
-  (`koselogic_iac/monitoring/alert-rules/loki-rules.yml`) fires on any
-  error/exception/traceback line and routes an email alert through Alertmanager
-  to `info@koselogic.be`.
-- Uptime is monitored separately via Blackbox probes against `/health`.
+  request exception at `ERROR` level with a full traceback, and returns a
+  generic 500 so internals are never leaked to the client.
+- `/health` returns 200 and is filtered out of the uvicorn access log, so it is
+  cheap to poll from a liveness probe or an external uptime check.
 
-No application configuration is required — just ensure the app logs to stdout
-(the default). View logs and dashboards at `https://grafana.koselogic.be`.
+To get alerting, point your stack at those two signals: match
+error/exception/traceback lines in the container logs, and probe `/health` for
+uptime. No application configuration is required — just don't route logging
+away from stdout.
 
 ## Performance & Resource Safeguards
 
@@ -428,9 +428,11 @@ builder stage that produces `/opt/venv`, and the runtime stage copies only that
 venv onto `python:slim`, so no compiler or build toolchain ships in the final
 image. It serves with `uvicorn app.main:proclogic` on port 80.
 
-**Note**: the image does not run `playwright install`, so the Chromium binary
-used by `POST /company/scrape-website` is not present. Add it to the Dockerfile
-if you need that endpoint in a container.
+The runtime stage also installs Chromium plus its shared libraries
+(`playwright install --with-deps chromium`) into `/opt/playwright`, which is
+what `POST /company/scrape-website` launches. That layer costs ~1.4 GB — by far
+the largest part of the image — so drop the `RUN playwright install` line if you
+do not need that endpoint.
 
 ### Run production container
 
@@ -602,7 +604,7 @@ Please report security vulnerabilities to security@proclogic.be
 
 ## License
 
-This project is licensed under the [MIT License](https://opensource.org/licenses/MIT).
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Related Projects
 
