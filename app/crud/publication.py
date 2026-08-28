@@ -628,36 +628,6 @@ def publication_exists(publication_workspace_id: str, session: Session) -> bool:
     ).scalar()
 
 
-def delete_publication(publication_workspace_id: str, session: Session):
-    """Delete a publication and its related data."""
-    try:
-        # First delete the company-publication matches
-        session.query(CompanyPublicationMatch).filter(
-            CompanyPublicationMatch.publication_workspace_id == publication_workspace_id
-        ).delete(synchronize_session=False)
-
-        # Then delete the publication
-        publication = (
-            session.query(Publication)
-            .filter_by(publication_workspace_id=publication_workspace_id)
-            .first()
-        )
-        if publication:
-            session.delete(publication)
-            session.commit()
-            logging.info(
-                f"Publication with workspace ID {publication_workspace_id} deleted successfully."
-            )
-        else:
-            logging.warning(
-                f"Publication with workspace ID {publication_workspace_id} not found."
-            )
-    except Exception as e:
-        logging.error("Error deleting publication: %s", e)
-        session.rollback()
-        raise
-
-
 def build_region_filter_conditions(region_filter: List[str]):
     """
     Build SQLAlchemy filter conditions for region filtering.

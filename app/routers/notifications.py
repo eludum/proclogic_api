@@ -17,7 +17,7 @@ notifications_router = APIRouter()
 
 
 @notifications_router.get("/notifications/", response_model=NotificationListResponse)
-async def get_notifications(
+def get_notifications(
     limit: int = Query(100, description="Maximum number of notifications to return"),
     offset: int = Query(0, description="Skip this many notifications"),
     auth_user: AuthUser = Depends(get_auth_user),
@@ -63,7 +63,7 @@ async def get_notifications(
 
 
 @notifications_router.get("/notifications/combined")
-async def get_combined_notifications(
+def get_combined_notifications(
     limit: int = Query(100, description="Maximum number of notifications to return"),
     offset: int = Query(0, description="Skip this many notifications"),
     auth_user: AuthUser = Depends(get_auth_user),
@@ -217,7 +217,7 @@ async def get_combined_notifications(
 
 
 @notifications_router.get("/notifications/counts")
-async def get_notification_counts(auth_user: AuthUser = Depends(get_auth_user)):
+def get_notification_counts(auth_user: AuthUser = Depends(get_auth_user)):
     """Get counts of notifications by category for the dashboard."""
     if not auth_user.email:
         raise HTTPException(status_code=400, detail="User email not available")
@@ -338,7 +338,7 @@ async def get_notification_counts(auth_user: AuthUser = Depends(get_auth_user)):
 @notifications_router.get(
     "/notifications/unread", response_model=NotificationListResponse
 )
-async def get_unread_notifications(
+def get_unread_notifications(
     limit: int = Query(100, description="Maximum number of notifications to return"),
     offset: int = Query(0, description="Skip this many notifications"),
     auth_user: AuthUser = Depends(get_auth_user),
@@ -393,7 +393,7 @@ async def get_unread_notifications(
     "/notifications/by-type/{notification_type}",
     response_model=NotificationListResponse,
 )
-async def get_notifications_by_type(
+def get_notifications_by_type(
     notification_type: str = Path(..., description="Type of notification to filter by"),
     limit: int = Query(100, description="Maximum number of notifications to return"),
     offset: int = Query(0, description="Skip this many notifications"),
@@ -466,7 +466,7 @@ async def get_notifications_by_type(
 
 
 @notifications_router.post("/notifications/", response_model=NotificationResponse)
-async def create_new_notification(
+def create_new_notification(
     notification: NotificationCreate,
     auth_user: AuthUser = Depends(get_auth_user),
 ):
@@ -515,7 +515,7 @@ async def create_new_notification(
 @notifications_router.post(
     "/notifications/{notification_id}/read", response_model=NotificationResponse
 )
-async def mark_notification_read(
+def mark_notification_read(
     notification_id: int = Path(
         ..., description="The ID of the notification to mark as read"
     ),
@@ -559,7 +559,7 @@ async def mark_notification_read(
 
 
 @notifications_router.post("/notifications/mark-read", status_code=200)
-async def mark_notifications_read(
+def mark_notifications_read(
     notification_ids: List[int],
     auth_user: AuthUser = Depends(get_auth_user),
 ):
@@ -599,7 +599,7 @@ async def mark_notifications_read(
 
 
 @notifications_router.post("/notifications/delete", status_code=200)
-async def delete_notifications_bulk(
+def delete_notifications_bulk(
     notification_ids: List[int],
     auth_user: AuthUser = Depends(get_auth_user),
 ):

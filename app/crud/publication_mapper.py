@@ -1,7 +1,6 @@
 import asyncio
 
 import httpx
-from app.config.settings import settings
 from app.models.company_models import Company
 from app.models.publication_models import Publication
 from app.schemas.company_schemas import CompanySchema, SectorSchema
@@ -18,6 +17,9 @@ from app.util.pubproc import (
 
 # TODO: hide stuff for the free part
 
+
+# Strong references to cache-warming tasks; see below.
+_background_tasks: set[asyncio.Task] = set()
 
 async def convert_publications_to_out_schema_list_free(
     publication: Publication,
@@ -55,7 +57,13 @@ async def convert_publication_to_out_schema_details_paid(
                 publication_workspace_id=workspace_id,
             )
 
-    asyncio.create_task(_warm_document_cache(publication.publication_workspace_id))
+    # Strong reference until done: asyncio only holds a weak one, so an
+    # unreferenced task can be collected before it has warmed anything.
+    _warm_task = asyncio.create_task(
+        _warm_document_cache(publication.publication_workspace_id)
+    )
+    _background_tasks.add(_warm_task)
+    _warm_task.add_done_callback(_background_tasks.discard)
 
     documents = []
     external_links = []

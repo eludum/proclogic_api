@@ -1,29 +1,12 @@
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from clerk_backend_api import Clerk, CreateInvitationRequestBody, GetUserListRequest
 from sqlalchemy.orm import Session
 
 import app.crud.company as crud_company
 from app.config.settings import settings
-
-
-def check_user_company_access(email: str, session: Session) -> Optional[str]:
-    """
-    Check if a user has access to a company based on their email.
-    Returns the company VAT number if the user has access, None otherwise.
-    """
-    try:
-        # Get company by email
-        company = crud_company.get_company_by_email(email=email, session=session)
-        if not company:
-            return None
-
-        return company.vat_number
-    except Exception as e:
-        logging.error(f"Error checking user company access: {e}")
-        return None
 
 
 def add_user_to_company(company_vat_number: str, email: str, session: Session) -> bool:
@@ -166,7 +149,7 @@ def get_company_users(
                         # Check if there's a pending invitation
                         invitations = clerk.invitations.list(query=email)
 
-                        if invitations is not []:
+                        if invitations:
                             for invitation in invitations:
                                 users.append(
                                     {

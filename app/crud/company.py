@@ -4,10 +4,6 @@ from typing import List, Optional
 from app.models.company_models import Company, Sector
 from app.models.publication_models import (
     CompanyPublicationMatch,
-    Dossier,
-    Lot,
-    Organisation,
-    Publication,
 )
 from app.schemas.company_schemas import CompanySchema
 from app.util.publication_utils.publication_converter import PublicationConverter
@@ -265,94 +261,6 @@ def get_company_by_email(email: str, session: Session, load_matches: bool = Fals
     except Exception as e:
         logging.error("Error getting company: %s", e)
         return None
-
-
-def get_company_recommended_publications(company_vat_number: str, session: Session):
-    """Get all publications recommended for a company."""
-    try:
-        publication_ids = (
-            session.query(CompanyPublicationMatch.publication_workspace_id)
-            .filter(
-                CompanyPublicationMatch.company_vat_number == company_vat_number,
-                CompanyPublicationMatch.is_recommended == True,
-            )
-            .all()
-        )
-        publication_ids = [
-            id[0] for id in publication_ids
-        ]  # Extract IDs from result tuples
-
-        if not publication_ids:
-            return []
-
-        # Query publications with all needed relationships eagerly loaded
-        publications = (
-            session.query(Publication)
-            .filter(Publication.publication_workspace_id.in_(publication_ids))
-            .options(
-                joinedload(Publication.dossier).joinedload(Dossier.titles),
-                joinedload(Publication.dossier).joinedload(Dossier.descriptions),
-                joinedload(Publication.organisation).joinedload(
-                    Organisation.organisation_names
-                ),
-                joinedload(Publication.cpv_main_code),
-                joinedload(Publication.cpv_additional_codes),
-                joinedload(Publication.company_matches),
-                joinedload(Publication.lots).joinedload(Lot.descriptions),
-                joinedload(Publication.lots).joinedload(Lot.titles),
-            )
-            .all()
-        )
-
-        return publications
-    except Exception as e:
-        logging.error("Error getting recommended publications: %s", e)
-        return []
-
-
-def get_company_saved_publications(company_vat_number: str, session: Session):
-    """Get all publications saved by a company."""
-    try:
-        # Get publication IDs from matches
-        publication_ids = (
-            session.query(CompanyPublicationMatch.publication_workspace_id)
-            .filter(
-                CompanyPublicationMatch.company_vat_number == company_vat_number,
-                CompanyPublicationMatch.is_saved == True,
-            )
-            .all()
-        )
-
-        publication_ids = [
-            id[0] for id in publication_ids
-        ]  # Extract IDs from result tuples
-
-        if not publication_ids:
-            return []
-
-        # Query publications with all needed relationships eagerly loaded
-        publications = (
-            session.query(Publication)
-            .filter(Publication.publication_workspace_id.in_(publication_ids))
-            .options(
-                joinedload(Publication.dossier).joinedload(Dossier.titles),
-                joinedload(Publication.dossier).joinedload(Dossier.descriptions),
-                joinedload(Publication.organisation).joinedload(
-                    Organisation.organisation_names
-                ),
-                joinedload(Publication.cpv_main_code),
-                joinedload(Publication.cpv_additional_codes),
-                joinedload(Publication.company_matches),
-                joinedload(Publication.lots).joinedload(Lot.descriptions),
-                joinedload(Publication.lots).joinedload(Lot.titles),
-            )
-            .all()
-        )
-
-        return publications
-    except Exception as e:
-        logging.error("Error getting saved publications: %s", e)
-        return []
 
 
 def save_publication_for_company(

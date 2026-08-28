@@ -216,7 +216,7 @@ def run_sql_readonly(ctx: ToolContext, sql: str) -> Dict[str, Any]:
             connection.execute(text("SET TRANSACTION READ ONLY"))
             result = connection.execute(wrapped)
             columns = list(result.keys())
-            rows = [dict(zip(columns, row)) for row in result.fetchmany(limit + 1)]
+            rows = [dict(zip(columns, row, strict=False)) for row in result.fetchmany(limit + 1)]
     except Exception as exc:
         # The message is handed back to the model so it can correct itself; it
         # comes from Postgres and describes SQL, not internals worth hiding.

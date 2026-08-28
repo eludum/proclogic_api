@@ -17,7 +17,7 @@ numpy
 python-dotenv
 nltk
 clerk-backend-api
-python-jose
+python-jose[cryptography]
 fastapi-pagination
 beautifulsoup4
 html2text

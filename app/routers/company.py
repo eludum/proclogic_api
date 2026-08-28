@@ -12,7 +12,6 @@ from app.ai.openai import get_async_openai_client
 from app.ai.recommend import get_recommendation
 from app.ai.scraper import scrape_company_website
 from app.config.postgres import get_session
-from app.config.settings import settings
 from app.crud.publication_mapper import convert_company_to_schema
 from app.models.publication_models import CompanyPublicationMatch, Publication
 from app.schemas.company_schemas import (
@@ -29,6 +28,9 @@ from app.util.publication_utils.publication_converter import PublicationConverte
 
 
 companies_router = APIRouter()
+
+# Strong references to fire-and-forget background tasks; see create_company.
+_background_tasks: set[asyncio.Task] = set()
 
 
 class WebsiteScrapingRequest(BaseModel):
@@ -107,11 +109,17 @@ async def create_company(
         if not created_company:
             raise HTTPException(status_code=500, detail="Failed to create company")
 
-        asyncio.create_task(
+        # Held in a module-level set until it finishes. asyncio keeps only a
+        # weak reference to a running task, so a fire-and-forget create_task can
+        # be garbage-collected mid-flight -- here that would mean a brand new
+        # company silently never gets its recommendations.
+        task = asyncio.create_task(
             generate_recommendations_for_new_company(
                 company_vat_number=created_company.vat_number
             )
         )
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
 
         return await convert_company_to_schema(created_company)
 
@@ -219,7 +227,7 @@ async def scrape_company_website_endpoint(
     except Exception as e:
         logging.error(f"Error in website scraping: {str(e)}")
         raise HTTPException(
-            status_code=500, detail=f"Error processing website: {str(e)}"
+            status_code=500, detail="Could not process that website."
         )
 
 

@@ -1,11 +1,11 @@
 from datetime import date
 from typing import List, Optional
+from urllib.parse import quote
 
 import app.crud.company as crud_company
 import app.crud.publication as crud_publication
 import httpx
 from app.config.postgres import get_session
-from app.config.settings import settings
 from app.crud.publication_mapper import (
     convert_publication_to_out_schema_details_free,
     convert_publication_to_out_schema_details_paid,
@@ -315,7 +315,7 @@ async def unsave_publication(
     "/publications/publication/{publication_workspace_id}/viewed",
     status_code=200,
 )
-async def mark_publication_viewed(
+def mark_publication_viewed(
     publication_workspace_id: str = Path(
         ..., description="Unique ID of the publication workspace"
     ),
@@ -477,9 +477,19 @@ async def get_publication_document(
     elif filename.lower().endswith(".png"):
         content_type = "image/png"
 
+    # filename comes from the upstream notice, not from us. A quote or a newline
+    # in it would corrupt the header, so quote it properly and send the RFC 5987
+    # form alongside for anything non-ASCII.
+    ascii_name = filename.encode("ascii", "replace").decode("ascii")
+    safe_name = ascii_name.replace("\\", "_").replace('"', "_").replace("\r", "").replace("\n", "")
+    disposition = (
+        f'attachment; filename="{safe_name}"; '
+        f"filename*=UTF-8''{quote(filename, safe='')}"
+    )
+
     # Return the file directly as a streaming response
     return StreamingResponse(
         file_data,  # We can pass the BytesIO object directly
         media_type=content_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": disposition},
     )

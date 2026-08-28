@@ -123,28 +123,6 @@ def mark_notifications_as_read(notification_ids: List[int], session: Session) ->
         session.close()
 
 
-def delete_notification(notification_id: int, session: Session) -> bool:
-    """Delete a notification."""
-    try:
-        notification = (
-            session.query(Notification)
-            .filter(Notification.id == notification_id)
-            .first()
-        )
-        if not notification:
-            return False
-
-        session.delete(notification)
-        session.commit()
-        return True
-    except Exception as e:
-        logging.error(f"Error deleting notification: {e}")
-        session.rollback()
-        return False
-    finally:
-        session.close()
-
-
 def delete_notifications(notification_ids: List[int], session: Session) -> bool:
     """Delete multiple notifications."""
     try:

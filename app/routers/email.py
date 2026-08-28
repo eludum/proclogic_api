@@ -12,7 +12,7 @@ email_tracking_router = APIRouter()
 @email_tracking_router.get(
     "/email/contract/{contract_id}", response_model=List[EmailTrackingResponse]
 )
-async def get_contract_email_history(
+def get_contract_email_history(
     contract_id: str,
     auth_user: AuthUser = Depends(get_auth_user),
 ):

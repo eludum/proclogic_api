@@ -23,7 +23,7 @@ kanban_router = APIRouter()
 
 
 @kanban_router.get("/kanban/board", response_model=KanbanBoard)
-async def get_kanban_board(auth_user: AuthUser = Depends(get_auth_user)):
+def get_kanban_board(auth_user: AuthUser = Depends(get_auth_user)):
     """Get the full Kanban board with all columns and publications."""
     if not auth_user.email:
         raise HTTPException(status_code=400, detail="User email not available")
@@ -65,7 +65,7 @@ async def get_kanban_board(auth_user: AuthUser = Depends(get_auth_user)):
 
 
 @kanban_router.get("/kanban/statuses", response_model=List[KanbanStatusResponse])
-async def get_kanban_statuses(auth_user: AuthUser = Depends(get_auth_user)):
+def get_kanban_statuses(auth_user: AuthUser = Depends(get_auth_user)):
     """Get all Kanban statuses for the company."""
     if not auth_user.email:
         raise HTTPException(status_code=400, detail="User email not available")
@@ -85,7 +85,7 @@ async def get_kanban_statuses(auth_user: AuthUser = Depends(get_auth_user)):
 
 
 @kanban_router.post("/kanban/statuses", response_model=KanbanStatusResponse)
-async def create_kanban_status(
+def create_kanban_status(
     status: KanbanStatusCreate, auth_user: AuthUser = Depends(get_auth_user)
 ):
     """Create a new Kanban status."""
@@ -117,7 +117,7 @@ async def create_kanban_status(
 
 
 @kanban_router.put("/kanban/statuses/{status_id}", response_model=KanbanStatusResponse)
-async def update_kanban_status(
+def update_kanban_status(
     status_id: int,
     status_update: KanbanStatusUpdate,
     auth_user: AuthUser = Depends(get_auth_user),
@@ -150,7 +150,7 @@ async def update_kanban_status(
 
 
 @kanban_router.delete("/kanban/statuses/{status_id}")
-async def delete_kanban_status(
+def delete_kanban_status(
     status_id: int, auth_user: AuthUser = Depends(get_auth_user)
 ):
     """Delete a Kanban status and move its publications to another status."""
@@ -178,7 +178,7 @@ async def delete_kanban_status(
 
 
 @kanban_router.post("/kanban/publications", response_model=PublicationStatusResponse)
-async def add_publication_to_kanban(
+def add_publication_to_kanban(
     publication_status: PublicationStatusCreate,
     auth_user: AuthUser = Depends(get_auth_user),
 ):
@@ -217,7 +217,7 @@ async def add_publication_to_kanban(
     "/kanban/publications/{publication_workspace_id}",
     response_model=PublicationStatusResponse,
 )
-async def get_publication_kanban_status(
+def get_publication_kanban_status(
     publication_workspace_id: str, auth_user: AuthUser = Depends(get_auth_user)
 ):
     """Get the Kanban status of a specific publication."""
@@ -249,7 +249,7 @@ async def get_publication_kanban_status(
     "/kanban/publications/{publication_workspace_id}",
     response_model=PublicationStatusResponse,
 )
-async def update_publication_kanban_status(
+def update_publication_kanban_status(
     publication_workspace_id: str,
     status_update: PublicationStatusUpdate,
     auth_user: AuthUser = Depends(get_auth_user),
@@ -284,7 +284,7 @@ async def update_publication_kanban_status(
 
 
 @kanban_router.delete("/kanban/publications/{publication_workspace_id}")
-async def remove_publication_from_kanban(
+def remove_publication_from_kanban(
     publication_workspace_id: str, auth_user: AuthUser = Depends(get_auth_user)
 ):
     """Remove a publication from the Kanban board."""
@@ -313,7 +313,7 @@ async def remove_publication_from_kanban(
 
 
 @kanban_router.post("/kanban/move", response_model=PublicationStatusResponse)
-async def move_publication(
+def move_publication(
     move_request: MovePublicationRequest, auth_user: AuthUser = Depends(get_auth_user)
 ):
     """Move a publication to a different status and/or position."""
@@ -344,7 +344,7 @@ async def move_publication(
 
 
 @kanban_router.post("/kanban/initialize")
-async def initialize_kanban_board(auth_user: AuthUser = Depends(get_auth_user)):
+def initialize_kanban_board(auth_user: AuthUser = Depends(get_auth_user)):
     """Initialize the Kanban board with default statuses."""
     if not auth_user.email:
         raise HTTPException(status_code=400, detail="User email not available")

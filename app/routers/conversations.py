@@ -13,7 +13,6 @@ import app.crud.conversation as crud_conversation
 import app.crud.publication as crud_publication
 from app.ai.openai import get_async_openai_client
 from app.config.postgres import get_session
-from app.config.settings import settings
 from app.models.conversation_models import Conversation
 from app.schemas.conversation_schemas import (
     ChatRequest,
@@ -44,7 +43,7 @@ def truncate_text(text: str, max_length: int = 1000) -> str:
 
 
 @conversations_router.get("/conversations/", response_model=List[ConversationSummary])
-async def get_user_conversations(
+def get_user_conversations(
     auth_user: AuthUser = Depends(get_auth_user),
 ):
     """Get all conversations for the authenticated user."""
@@ -101,7 +100,7 @@ async def get_user_conversations(
 @conversations_router.get(
     "/conversations/{conversation_id}", response_model=ConversationSchema
 )
-async def get_conversation(
+def get_conversation(
     conversation_id: int,
     auth_user: AuthUser = Depends(get_auth_user),
 ):
@@ -212,7 +211,7 @@ async def chat_with_publication(
 
 
 @conversations_router.delete("/conversations/{conversation_id}", status_code=200)
-async def delete_conversation(
+def delete_conversation(
     conversation_id: int,
     auth_user: AuthUser = Depends(get_auth_user),
 ):
@@ -254,7 +253,7 @@ async def delete_conversation(
     "/publications/{publication_workspace_id}/conversation",
     response_model=Optional[ConversationSchema],
 )
-async def get_publication_conversation(
+def get_publication_conversation(
     publication_workspace_id: str,
     auth_user: AuthUser = Depends(get_auth_user),
 ):
@@ -352,10 +351,13 @@ async def websocket_conversation(
                 )
                 return
         except Exception as auth_error:
+            logging.info(
+                f"Connection {connection_id}: authentication rejected: {auth_error}"
+            )
             await websocket.send_json(
                 {
                     "type": "error",
-                    "data": {"detail": f"Authentication failed: {str(auth_error)}"},
+                    "data": {"detail": "Authentication failed."},
                 }
             )
             return
@@ -432,10 +434,14 @@ async def websocket_conversation(
                     }
                 )
         except Exception as db_error:
+            logging.error(
+                f"Connection {connection_id}: conversation setup failed: {db_error}",
+                exc_info=db_error,
+            )
             await websocket.send_json(
                 {
                     "type": "error",
-                    "data": {"detail": f"Database error: {str(db_error)}"},
+                    "data": {"detail": "Could not load this conversation."},
                 }
             )
             return
@@ -707,7 +713,7 @@ async def websocket_conversation(
                     f"Connection {connection_id}: Error processing message: {e}"
                 )
                 await websocket.send_json(
-                    {"type": "error", "data": {"detail": f"Error: {str(e)}"}}
+                    {"type": "error", "data": {"detail": "Er is een fout opgetreden."}}
                 )
                 is_processing = False  # Reset state on error
 
@@ -717,7 +723,7 @@ async def websocket_conversation(
         logging.error(f"Connection {connection_id}: WebSocket error: {str(e)}")
         try:
             await websocket.send_json(
-                {"type": "error", "data": {"detail": f"Error: {str(e)}"}}
+                {"type": "error", "data": {"detail": "Er is een fout opgetreden."}}
             )
         except:
             pass  # Can't do anything if sending fails

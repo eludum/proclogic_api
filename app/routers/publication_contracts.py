@@ -18,7 +18,7 @@ contracts_router = APIRouter()
 
 
 @contracts_router.get("/contracts", response_model=Page[ContractItem])
-async def get_contracts(
+def get_contracts(
     # Pagination
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(100, ge=1, le=500, description="Items per page"),
@@ -100,7 +100,7 @@ async def get_contracts(
 
 
 @contracts_router.get("/contracts/summary", response_model=AwardSummary)
-async def get_contracts_summary_endpoint(
+def get_contracts_summary_endpoint(
     # Search
     search: Optional[str] = Query(
         None, description="Search in winner, buyer, or supplier names"
@@ -202,7 +202,7 @@ def award_filters(
 
 
 @contracts_router.get("/contracts/by-sector")
-async def get_awards_by_sector(
+def get_awards_by_sector(
     filters: Dict[str, Any] = Depends(award_filters),
     limit: int = Query(25, ge=1, le=200),
     auth_user: AuthUser = Depends(get_auth_user),
@@ -213,7 +213,7 @@ async def get_awards_by_sector(
 
 
 @contracts_router.get("/contracts/by-region")
-async def get_awards_by_region(
+def get_awards_by_region(
     filters: Dict[str, Any] = Depends(award_filters),
     limit: int = Query(25, ge=1, le=200),
     auth_user: AuthUser = Depends(get_auth_user),
@@ -228,7 +228,7 @@ async def get_awards_by_region(
 
 
 @contracts_router.get("/contracts/by-winner")
-async def get_awards_by_winner(
+def get_awards_by_winner(
     filters: Dict[str, Any] = Depends(award_filters),
     limit: int = Query(25, ge=1, le=200),
     auth_user: AuthUser = Depends(get_auth_user),
@@ -239,7 +239,7 @@ async def get_awards_by_winner(
 
 
 @contracts_router.get("/contracts/by-supplier")
-async def get_awards_by_supplier(
+def get_awards_by_supplier(
     filters: Dict[str, Any] = Depends(award_filters),
     limit: int = Query(25, ge=1, le=200),
     auth_user: AuthUser = Depends(get_auth_user),
@@ -250,7 +250,7 @@ async def get_awards_by_supplier(
 
 
 @contracts_router.get("/contracts/by-buyer")
-async def get_awards_by_buyer(
+def get_awards_by_buyer(
     filters: Dict[str, Any] = Depends(award_filters),
     limit: int = Query(25, ge=1, le=200),
     auth_user: AuthUser = Depends(get_auth_user),
@@ -261,7 +261,7 @@ async def get_awards_by_buyer(
 
 
 @contracts_router.get("/contracts/timeseries")
-async def get_awards_timeseries(
+def get_awards_timeseries(
     filters: Dict[str, Any] = Depends(award_filters),
     granularity: str = Query("month", pattern="^(month|quarter|year)$"),
     auth_user: AuthUser = Depends(get_auth_user),
