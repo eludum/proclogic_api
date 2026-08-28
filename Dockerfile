@@ -23,18 +23,13 @@ FROM python:slim AS runtime
 
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH" \
-    PYTHONUNBUFFERED=1 \
-    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+    PYTHONUNBUFFERED=1
 
-# Chromium + its shared libraries, for app/util/web_scraper.py (the company
-# website scrape behind POST /company/scrape-website). Without this the endpoint
-# fails at launch() with "Executable doesn't exist".
-# `--with-deps` apt-installs the browser's runtime libs (fonts, libnss3, …); it
-# pulls no compiler, so the "no build tools in the runtime image" rule holds.
-# Browsers land in PLAYWRIGHT_BROWSERS_PATH, which is set above so the app finds
-# them regardless of $HOME.
-RUN playwright install --with-deps chromium \
-    && rm -rf /var/lib/apt/lists/*
+# No `playwright install` here on purpose: nothing the API or the scraper worker
+# serves drives a browser. The one Playwright caller, app/util/web_scraper.py,
+# is imported only by scripts/backfill_contracts, which is run from a checkout
+# with its own venv — installing Chromium here would add ~1.4 GB for code this
+# image never executes.
 
 WORKDIR /code
 

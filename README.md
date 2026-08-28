@@ -27,7 +27,7 @@ ProcLogic API is the backend service powering the ProcLogic platform. It provide
 - **Contract Awards**: Award/contract tracking with automated winner emails and open-tracking
 - **Kanban Pipeline**: Per-company boards to track publications through custom statuses
 - **Notifications**: In-app notifications plus email delivery over Mailtrap SMTP
-- **Company Profiles**: Company/VAT records, team invites, and Playwright-based website scraping used to build recommendations
+- **Company Profiles**: Company/VAT records, team invites, and website scraping (httpx + BeautifulSoup, summarised by OpenAI) used to pre-fill onboarding and build recommendations
 - **User Authentication**: Secure JWT-based auth via Clerk (JWKS validated, cache pre-warmed at startup)
 - **Subscription Management**: Stripe webhooks for payment and subscription state
 - **Document Handling**: Streamed download and extraction of tender document archives
@@ -64,7 +64,7 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 ```bash
 pip install -r requirements.txt
-playwright install chromium  # Browser binary for company website scraping
+playwright install chromium  # Only needed to run scripts/backfill_contracts
 ```
 
 ### 4. Obtain BOSA public procurement API Credentials
@@ -305,7 +305,7 @@ All endpoints require a Clerk bearer token except `/health`, the Stripe webhook,
 
 **Company & Users**
 - `GET|POST|PATCH /company/` , `GET /company/{vat_number}` - Company profile
-- `POST /company/scrape-website` - Playwright scrape used to enrich recommendations
+- `POST /company/scrape-website` - Fetch a company site over HTTP and have OpenAI extract name, VAT, sectors and regions (onboarding pre-fill)
 - `GET /users/company-users` | `/company-emails`, `POST /users/invite`, `DELETE /users/remove/{email}`
 
 **Billing**
@@ -347,15 +347,16 @@ proclogic_api/
 │   │   ├── pubproc.py            # Procurement integration & scraper loops
 │   │   ├── publication_utils/    # CPV/NUTS codes, converters, contracts
 │   │   ├── redis_cache.py        # Caching decorator (with size caps)
-│   │   ├── web_scraper.py        # Playwright website scraping
+│   │   ├── web_scraper.py        # Playwright scrape of the procurement portal,
+│   │   │                         #   used only by scripts/backfill_contracts
 │   │   ├── zip.py                # Disk-bounded archive extraction
 │   │   └── email/                # Email templates and service
 │   └── main.py              # FastAPI app, lifespan, scraper tasks, error handler
 ├── alembic/                 # Database migrations
 │   ├── versions/            # Migration files
 │   └── env.py               # Alembic configuration
-├── scripts/                 # Utility scripts
-│   └── backfill_contracts/  # Historic award backfill
+├── scripts/                 # Utility scripts (run from a checkout, not the image)
+│   └── backfill_contracts/  # Historic award backfill; needs Playwright
 ├── assets/                  # Logos
 ├── .env                     # Environment variables (not in git)
 ├── .env.postgres            # PostgreSQL env vars (not in git)
@@ -428,11 +429,10 @@ builder stage that produces `/opt/venv`, and the runtime stage copies only that
 venv onto `python:slim`, so no compiler or build toolchain ships in the final
 image. It serves with `uvicorn app.main:proclogic` on port 80.
 
-The runtime stage also installs Chromium plus its shared libraries
-(`playwright install --with-deps chromium`) into `/opt/playwright`, which is
-what `POST /company/scrape-website` launches. That layer costs ~1.4 GB — by far
-the largest part of the image — so drop the `RUN playwright install` line if you
-do not need that endpoint.
+The image ships no browser: nothing the API or the scraper worker serves uses
+Playwright. `app/util/web_scraper.py` is imported only by
+`scripts/backfill_contracts`, which runs from a checkout with its own venv, so
+install the Chromium binary there rather than in the image (it costs ~1.4 GB).
 
 ### Run production container
 
