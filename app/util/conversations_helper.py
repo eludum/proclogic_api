@@ -21,6 +21,56 @@ logger = logging.getLogger(__name__)
 EventCallback = Callable[[str, Dict[str, Any]], Awaitable[None]]
 
 
+# The document summary is the single largest thing in the prompt and the history
+# is replayed on every turn, so it is bounded. Procy can always call
+# get_publication for the rest.
+MAX_SUMMARY_CHARS = 6000
+
+
+def _truncate(text: Optional[str], limit: int = MAX_SUMMARY_CHARS) -> Optional[str]:
+    if not text:
+        return None
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "\n[...ingekort, vraag door voor meer detail]"
+
+
+def _tender_content(publication: Publication, pub_data) -> str:
+    """The actual substance of the tender, not just its metadata.
+
+    This was missing entirely. The prompt carried the title, the deadline and the
+    CPV code, and nothing else -- so the assistant on a document-analysis product
+    could not see a single word of the tender it was being asked about, while the
+    chat window listed the document filenames as though it could.
+    """
+    parts = []
+
+    description = getattr(pub_data, "original_description", None)
+    if description:
+        parts.append(f"BESCHRIJVING VAN DE OPDRACHT:\n{_truncate(description, 4000)}")
+
+    summary = publication.ai_summary_without_documents
+    if summary:
+        parts.append(f"SAMENVATTING VAN DE AANKONDIGING:\n{_truncate(summary)}")
+
+    doc_summary = publication.ai_summary_with_documents
+    if doc_summary:
+        parts.append(
+            "SAMENVATTING VAN DE BESTEKDOCUMENTEN:\n" + _truncate(doc_summary)
+        )
+
+    documents = getattr(pub_data, "documents", None)
+    if documents:
+        listed = ", ".join(documents[:25])
+        parts.append(f"BESCHIKBARE DOCUMENTEN ({len(documents)}): {listed}")
+
+    if not parts:
+        return "Er is geen beschrijving of documentinhoud beschikbaar voor deze opdracht."
+
+    return "\n\n".join(parts)
+
+
 def build_system_prompt(company: Company, publication: Publication) -> str:
     pub_data = PublicationConverter.to_output_schema(publication, company)
 
@@ -43,6 +93,8 @@ TENDER IN FOCUS:
 - Sector: {pub_data.sector}
 - Estimated value: {pub_data.estimated_value if pub_data.estimated_value else "Unknown"}
 
+{_tender_content(publication, pub_data)}
+
 COMPANY YOU ARE HELPING:
 - Name: {company.name}
 - VAT: {company.vat_number}
@@ -52,8 +104,11 @@ COMPANY YOU ARE HELPING:
 - Regions: {', '.join(company.operating_regions) if company.operating_regions else 'Not specified'}
 
 USING YOUR TOOLS:
-- Never answer a factual question about tenders, awards, companies, values or
-  market trends from memory. Look it up. You have the database; use it.
+- The description and document summaries above are the content of THIS tender.
+  Answer questions about its requirements, scope and criteria from them directly;
+  there is no need to search for the tender you are already looking at.
+- Never answer a factual question about OTHER tenders, awards, companies, values
+  or market trends from memory. Look it up. You have the database; use it.
 - find_similar_awards is the right tool for "what comparable work has been
   awarded before" and for questions about what such work costs.
 - awards_by_winner answers "who usually wins this kind of work".

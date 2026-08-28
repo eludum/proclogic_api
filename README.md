@@ -505,9 +505,28 @@ proclogic_api/
 
 Migrations are applied automatically when the app starts; a failure is logged and startup continues. The commands below are for authoring and manual control.
 
+### How migrations run at startup
+
+`run_migration()` (`app/util/alembic_runner.py`) holds a Postgres advisory lock
+for the duration, so only one replica migrates at a time. The API runs 3–7 pods
+and every one of them calls it on start; without the lock they race, and the
+indexes below are built with `CREATE INDEX CONCURRENTLY`, where losing that race
+can leave an index marked **invalid** and permanently unused. A pod that cannot
+get the lock within `MIGRATION_LOCK_TIMEOUT` logs and skips — whoever holds it
+is the one that will finish. The lock is session-scoped, so a crashed pod
+releases it automatically and cannot wedge a rollout.
+
+Index builds are concurrent: a plain `CREATE INDEX` on `publications` holds a
+lock that blocks writes for the whole build, which would stall the scraper. The
+`ALTER TABLE` statements run under `SET LOCAL lock_timeout` so they cannot queue
+for an exclusive lock while every later query queues behind them. Both index
+migrations first drop any same-named index left **invalid** by an interrupted
+build — `CREATE INDEX CONCURRENTLY IF NOT EXISTS` sees the name, skips, and the
+index would otherwise stay dead forever.
+
 ### Provisioning a new environment
 
-`run_migration()` (`app/util/alembic_runner.py`) takes one of two paths:
+`run_migration()` takes one of two paths:
 
 - **Existing database** — the normal `alembic upgrade head`.
 - **Empty database** — the schema is created from the models and stamped at head.

@@ -21,7 +21,7 @@ path exactly as before.
 import logging
 
 import alembic.config
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,18 @@ logger = logging.getLogger(__name__)
 # Deliberately not alembic_version: a database can carry a stamp with no tables
 # (running the old no-op initial revision did exactly that).
 SENTINEL_TABLE = "publications"
+
+# Serialises migrations across replicas. The API runs 3-7 pods and every one of
+# them calls run_migration() on start, so without this they race -- and the
+# indexes are now built with CREATE INDEX CONCURRENTLY, where losing that race
+# can leave an index behind marked invalid and permanently unused.
+#
+# An arbitrary but stable key; advisory locks share one namespace per database.
+MIGRATION_LOCK_KEY = 0x70726F63  # "proc"
+
+# How long a pod waits for whichever replica got there first. Comfortably longer
+# than a migration should take, short enough not to hold up a rollout.
+MIGRATION_LOCK_TIMEOUT = "120s"
 
 
 def _database_is_empty() -> bool:
@@ -60,7 +72,7 @@ def _create_from_models() -> None:
     Base.metadata.create_all(engine)
 
 
-def run_migration():
+def _migrate():
     if _database_is_empty():
         logger.info("Empty database detected; creating schema from models.")
         _create_from_models()
@@ -69,3 +81,43 @@ def run_migration():
         return
 
     alembic.config.main(argv=["--raiseerr", "upgrade", "head"])
+
+
+def run_migration():
+    """Migrate, holding an advisory lock so only one replica does it at a time.
+
+    The lock is session-scoped and released on the connection below, or by the
+    server if this pod dies mid-migration -- so a crashed pod cannot wedge a
+    rollout.
+    """
+    from app.config.postgres import engine
+
+    connection = engine.connect()
+    try:
+        connection.execute(text(f"SET lock_timeout = '{MIGRATION_LOCK_TIMEOUT}'"))
+        try:
+            connection.execute(
+                text("SELECT pg_advisory_lock(:key)"), {"key": MIGRATION_LOCK_KEY}
+            )
+        except Exception as exc:
+            # Another replica has been migrating for longer than the timeout.
+            # It is the one holding the lock, so it is the one that will finish;
+            # starting a competing run would be worse than waiting for the next
+            # pod restart.
+            logger.warning(
+                "Could not acquire the migration lock within %s (%s); "
+                "another instance is migrating. Skipping.",
+                MIGRATION_LOCK_TIMEOUT,
+                exc,
+            )
+            return
+
+        try:
+            _migrate()
+        finally:
+            connection.execute(
+                text("SELECT pg_advisory_unlock(:key)"), {"key": MIGRATION_LOCK_KEY}
+            )
+            connection.commit()
+    finally:
+        connection.close()
