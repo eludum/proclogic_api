@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import AnyHttpUrl, BaseModel
 
 import app.crud.company as crud_company
-from app.ai.openai import get_openai_client
+from app.ai.openai import get_async_openai_client
 from app.ai.recommend import get_recommendation
 from app.ai.scraper import scrape_company_website
 from app.config.postgres import get_session
@@ -166,7 +166,7 @@ async def scrape_company_website_endpoint(
         raise HTTPException(status_code=400, detail="User email not available")
 
     # Get the OpenAI client
-    client = get_openai_client()
+    client = get_async_openai_client()
 
     # Scrape the website
     try:
@@ -265,8 +265,10 @@ async def generate_recommendations_for_new_company(company_vat_number: str):
         three_days_back = get_three_workdays_back()
 
         with get_session() as session:
-            company = crud_company.get_company_by_vat_number(
-                vat_number=company_vat_number, session=session
+            company = await asyncio.to_thread(
+                crud_company.get_company_by_vat_number,
+                vat_number=company_vat_number,
+                session=session,
             )
 
             if not company:
@@ -276,8 +278,8 @@ async def generate_recommendations_for_new_company(company_vat_number: str):
                 return
 
             # Get active publications from the past 2 weeks
-            publications = (
-                session.query(Publication)
+            publications = await asyncio.to_thread(
+                lambda: session.query(Publication)
                 .filter(
                     Publication.publication_date >= three_days_back,
                     Publication.vault_submission_deadline > datetime.now(),
@@ -296,8 +298,8 @@ async def generate_recommendations_for_new_company(company_vat_number: str):
             for publication in publications:
                 try:
                     # Check if we already have a match for this publication
-                    existing_match = (
-                        session.query(CompanyPublicationMatch)
+                    existing_match = await asyncio.to_thread(
+                        lambda: session.query(CompanyPublicationMatch)
                         .filter(
                             CompanyPublicationMatch.company_vat_number
                             == company.vat_number,
@@ -312,8 +314,10 @@ async def generate_recommendations_for_new_company(company_vat_number: str):
                         continue
 
                     # Generate recommendation using the AI system
-                    match, match_percentage = get_recommendation(
-                        publication=publication, company=company
+                    match, match_percentage = await asyncio.to_thread(
+                        get_recommendation,
+                        publication=publication,
+                        company=company,
                     )
 
                     if (
@@ -365,7 +369,7 @@ async def generate_recommendations_for_new_company(company_vat_number: str):
                     continue
 
             # Commit all changes
-            session.commit()
+            await asyncio.to_thread(session.commit)
 
             # Send a welcome notification with summary
             if match_count > 0:

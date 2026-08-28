@@ -6,12 +6,12 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 import app.crud.company as crud_company
 import app.crud.conversation as crud_conversation
 import app.crud.publication as crud_publication
-from app.ai.openai import get_openai_client
+from app.ai.openai import get_async_openai_client
 from app.config.postgres import get_session
 from app.config.settings import settings
 from app.models.conversation_models import Conversation
@@ -135,7 +135,7 @@ async def get_conversation(
 async def chat_with_publication(
     request: ChatRequest,
     auth_user: AuthUser = Depends(get_auth_user),
-    client: OpenAI = Depends(get_openai_client),
+    client: AsyncOpenAI = Depends(get_async_openai_client),
 ):
     """Send a message to a publication and get a response."""
     if not auth_user.email:
@@ -290,7 +290,7 @@ async def get_publication_conversation(
 @conversations_router.websocket("/ws/conversation")
 async def websocket_conversation(
     websocket: WebSocket,
-    client: OpenAI = Depends(get_openai_client),
+    client: AsyncOpenAI = Depends(get_async_openai_client),
 ):
     """Enhanced WebSocket endpoint with improved error handling and logging."""
     logging.info("WebSocket connection attempt received")

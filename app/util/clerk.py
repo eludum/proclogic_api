@@ -46,7 +46,9 @@ def get_jwks():
     if _jwks_cache is None:
         logging.warning("JWKS cache miss - fetching synchronously (startup pre-warming may have failed)")
         import requests
-        response = requests.get(settings.clerk_jwks_url)
+        # Bounded: this runs on the event loop via the async get_auth_user
+        # dependency, so an unbounded fetch would stall the whole worker.
+        response = requests.get(settings.clerk_jwks_url, timeout=10)
         if response.status_code != 200:
             logging.error(f"Failed to get JWKS: {response.status_code}")
             raise HTTPException(

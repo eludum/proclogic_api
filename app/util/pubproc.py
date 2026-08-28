@@ -282,7 +282,9 @@ async def process_publication_contract(
         publication_workspace_id=pub.publication_workspace_id,
     )
 
-    contract = summarize_publication_contract(xml=xml_content)
+    contract = await asyncio.to_thread(
+        summarize_publication_contract, xml=xml_content
+    )
     if contract:
         pub.contract = contract
         crud_publication.get_or_create_publication(
@@ -302,8 +304,11 @@ async def enrich_publication_with_ai(
     """
     if filesmap:
         try:
-            estimated_value, summary, citations = summarize_publication_with_files(
-                publication=pub, xml=xml_content, filesmap=filesmap
+            estimated_value, summary, citations = await asyncio.to_thread(
+                summarize_publication_with_files,
+                publication=pub,
+                xml=xml_content,
+                filesmap=filesmap,
             )
             pub.ai_summary_with_documents = summary + citations
             pub.estimated_value = int(estimated_value)
@@ -311,8 +316,10 @@ async def enrich_publication_with_ai(
             logging.error(f"Error in summarize_publication_with_files: {e}")
     else:
         try:
-            pub.ai_summary_without_documents = summarize_publication_without_files(
-                publication=pub, xml=xml_content
+            pub.ai_summary_without_documents = await asyncio.to_thread(
+                summarize_publication_without_files,
+                publication=pub,
+                xml=xml_content,
             )
         except Exception as e:
             logging.error(f"Error in summarize_publication_without_files: {e}")
@@ -329,8 +336,8 @@ async def generate_company_recommendations(
     # Process each company
     for company in crud_company.get_all_companies(session=session):
         try:
-            match, match_percentage = get_recommendation(
-                publication=pub, company=company
+            match, match_percentage = await asyncio.to_thread(
+                get_recommendation, publication=pub, company=company
             )
 
             if match:

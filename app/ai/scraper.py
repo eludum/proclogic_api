@@ -6,9 +6,9 @@ from urllib.parse import urljoin, urlparse
 import html2text
 import httpx
 from bs4 import BeautifulSoup
-from openai import OpenAI
+from openai import AsyncOpenAI
 
-from app.ai.openai import get_openai_client
+from app.ai.openai import get_async_openai_client
 from app.config.settings import settings
 from app.util.publication_utils.cpv_codes import nl_sectors
 
@@ -224,14 +224,14 @@ async def sanitize_url(url: str) -> str:
 
 
 async def scrape_company_website(
-    website_url: str, client: OpenAI = None
+    website_url: str, client: AsyncOpenAI = None
 ) -> Optional[str]:
     """
     Scrape a company website using OpenAI to extract relevant company information.
     Returns a JSON string with the extracted information.
     """
     if client is None:
-        client = get_openai_client()
+        client = get_async_openai_client()
 
     try:
         # Sanitize the URL
@@ -283,6 +283,7 @@ async def scrape_company_website(
 
             # Scrape additional pages concurrently
             additional_content = ""
+            results = []
             if additional_pages:
                 tasks = [
                     scrape_single_page(http_client, page) for page in additional_pages
@@ -308,7 +309,7 @@ async def scrape_company_website(
                 )
 
             # Use OpenAI to analyze the website content with multilingual support
-            completion = client.chat.completions.create(
+            completion = await client.chat.completions.create(
                 model=settings.openai_model,
                 response_format={"type": "json_object"},
                 messages=[

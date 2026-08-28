@@ -1,8 +1,7 @@
-import asyncio
 import logging
 from typing import Optional, Tuple, List, Dict
 
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 from app.config.settings import settings
 from app.models.company_models import Company
@@ -54,7 +53,7 @@ async def process_ai_message(
     user_message: str,
     company: Company,
     publication: Publication,
-    client: OpenAI,
+    client: AsyncOpenAI,
 ) -> Tuple[str, Optional[str]]:
     """Process a message with OpenAI Chat Completions API and return response."""
     # Build conversation history
@@ -64,7 +63,7 @@ async def process_ai_message(
     messages.append({"role": "user", "content": user_message})
 
     # Call Chat Completions API
-    response = client.chat.completions.create(
+    response = await client.chat.completions.create(
         model=settings.openai_model,
         messages=messages,
     )
@@ -80,7 +79,7 @@ async def stream_ai_response(
     user_message: str,
     company: Company,
     publication: Publication,
-    client: OpenAI,
+    client: AsyncOpenAI,
 ):
     """Stream a response from OpenAI using Chat Completions API streaming."""
     logging.info(f"Stream AI: Starting with message: '{user_message[:30]}...'")
@@ -92,21 +91,19 @@ async def stream_ai_response(
         # Add the new user message
         messages.append({"role": "user", "content": user_message})
 
-        # Create streaming response - use async loop to prevent blocking
-        stream = client.chat.completions.create(
+        # Stream from the async client so the event loop stays free
+        stream = await client.chat.completions.create(
             model=settings.openai_model,
             messages=messages,
             stream=True,
         )
 
         # Stream the response
-        for chunk in stream:
+        async for chunk in stream:
             if chunk.choices[0].delta.content is not None:
                 content = chunk.choices[0].delta.content
                 # Yield each chunk as it comes
                 yield content, []
-                # Allow other tasks to run
-                await asyncio.sleep(0)
 
         logging.info(f"Stream AI: Completed streaming response")
 
