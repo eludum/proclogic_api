@@ -13,7 +13,6 @@ class Settings(BaseSettings):
 
     openai_api_key: str
     openai_model: str = "gpt-5-mini"
-    deepseek_api_key: Optional[str] = None
 
     pubproc_client_id: str
     pubproc_client_secret: str
