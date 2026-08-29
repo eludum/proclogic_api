@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict
 
 
@@ -36,5 +36,10 @@ class RelatedContentResponse(BaseModel):
     # "ready" | "running" | "none" -- the state of a deep search for this tender,
     # so the client knows whether to offer the button, poll, or do nothing.
     deep_status: str = "none"
+
+    # Live progress of a running deep search, straight from the agent:
+    # {step, total, label, awards_seen}. Real phases completed, not elapsed time,
+    # so the client can render a bar that means something. None when idle.
+    deep_progress: Optional[Dict[str, Any]] = None
 
     model_config = ConfigDict(from_attributes=True)

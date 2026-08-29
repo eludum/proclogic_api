@@ -15,6 +15,7 @@ from app.crud.publication_mapper import (
 )
 from app.ai.retrieval_agent import (
     cached_deep_results,
+    deep_progress,
     deep_status,
     deterministic_results,
     find_similar_awards,
@@ -459,6 +460,7 @@ async def get_related_content(
         total_contracts=len(related_contracts),
         source=source,
         deep_status=deep_status(publication_workspace_id, contracts_limit),
+        deep_progress=deep_progress(publication_workspace_id, contracts_limit),
     )
 
 

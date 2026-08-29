@@ -91,6 +91,25 @@ Antwoord uitsluitend met JSON, zonder omliggende tekst:
 - Liever vijf goede resultaten dan twintig zwakke."""
 
 
+# What to show while a given tool runs. Anything unlisted falls back to a
+# generic line rather than leaking a function name into the UI.
+_TOOL_LABELS = {
+    "search_awards": "Gunningen doorzoeken",
+    "search_publications": "Aanbestedingen doorzoeken",
+    "find_similar_awards": "Vergelijkbare gunningen opzoeken",
+    "find_similar_publications": "Vergelijkbare aanbestedingen opzoeken",
+    "get_award": "Een gunning opvragen",
+    "get_publication": "Een aanbesteding opvragen",
+    "awards_by_sector": "Gunningen per sector bekijken",
+    "awards_by_region": "Gunningen per regio bekijken",
+    "awards_by_buyer": "Opdrachten van deze aanbestedende dienst bekijken",
+    "awards_by_winner": "Eerdere winnaars bekijken",
+    "search_organisations": "Organisaties opzoeken",
+    "lookup_cpv": "CPV-codes opzoeken",
+    "lookup_nuts": "Regiocodes opzoeken",
+}
+
+
 def _cache_key(workspace_id: str, limit: int) -> str:
     return f"similar_awards:{workspace_id}:{limit}"
 
@@ -126,6 +145,70 @@ def _cache_set(workspace_id: str, limit: int, value: List[Dict[str, Any]]) -> No
 # button that starts one. The flag below is what lets the client poll for
 # progress instead of holding a request open for a minute and a half.
 # ---------------------------------------------------------------------------
+
+class DeepProgress:
+    """Real progress for the deep search, published to Redis as it happens.
+
+    Not a timer. The steps below are the actual phases of the run -- loading the
+    candidate pool, each tool-calling round the agent takes, and writing up the
+    answer -- so the bar moves when work completes rather than when time passes.
+    Rounds are not equal in length, so the bar is not linear in seconds; it is
+    honest about progress, which is the thing a progress bar is for.
+
+    ``awards_seen`` is the count of distinct awards the agent has actually pulled
+    out of the database so far. It is the most informative number available and
+    it only ever grows, so it reads as progress even mid-round.
+
+    Every write is best-effort: this is telemetry for a spinner, and it must
+    never be the reason a search fails.
+    """
+
+    def __init__(self, workspace_id: str, limit: int):
+        self.workspace_id = workspace_id
+        self.limit = limit
+        # prepare + one per round + finalise
+        self.total = settings.retrieval_agent_max_rounds + 2
+        self.step = 0
+
+    def _key(self) -> str:
+        return f"similar_awards_progress:{self.workspace_id}:{self.limit}"
+
+    def publish(self, label: str, awards_seen: int = 0, advance: bool = True) -> None:
+        if advance:
+            self.step = min(self.step + 1, self.total)
+        try:
+            get_redis_client().set(
+                self._key(),
+                json.dumps(
+                    {
+                        "step": self.step,
+                        "total": self.total,
+                        "label": label,
+                        "awards_seen": awards_seen,
+                    }
+                ),
+                ex=int(settings.retrieval_agent_deep_timeout_seconds) + 60,
+            )
+        except Exception as exc:
+            logger.debug("progress publish failed for %s: %s", self.workspace_id, exc)
+
+    def clear(self) -> None:
+        try:
+            get_redis_client().delete(self._key())
+        except Exception as exc:
+            logger.debug("progress clear failed for %s: %s", self.workspace_id, exc)
+
+
+def deep_progress(workspace_id: str, limit: int) -> Optional[Dict[str, Any]]:
+    """The live progress of a running deep search, or None."""
+    try:
+        raw = get_redis_client().get(f"similar_awards_progress:{workspace_id}:{limit}")
+        if raw:
+            return json.loads(raw)
+    except Exception as exc:
+        logger.debug("progress read failed for %s: %s", workspace_id, exc)
+    return None
+
 
 STATUS_READY = "ready"
 STATUS_RUNNING = "running"
@@ -198,9 +281,10 @@ async def run_deep_search(
     page on the deterministic list.
     """
     context = ctx or ANONYMOUS
+    progress = DeepProgress(workspace_id, limit)
     try:
         results = await asyncio.wait_for(
-            _find_similar_awards_uncached(workspace_id, limit, context),
+            _find_similar_awards_uncached(workspace_id, limit, context, progress),
             timeout=settings.retrieval_agent_deep_timeout_seconds,
         )
         if results:
@@ -224,6 +308,7 @@ async def run_deep_search(
             exc_info=exc,
         )
     finally:
+        progress.clear()
         _clear_running(workspace_id, limit)
 
 
@@ -445,6 +530,7 @@ async def _run_agent(
     seen_ids: Set[str],
     limit: int,
     ctx: ToolContext,
+    progress: Optional["DeepProgress"] = None,
 ) -> List[Dict[str, Any]]:
     """The tool-calling loop. Returns the model's raw ranked list."""
     load_tools()
@@ -472,6 +558,12 @@ async def _run_agent(
     ]
 
     for round_index in range(settings.retrieval_agent_max_rounds):
+        if progress:
+            progress.publish(
+                f"Zoekopdracht {round_index + 1} van "
+                f"{settings.retrieval_agent_max_rounds} voorbereiden...",
+                awards_seen=len(seen_ids),
+            )
         response = await client.chat.completions.create(
             model=settings.openai_model,
             messages=messages,
@@ -501,6 +593,14 @@ async def _run_agent(
         )
 
         if not tool_calls:
+            # The agent is answering rather than searching again: the remaining
+            # rounds will not happen, so jump the bar to the write-up phase
+            # instead of leaving it stuck where it was.
+            if progress:
+                progress.step = progress.total - 1
+                progress.publish(
+                    "Resultaten onderbouwen...", awards_seen=len(seen_ids), advance=False
+                )
             return _parse_results(message.content or "")
 
         for call in tool_calls:
@@ -508,6 +608,13 @@ async def _run_agent(
                 arguments = json.loads(call.function.arguments or "{}")
             except json.JSONDecodeError:
                 arguments = {}
+
+            if progress:
+                progress.publish(
+                    f"{_TOOL_LABELS.get(call.function.name, 'De databank doorzoeken')}...",
+                    awards_seen=len(seen_ids),
+                    advance=False,
+                )
 
             payload = await call_tool_as_text(call.function.name, arguments, ctx)
 
@@ -533,6 +640,8 @@ async def _run_agent(
 
     # Rounds exhausted. Force an answer with the evidence already gathered
     # instead of returning nothing.
+    if progress:
+        progress.publish("Resultaten onderbouwen...", awards_seen=len(seen_ids))
     messages.append(
         {
             "role": "user",
@@ -620,9 +729,12 @@ def _prepare(workspace_id: str, pool_size: int):
 
 
 async def _find_similar_awards_uncached(
-    workspace_id: str, limit: int, ctx: ToolContext
+    workspace_id: str, limit: int, ctx: ToolContext,
+    progress: Optional["DeepProgress"] = None,
 ) -> List[Dict[str, Any]]:
     pool_size = settings.retrieval_agent_max_candidates
+    if progress:
+        progress.publish("Aanbesteding en eerste kandidaten laden...")
     source, candidates, seen_ids = await asyncio.to_thread(
         _prepare, workspace_id, pool_size
     )
@@ -631,7 +743,7 @@ async def _find_similar_awards_uncached(
         logger.info("find_similar_awards: no publication %s", workspace_id)
         return []
 
-    ranked = await _run_agent(source, candidates, seen_ids, limit, ctx)
+    ranked = await _run_agent(source, candidates, seen_ids, limit, ctx, progress)
     if not ranked:
         return []
 
@@ -658,6 +770,12 @@ async def _find_similar_awards_uncached(
     accepted.sort(key=lambda e: float(e.get("relevance") or 0), reverse=True)
     accepted = accepted[:limit]
 
+    if progress:
+        progress.publish(
+            f"{len(accepted)} gunning(en) ophalen...",
+            awards_seen=len(seen_ids),
+            advance=False,
+        )
     awards = await asyncio.to_thread(
         _load_awards, [e["workspace_id"] for e in accepted]
     )
