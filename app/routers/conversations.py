@@ -76,8 +76,13 @@ def get_user_conversations(
                 last_message = sorted_messages[0] if sorted_messages else None
                 message_count = len(conv.messages)
 
-            # Get publication title
-            publication_title = get_publication_title(conv.publication)
+            # A general conversation has no tender behind it; label it as such
+            # rather than dereferencing a null publication.
+            publication_title = (
+                get_publication_title(conv.publication)
+                if conv.publication is not None
+                else "Algemeen gesprek"
+            )
 
             result.append(
                 ConversationSummary(
@@ -148,12 +153,16 @@ async def chat_with_publication(
         if not company:
             raise HTTPException(status_code=404, detail="Company not found")
 
-        # Verify publication exists
-        publication = crud_publication.get_publication_by_workspace_id(
-            publication_workspace_id=request.publication_workspace_id, session=session
-        )
-        if not publication:
-            raise HTTPException(status_code=404, detail="Publication not found")
+        # A conversation may be about one tender or about the market at large;
+        # only verify the tender when one was named.
+        publication = None
+        if request.publication_workspace_id:
+            publication = crud_publication.get_publication_by_workspace_id(
+                publication_workspace_id=request.publication_workspace_id,
+                session=session,
+            )
+            if not publication:
+                raise HTTPException(status_code=404, detail="Publication not found")
 
         # Get or create conversation
         conversation = None
@@ -332,7 +341,9 @@ async def websocket_conversation(
         conversation_id = request_data.get("conversation_id")
         auth_token = request_data.get("token")
 
-        if not publication_workspace_id or not auth_token:
+        # publication_workspace_id is optional: a general conversation about the
+        # market has no tender behind it. The token is not optional.
+        if not auth_token:
             await websocket.send_json(
                 {"type": "error", "data": {"detail": "Missing required parameters"}}
             )
@@ -374,14 +385,17 @@ async def websocket_conversation(
                     )
                     return
 
-                publication = crud_publication.get_publication_by_workspace_id(
-                    publication_workspace_id=publication_workspace_id, session=session
-                )
-                if not publication:
-                    await websocket.send_json(
-                        {"type": "error", "data": {"detail": "Publication not found"}}
+                publication = None
+                if publication_workspace_id:
+                    publication = crud_publication.get_publication_by_workspace_id(
+                        publication_workspace_id=publication_workspace_id,
+                        session=session,
                     )
-                    return
+                    if not publication:
+                        await websocket.send_json(
+                            {"type": "error", "data": {"detail": "Publication not found"}}
+                        )
+                        return
 
                 # Get or create conversation
                 conversation = None

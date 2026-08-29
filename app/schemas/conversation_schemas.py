@@ -52,7 +52,9 @@ class ConversationSummary(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    publication_workspace_id: str
+    # Optional: omit it for a conversation about the market rather than about
+    # one tender. See build_general_system_prompt.
+    publication_workspace_id: Optional[str] = None
     message: str
     conversation_id: Optional[int] = None
 

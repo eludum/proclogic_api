@@ -11,8 +11,12 @@ class Conversation(Base):
     __tablename__ = "conversations"
 
     id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True)
-    publication_workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("publications.publication_workspace_id")
+    # Nullable: a conversation may be about one tender, or about nothing in
+    # particular. Procy can query the whole database, so "what did Defensie
+    # award last year" is a perfectly good question with no publication behind
+    # it, and the awards pages start exactly that kind of chat.
+    publication_workspace_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("publications.publication_workspace_id"), nullable=True
     )
     company_vat_number: Mapped[str] = mapped_column(ForeignKey("companies.vat_number"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())

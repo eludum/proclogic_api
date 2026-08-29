@@ -30,7 +30,10 @@ from app.schemas.publication_related_schemas import (
 )
 from app.util.clerk import AuthUser, get_auth_user
 from app.util.kanban_integration import remove_unsaved_publication_from_kanban
-from app.util.pubproc import get_publication_workspace_documents
+from app.util.pubproc import (
+    get_publication_workspace_documents,
+    list_publication_workspace_documents,
+)
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer
@@ -577,3 +580,46 @@ async def start_deep_related_search(
         status = "running"
 
     return {"status": status}
+
+
+@publications_router.get(
+    "/publications/publication/{publication_workspace_id}/documents",
+)
+async def list_publication_documents(
+    publication_workspace_id: str = Path(
+        ..., description="Unique ID of the publication workspace"
+    ),
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """List the documents attached to a publication.
+
+    Awards are publications, so this is the same endpoint for both -- an awarded
+    tender's annexes are reached by the same id and downloaded through the same
+    .../document/{filename} URL. There was no way to enumerate them before, only
+    to fetch one by name, which meant the awards pages had no way to show what
+    was there.
+
+    Metadata only: no document is downloaded to answer this.
+    """
+    if not auth_user.email:
+        raise HTTPException(status_code=400, detail="User email not available")
+
+    with get_session() as session:
+        company = crud_company.get_company_by_email(
+            email=auth_user.email, session=session
+        )
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        publication = crud_publication.get_publication_by_workspace_id(
+            publication_workspace_id=publication_workspace_id, session=session
+        )
+        if not publication:
+            raise HTTPException(status_code=404, detail="Publication not found")
+
+    async with httpx.AsyncClient() as client:
+        documents = await list_publication_workspace_documents(
+            client=client, publication_workspace_id=publication_workspace_id
+        )
+
+    return {"documents": documents, "total": len(documents)}

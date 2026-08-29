@@ -619,6 +619,61 @@ async def download_document_from_url(
 
 
 @redis_cache("pubproc:documents")
+async def list_publication_workspace_documents(
+    client: httpx.AsyncClient, publication_workspace_id: str
+) -> list:
+    """The documents attached to a publication workspace, metadata only.
+
+    Separate from get_publication_workspace_documents, which resolves a download
+    URL and pulls the bytes for every version so it can hand back a filename ->
+    BytesIO map. That is the right shape for "give me the files" and entirely
+    the wrong one for "what files are there": listing a tender with a dozen
+    annexes would download every one of them to render a list of names.
+
+    Returns a list of {filename, created_at}, latest version per document.
+    BOSA does not report a file size on this endpoint, so none is invented.
+    """
+    token = get_token()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "BelGov-Trace-Id": generate_uuid(),
+    }
+
+    try:
+        r = await client.get(
+            settings.pubproc_server
+            + settings.path_dos_api
+            + f"/publication-workspaces/{publication_workspace_id}/documents",
+            headers=headers,
+            timeout=20.0,
+        )
+        if r.status_code != 200:
+            logging.error(
+                f"Failed to list documents for {publication_workspace_id}: {r.status_code}"
+            )
+            return []
+
+        out = []
+        for doc in r.json():
+            versions = doc.get("versions", [])
+            if not versions:
+                continue
+            latest = max(versions, key=lambda v: v.get("createdAt", ""))
+            info = latest.get("document", {}) or {}
+            filename = info.get("originalFileName")
+            if not filename:
+                continue
+            out.append(
+                {"filename": filename, "created_at": latest.get("createdAt")}
+            )
+        return out
+    except Exception as exc:
+        logging.error(
+            f"Error listing documents for {publication_workspace_id}: {exc}"
+        )
+        return []
+
+
 async def get_publication_workspace_documents(
     client: httpx.AsyncClient, publication_workspace_id: str
 ) -> dict:

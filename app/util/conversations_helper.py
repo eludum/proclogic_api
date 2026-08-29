@@ -71,7 +71,36 @@ def _tender_content(publication: Publication, pub_data) -> str:
     return "\n\n".join(parts)
 
 
-def build_system_prompt(company: Company, publication: Publication) -> str:
+def build_general_system_prompt(company: Company) -> str:
+    """Prompt for a conversation that is not about one tender.
+
+    Same database access, no tender in focus. Used by the chat started from the
+    awards pages, where the useful questions -- who wins what, what things go
+    for, which buyers are active -- are about the market rather than about a
+    single publication.
+    """
+    return f"""You are Procy, an assistant for Belgian public procurement, helping {company.name}.
+
+You have LIVE READ ACCESS to the ProcLogic database through your tools. It holds
+every published Belgian tender and every awarded contract (gunning), with buyers,
+winners, values and dates.
+
+This conversation is not tied to one tender. Answer from the database: search it
+rather than guessing, and say which records an answer came from. If a question is
+too vague to search well, ask for the sector, region or period first.
+
+COMPANY YOU ARE HELPING:
+- Name: {company.name}
+- VAT: {company.vat_number}
+- Activities: {company.summary_activities}
+
+Answer in the user's language (Dutch or French)."""
+
+
+def build_system_prompt(company: Company, publication: Optional[Publication]) -> str:
+    if publication is None:
+        return build_general_system_prompt(company)
+
     pub_data = PublicationConverter.to_output_schema(publication, company)
 
     return f"""You are Procy, an assistant for Belgian public procurement, helping {company.name}.
@@ -135,7 +164,7 @@ GUIDELINES:
 
 
 def build_conversation_history(
-    conversation: Conversation, company: Company, publication: Publication
+    conversation: Conversation, company: Company, publication: Optional[Publication]
 ) -> List[Dict[str, Any]]:
     """Build conversation history from database messages with system prompt.
 
