@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -329,6 +330,65 @@ Index("idx_match_company", CompanyPublicationMatch.company_vat_number)
 Index("idx_match_publication", CompanyPublicationMatch.publication_workspace_id)
 Index("idx_match_percentage", CompanyPublicationMatch.match_percentage)
 Index("idx_match_recommended", CompanyPublicationMatch.is_recommended)
+
+
+# ---------------------------------------------------------------------------
+# Indexes that used to live only in migrations.
+#
+# alembic_runner provisions an empty database with Base.metadata.create_all()
+# and then stamps it at head, so anything declared only inside a migration was
+# never created there -- and, being stamped, never would be. A fresh
+# environment came up with none of these and silently ran every search as a
+# sequential scan.
+#
+# Declaring them here fixes that path and costs the upgrade path nothing:
+# create_all is only ever called against an empty database, the names match the
+# migrations exactly, and create_all skips what already exists.
+# ---------------------------------------------------------------------------
+
+# b3c4d5e6f7g8
+Index(
+    "idx_publications_cpv_pubdate",
+    Publication.cpv_main_code_code,
+    Publication.publication_date,
+)
+Index("idx_publications_publication_date", Publication.publication_date)
+Index("idx_publications_dossier_ref", Publication.dossier_reference_number)
+Index("idx_publications_organisation_id", Publication.organisation_id)
+Index(
+    "idx_match_company_recommended_pub",
+    CompanyPublicationMatch.company_vat_number,
+    CompanyPublicationMatch.is_recommended,
+    CompanyPublicationMatch.publication_workspace_id,
+)
+Index(
+    "idx_match_company_saved_pub",
+    CompanyPublicationMatch.company_vat_number,
+    CompanyPublicationMatch.is_saved,
+    CompanyPublicationMatch.publication_workspace_id,
+)
+
+# c4d5e6f7a8b9. text() rather than func.to_tsvector(...): SQLAlchemy renders the
+# text-search config as a bind parameter, and Postgres will not match an
+# expression index built with a literal config against a query carrying a
+# parameter. The string must stay character-identical to SEARCHABLE_TSVECTOR in
+# app/crud/fts.py and to the DDL in the migration.
+Index(
+    "idx_publications_searchable_content_fts",
+    text("to_tsvector('dutch', coalesce(searchable_content, ''))"),
+    postgresql_using="gin",
+    _table=Publication.__table__,
+)
+Index(
+    "idx_publications_searchable_content_trgm",
+    text("searchable_content gin_trgm_ops"),
+    postgresql_using="gin",
+    _table=Publication.__table__,
+)
+
+# d5e6f7a8b9c0
+Index("idx_descriptions_dossier_kind", Description.dossier_reference_number, Description.kind)
+Index("idx_descriptions_lot_kind", Description.lot_id, Description.kind)
 
 from app.models.conversation_models import Conversation
 from app.models.kanban_models import PublicationStatus

@@ -42,6 +42,13 @@ WORKDIR /code
 COPY ./alembic.ini /code/alembic.ini
 COPY ./alembic /code/alembic
 COPY ./app /code/app
+# The one-off maintenance jobs (backfill_searchable_content, backfill_description_kind)
+# have to be runnable against production, and the only place with the right
+# database credentials and network path is a pod. Without these in the image
+# there is no way to run them short of a laptop with a tunnel to the cluster.
+# backfill_contracts is the exception -- it drives Playwright, which this image
+# deliberately does not ship (see above) -- so it stays a checkout-only script.
+COPY ./scripts /code/scripts
 
 EXPOSE 80
 

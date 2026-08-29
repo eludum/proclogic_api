@@ -71,7 +71,19 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            # Two migrations (c4d5e6f7a8b9, d5e6f7a8b9c0) build their indexes in
+            # an autocommit block, and entering one unconditionally COMMITs
+            # whatever came before it. Without transaction_per_migration that
+            # commit spans revisions: a failure in one migration rolls back the
+            # *previous* migration's version bump while its DDL is already
+            # committed, leaving alembic_version pointing at work that is
+            # already done. One transaction per revision keeps each version bump
+            # committed together with the migration it belongs to.
+            transaction_per_migration=True,
+        )
 
         with context.begin_transaction():
             context.run_migrations()

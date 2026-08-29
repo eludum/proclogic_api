@@ -72,14 +72,13 @@ def upgrade() -> None:
 
     # A non-volatile default makes this metadata-only on PostgreSQL 11+: no
     # table rewrite, so the exclusive lock is held only momentarily.
-    op.add_column(
-        "descriptions",
-        sa.Column(
-            "kind",
-            sa.String(length=16),
-            nullable=False,
-            server_default="unknown",
-        ),
+    #
+    # IF NOT EXISTS for the same reason as c4d5e6f7a8b9: the autocommit block
+    # below commits this ALTER before the revision is recorded, so an
+    # interrupted index build has to be safe to retry.
+    op.execute(
+        "ALTER TABLE descriptions ADD COLUMN IF NOT EXISTS kind "
+        "VARCHAR(16) NOT NULL DEFAULT 'unknown'"
     )
 
     with op.get_context().autocommit_block():
