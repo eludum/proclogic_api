@@ -1,7 +1,7 @@
 import logging
 from typing import List, Optional, Tuple
 
-from sqlalchemy import and_, extract, func, or_
+from sqlalchemy import and_, extract, func
 from sqlalchemy.orm import Session, joinedload
 
 from app.crud.fts import (
@@ -17,50 +17,31 @@ from app.models.publication_models import Dossier, Publication
 def build_search_filter(search_term: str):
     """Build search filter for contract publications.
 
-    Matches the flattened Dutch full-text blob (title, description, lots, buyer,
-    winner) as well as the organisation names directly. The organisation arms
-    are kept alongside the full-text one because searchable_content is populated
-    at ingest and may still be NULL on rows that predate the backfill -- without
-    them, an un-backfilled award would be invisible to search.
+    Matches the flattened Dutch full-text blob, which build_searchable_content()
+    already fills with the winner, the contracting authority and the service
+    provider -- name and business_id both -- alongside the title, descriptions
+    and lots.
+
+    This used to OR four correlated ``EXISTS ... lower(name) LIKE '%term%'``
+    subqueries over contract_organizations next to the full-text arm, because
+    searchable_content could still be NULL on rows predating its backfill. That
+    backfill has since completed (0 NULL rows, awards included) and ingest fills
+    the column, so those arms matched nothing the full-text arm did not.
+
+    They were not merely redundant, they were fatal. Postgres cannot answer a
+    disjunction from an index unless it can answer every branch from one, so
+    ORing unindexable correlated subqueries beside the indexed tsvector match
+    dragged the whole query onto a sequential scan of 107k publications with
+    four correlated lookups per row. Measured with the retrieval agent's own
+    seed term: the organisation arms alone 0.46s, the full-text arm alone 0.19s,
+    the two ORed together **30s -- the statement timeout**. Which is precisely
+    why the agent silently returned nothing and /related fell back to the
+    deterministic scorer.
     """
     if not search_term or not search_term.strip():
         return None
 
-    search_pattern = f"%{search_term.strip()}%"
-
-    conditions = [
-        # Search in winner name (through contract -> winning_publisher)
-        Publication.contract.has(
-            Contract.winning_publisher.has(
-                func.lower(ContractOrganization.name).like(func.lower(search_pattern))
-            )
-        ),
-        # Search in buyer name (through contract -> contracting_authority)
-        Publication.contract.has(
-            Contract.contracting_authority.has(
-                func.lower(ContractOrganization.name).like(func.lower(search_pattern))
-            )
-        ),
-        # Search in service provider name
-        Publication.contract.has(
-            Contract.service_provider.has(
-                func.lower(ContractOrganization.name).like(func.lower(search_pattern))
-            )
-        ),
-        Publication.contract.has(
-            Contract.winning_publisher.has(
-                func.lower(ContractOrganization.business_id).like(
-                    func.lower(search_pattern)
-                )
-            )
-        ),
-    ]
-
-    fts_condition = build_fts_condition(search_term)
-    if fts_condition is not None:
-        conditions.append(fts_condition)
-
-    return or_(*conditions)
+    return build_fts_condition(search_term)
 
 
 def build_time_filter(
