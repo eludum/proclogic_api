@@ -134,9 +134,19 @@ def _terms(term: str) -> List[str]:
     return out[:MAX_QUERY_TERMS]
 
 
+# An exclusion is a dash bound to the word it removes ("asfalt -beton"). A dash
+# with space on both sides is punctuation, and procurement titles are full of it
+# -- "Coeur de village - Amenagement de Straimont", "Levering en plaatsing - lot
+# 3". Treating those as an operator sent the query down the match-all branch,
+# where websearch_to_tsquery ANDs every word of a 160-character title and
+# matches nothing at all. That is what left the retrieval agent seeding its
+# candidate pool with zero rows.
+_EXCLUSION = re.compile(r"(?:^|\s)-(?=\w)")
+
+
 def _has_explicit_syntax(term: str) -> bool:
     """A quoted phrase or an explicit operator means the caller meant it."""
-    return '"' in term or " OR " in term or " -" in term
+    return '"' in term or " OR " in term or bool(_EXCLUSION.search(term))
 
 
 def _tsquery(term: str):
