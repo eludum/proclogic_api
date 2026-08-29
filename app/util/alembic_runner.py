@@ -96,6 +96,7 @@ def _create_from_models() -> None:
 
     # Imported for their side effect: a model class has to be imported before it
     # appears in Base.metadata, and create_all only creates what it can see.
+    import app.models.company_award_models  # noqa: F401
     import app.models.company_models  # noqa: F401
     import app.models.conversation_models  # noqa: F401
     import app.models.email_models  # noqa: F401

@@ -1,11 +1,20 @@
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi_pagination import Page, Params
 
+from app.ai.award_extraction import extract_award_from_pdf, validate_upload
+from app.ai.openai import get_async_openai_client
 from app.config.postgres import get_session
-from app.crud import award_analytics
+from app.crud import award_analytics, company_award as crud_company_award
+from app.crud import company as crud_company
+from app.crud import publication as crud_publication
 from app.crud.publication_contract import get_contracts_summary, get_paginated_contracts
+from app.schemas.company_award_schemas import (
+    AwardEntryIn,
+    AwardEntryOut,
+    ExtractedAward,
+)
 from app.schemas.publication_contract_schemas import AwardSummary, ContractItem
 from app.util.publication_utils.contract import (
     convert_publications_to_contract_items,
@@ -15,6 +24,49 @@ from app.util.publication_utils.contract import (
 from app.util.clerk import AuthUser, get_auth_user
 
 contracts_router = APIRouter()
+
+
+def _company_for(session, auth_user: AuthUser):
+    """The caller's company, or None.
+
+    This is the isolation boundary for everything below: the company is derived
+    from the authenticated email and never read from a path, query or body, so
+    there is no request a client can shape to reach another company's entries.
+    """
+    if not auth_user or not auth_user.email:
+        return None
+    return crud_company.get_company_by_email(email=auth_user.email, session=session)
+
+
+def _require_company(session, auth_user: AuthUser):
+    company = _company_for(session, auth_user)
+    if company is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Geen bedrijf gekoppeld aan dit account.",
+        )
+    return company
+
+
+def _entry_out(entry) -> AwardEntryOut:
+    return AwardEntryOut(
+        id=entry.id,
+        publication_workspace_id=entry.publication_workspace_id,
+        source=entry.source,
+        source_document_name=entry.source_document_name,
+        created_by_email=entry.created_by_email,
+        created_at=entry.created_at,
+        updated_at=entry.updated_at,
+        supplied_fields=sorted(entry.supplied().keys()),
+        title=entry.title,
+        award_date=entry.award_date,
+        winner=entry.winner,
+        buyer=entry.buyer,
+        value=entry.value,
+        currency=entry.currency,
+        reference_number=entry.reference_number,
+        notes=entry.notes,
+    )
 
 
 @contracts_router.get("/contracts", response_model=Page[ContractItem])
@@ -93,6 +145,17 @@ def get_contracts(
 
         # Convert to ContractItem schemas
         contracts = convert_publications_to_contract_items(publications)
+
+        # Lay this company's own values over the BOSA ones. Scoped to the
+        # caller's company, so another customer's corrections are not merely
+        # hidden in the UI -- they are never loaded.
+        company = _company_for(session, auth_user)
+        if company is not None:
+            entries = crud_company_award.get_entries_for_publications(
+                session, company.vat_number, [c.publication_id for c in contracts]
+            )
+            for item in contracts:
+                crud_company_award.merge_over(item, entries.get(item.publication_id))
 
         # Create paginated response
         params = Params(page=page, size=size)
@@ -273,3 +336,179 @@ def get_awards_timeseries(
                 session, granularity=granularity, **filters
             )
         }
+
+
+# ---------------------------------------------------------------------------
+# Company-supplied award data
+#
+# BOSA publishes a great many awards with the amount, the winner or the date
+# missing, and customers often hold the real figures. These endpoints let a
+# company record what it knows without ever touching the shared scraped row:
+# see app/models/company_award_models.py. Every one of them scopes to the
+# company resolved from the caller's email.
+# ---------------------------------------------------------------------------
+
+
+@contracts_router.get(
+    "/contracts/{publication_id}/entry",
+    response_model=Optional[AwardEntryOut],
+)
+def get_award_entry(
+    publication_id: str,
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """This company's own values for one award, or null if it has none."""
+    with get_session() as session:
+        company = _require_company(session, auth_user)
+        entry = crud_company_award.get_entry(session, company.vat_number, publication_id)
+        return _entry_out(entry) if entry else None
+
+
+@contracts_router.put(
+    "/contracts/{publication_id}/entry", response_model=AwardEntryOut
+)
+def put_award_entry(
+    publication_id: str,
+    payload: AwardEntryIn,
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """Record or update this company's values for an existing BOSA award.
+
+    Only the fields present in the body are touched, so filling in a missing
+    amount does not blank the rest. Sending a field as null clears it, which is
+    how one field is reverted to the BOSA value without dropping the whole entry.
+    """
+    with get_session() as session:
+        company = _require_company(session, auth_user)
+
+        publication = crud_publication.get_publication_by_workspace_id(
+            publication_workspace_id=publication_id, session=session
+        )
+        if publication is None:
+            raise HTTPException(status_code=404, detail="Gunning niet gevonden.")
+
+        entry = crud_company_award.upsert_entry(
+            session=session,
+            company_vat_number=company.vat_number,
+            created_by_email=auth_user.email,
+            publication_workspace_id=publication_id,
+            fields=payload.model_dump(
+                exclude={"source", "source_document_name"}, exclude_unset=True
+            ),
+            source=payload.source,
+            source_document_name=payload.source_document_name,
+        )
+        return _entry_out(entry)
+
+
+@contracts_router.delete("/contracts/{publication_id}/entry")
+def delete_award_entry(
+    publication_id: str,
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """Drop this company's values, restoring the plain BOSA view."""
+    with get_session() as session:
+        company = _require_company(session, auth_user)
+        removed = crud_company_award.delete_entry(
+            session, company.vat_number, publication_id
+        )
+        if not removed:
+            raise HTTPException(status_code=404, detail="Geen eigen gegevens gevonden.")
+        return {"deleted": True}
+
+
+@contracts_router.post("/contracts/extract-document", response_model=ExtractedAward)
+async def extract_award_document(
+    file: UploadFile = File(..., description="Award notice as PDF"),
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """Read an uploaded award notice and return what the model found.
+
+    Writes nothing. The client shows these values in the form for the user to
+    check and correct, and a separate save persists them -- a model reading a
+    scanned notice misreads amounts and dates often enough that storing its
+    output unseen would present guesses as facts.
+    """
+    with get_session() as session:
+        _require_company(session, auth_user)
+
+    content = await file.read()
+    rejection = validate_upload(file.filename or "", file.content_type, len(content))
+    if rejection:
+        raise HTTPException(status_code=400, detail=rejection)
+
+    client = get_async_openai_client()
+    return await extract_award_from_pdf(client, file.filename or "document.pdf", content)
+
+
+@contracts_router.get("/company-awards", response_model=List[AwardEntryOut])
+def list_company_awards(auth_user: AuthUser = Depends(get_auth_user)):
+    """Awards this company entered itself, which BOSA never published."""
+    with get_session() as session:
+        company = _require_company(session, auth_user)
+        return [
+            _entry_out(e)
+            for e in crud_company_award.list_company_awards(session, company.vat_number)
+        ]
+
+
+@contracts_router.post("/company-awards", response_model=AwardEntryOut)
+def create_company_award(
+    payload: AwardEntryIn,
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """Create an award of the company's own, with no BOSA row behind it."""
+    with get_session() as session:
+        company = _require_company(session, auth_user)
+
+        fields = payload.model_dump(exclude={"source", "source_document_name"})
+        if not any(v is not None for v in fields.values()):
+            raise HTTPException(
+                status_code=400, detail="Vul minstens één veld in."
+            )
+
+        entry = crud_company_award.upsert_entry(
+            session=session,
+            company_vat_number=company.vat_number,
+            created_by_email=auth_user.email,
+            publication_workspace_id=None,
+            fields=fields,
+            source=payload.source,
+            source_document_name=payload.source_document_name,
+        )
+        return _entry_out(entry)
+
+
+@contracts_router.patch(
+    "/company-awards/{entry_id}", response_model=AwardEntryOut
+)
+def update_company_award(
+    entry_id: int,
+    payload: AwardEntryIn,
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    with get_session() as session:
+        company = _require_company(session, auth_user)
+        entry = crud_company_award.update_by_id(
+            session,
+            company.vat_number,
+            entry_id,
+            payload.model_dump(
+                exclude={"source", "source_document_name"}, exclude_unset=True
+            ),
+        )
+        if entry is None:
+            raise HTTPException(status_code=404, detail="Gunning niet gevonden.")
+        return _entry_out(entry)
+
+
+@contracts_router.delete("/company-awards/{entry_id}")
+def delete_company_award(
+    entry_id: int,
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    with get_session() as session:
+        company = _require_company(session, auth_user)
+        if not crud_company_award.delete_by_id(session, company.vat_number, entry_id):
+            raise HTTPException(status_code=404, detail="Gunning niet gevonden.")
+        return {"deleted": True}
