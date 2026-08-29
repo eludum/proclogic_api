@@ -38,6 +38,7 @@ from app.schemas.publication_schemas import (
     OrganisationSchema,
     PublicationSchema,
 )
+from app.crud.fts import build_fts_condition, build_fts_rank
 from app.util.publication_utils.searchable import refresh_searchable_content
 from sqlalchemy import and_, case, desc, func, literal_column, or_, select
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload, subqueryload
@@ -781,51 +782,17 @@ def get_paginated_publications_for_company(
             )
 
     # Apply search term filter
+    # Match against the flattened text blob rather than joining out to
+    # descriptions and organisation_names. build_searchable_content() already
+    # folds in every field the old correlated subqueries reached -- dossier and
+    # lot titles and descriptions, organisation names, extracted keywords -- so
+    # this is a superset of what they matched, and it is index-backed:
+    # lower(descriptions.text) LIKE '%term%' over ~388k rows could not use an
+    # index and cost ~8s a query.
     if search_term and search_term.strip():
-        search_pattern = f"%{search_term.strip()}%"
-
-        # Create subqueries for text search
-        description_subquery = (
-            session.query(Description.id)
-            .filter(func.lower(Description.text).like(func.lower(search_pattern)))
-            .subquery()
-        )
-
-        organisation_name_subquery = (
-            session.query(OrganisationName.id)
-            .filter(func.lower(OrganisationName.text).like(func.lower(search_pattern)))
-            .subquery()
-        )
-
-        # Apply search conditions
-        query = query.filter(
-            or_(
-                Publication.dossier.has(
-                    Dossier.descriptions.any(Description.id.in_(description_subquery))
-                ),
-                Publication.dossier.has(
-                    Dossier.titles.any(Description.id.in_(description_subquery))
-                ),
-                Publication.organisation.has(
-                    Organisation.organisation_names.any(
-                        OrganisationName.id.in_(organisation_name_subquery)
-                    )
-                ),
-                Publication.lots.any(
-                    Lot.descriptions.any(Description.id.in_(description_subquery))
-                ),
-                Publication.lots.any(
-                    Lot.titles.any(Description.id.in_(description_subquery))
-                ),
-                # Search in extracted keywords if available
-                and_(
-                    Publication.extracted_keywords.isnot(None),
-                    func.array_to_string(Publication.extracted_keywords, ",", "").ilike(
-                        search_pattern
-                    ),
-                ),
-            )
-        )
+        fts_condition = build_fts_condition(search_term)
+        if fts_condition is not None:
+            query = query.filter(fts_condition)
 
     # Apply region filter at database level
     if region_filter and len(region_filter) > 0:
@@ -866,6 +833,15 @@ def get_paginated_publications_for_company(
     # Get total count before pagination
     count_query = query.with_entities(func.count())
     total_count = count_query.scalar()
+
+    # Relevance leads whenever there is a search term; the requested sort then
+    # breaks ties. order_by() appends, so calling it here and letting the block
+    # below add its own keys yields "rank first, then the caller's choice".
+    # Without this, matching any term and ordering purely by date buries the
+    # best match behind whatever happens to be newest.
+    fts_rank = build_fts_rank(search_term)
+    if fts_rank is not None:
+        query = query.order_by(fts_rank.desc())
 
     # Apply sorting
     # Create a case expression for match percentage to handle NULL values
@@ -982,51 +958,17 @@ def get_paginated_publications_free(
     )
 
     # Apply search term if provided
+    # Match against the flattened text blob rather than joining out to
+    # descriptions and organisation_names. build_searchable_content() already
+    # folds in every field the old correlated subqueries reached -- dossier and
+    # lot titles and descriptions, organisation names, extracted keywords -- so
+    # this is a superset of what they matched, and it is index-backed:
+    # lower(descriptions.text) LIKE '%term%' over ~388k rows could not use an
+    # index and cost ~8s a query.
     if search_term and search_term.strip():
-        search_pattern = f"%{search_term.strip()}%"
-
-        # Create subqueries for text search
-        description_subquery = (
-            session.query(Description.id)
-            .filter(func.lower(Description.text).like(func.lower(search_pattern)))
-            .subquery()
-        )
-
-        organisation_name_subquery = (
-            session.query(OrganisationName.id)
-            .filter(func.lower(OrganisationName.text).like(func.lower(search_pattern)))
-            .subquery()
-        )
-
-        # Apply search conditions
-        query = query.filter(
-            or_(
-                Publication.dossier.has(
-                    Dossier.descriptions.any(Description.id.in_(description_subquery))
-                ),
-                Publication.dossier.has(
-                    Dossier.titles.any(Description.id.in_(description_subquery))
-                ),
-                Publication.organisation.has(
-                    Organisation.organisation_names.any(
-                        OrganisationName.id.in_(organisation_name_subquery)
-                    )
-                ),
-                Publication.lots.any(
-                    Lot.descriptions.any(Description.id.in_(description_subquery))
-                ),
-                Publication.lots.any(
-                    Lot.titles.any(Description.id.in_(description_subquery))
-                ),
-                # Search in extracted keywords if available
-                and_(
-                    Publication.extracted_keywords.isnot(None),
-                    func.array_to_string(Publication.extracted_keywords, ",", "").ilike(
-                        search_pattern
-                    ),
-                ),
-            )
-        )
+        fts_condition = build_fts_condition(search_term)
+        if fts_condition is not None:
+            query = query.filter(fts_condition)
 
     # Apply region filter at database level
     if region_filter and len(region_filter) > 0:
@@ -1050,6 +992,15 @@ def get_paginated_publications_free(
 
     # Get total count before pagination
     total_count = query.count()
+
+    # Relevance leads whenever there is a search term; the requested sort then
+    # breaks ties. order_by() appends, so calling it here and letting the block
+    # below add its own keys yields "rank first, then the caller's choice".
+    # Without this, matching any term and ordering purely by date buries the
+    # best match behind whatever happens to be newest.
+    fts_rank = build_fts_rank(search_term)
+    if fts_rank is not None:
+        query = query.order_by(fts_rank.desc())
 
     # Apply sorting
     if sort_by == "publication_date":

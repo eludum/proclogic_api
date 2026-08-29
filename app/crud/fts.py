@@ -12,6 +12,7 @@ string below must stay character-identical to the index definition in migration
 
 import logging
 import re
+import time
 from typing import List, Optional
 
 from sqlalchemy import and_, func, literal_column, or_, text
@@ -48,6 +49,14 @@ MAX_QUERY_TERMS = 8
 TRGM_INDEX_NAME = "idx_publications_searchable_content_trgm"
 
 _substring_arm_indexed: Optional[bool] = None
+_substring_arm_checked_at: float = 0.0
+
+# How long to wait before re-probing after a negative answer. A positive answer
+# is cached for the life of the process -- the index is not going to disappear --
+# but a negative one should not be permanent: installing pg_trgm and building the
+# index is exactly the fix for a missing index, and it should take effect without
+# needing a rollout.
+_ABSENT_RECHECK_SECONDS = 300.0
 
 
 def substring_arm_is_indexed() -> bool:
@@ -65,13 +74,19 @@ def substring_arm_is_indexed() -> bool:
     reference numbers that tokenise away -- which is a real loss of recall, but
     a smaller one than every multi-word search failing.
 
-    Cached after the first successful answer; a failed check is not cached, and
-    is treated as "not indexed" so a probe that cannot run never produces the
-    slow query.
+    A positive answer is cached for the life of the process. A negative one is
+    re-probed every _ABSENT_RECHECK_SECONDS, so building the index takes effect
+    without a rollout. A failed check is not cached at all, and counts as "not
+    indexed" so a probe that cannot run never produces the slow query.
     """
-    global _substring_arm_indexed
-    if _substring_arm_indexed is not None:
-        return _substring_arm_indexed
+    global _substring_arm_indexed, _substring_arm_checked_at
+    if _substring_arm_indexed:
+        return True
+    if (
+        _substring_arm_indexed is not None
+        and time.monotonic() - _substring_arm_checked_at < _ABSENT_RECHECK_SECONDS
+    ):
+        return False
 
     from app.config.postgres import engine
 
@@ -87,13 +102,19 @@ def substring_arm_is_indexed() -> bool:
         logger.warning("Could not check for %s: %s", TRGM_INDEX_NAME, exc)
         return False
 
-    if not found:
+    if not found and _substring_arm_indexed is None:
         logger.warning(
             "%s is missing, so substring matching is disabled for full-text "
-            "search; queries fall back to the tsvector arm only.",
+            "search; queries fall back to the tsvector arm only. Re-checking "
+            "every %.0fs.",
             TRGM_INDEX_NAME,
+            _ABSENT_RECHECK_SECONDS,
         )
+    if found and _substring_arm_indexed is False:
+        logger.info("%s is now present; substring matching re-enabled.", TRGM_INDEX_NAME)
+
     _substring_arm_indexed = found
+    _substring_arm_checked_at = time.monotonic()
     return found
 
 
