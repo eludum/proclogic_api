@@ -31,6 +31,9 @@ logger = logging.getLogger(__name__)
 # (running the old no-op initial revision did exactly that).
 SENTINEL_TABLE = "publications"
 
+# Declared on the model, but it needs the pg_trgm operator class to exist.
+TRGM_INDEX_NAME = "idx_publications_searchable_content_trgm"
+
 # Serialises migrations across replicas. The API runs 3-7 pods and every one of
 # them calls run_migration() on start, so without this they race -- and the
 # indexes are now built with CREATE INDEX CONCURRENTLY, where losing that race
@@ -101,14 +104,36 @@ def _create_from_models() -> None:
     import app.models.publication_contract_models  # noqa: F401
     import app.models.publication_models  # noqa: F401
 
-    # Before create_all: idx_publications_searchable_content_trgm is declared on
-    # the model with gin_trgm_ops, and that operator class does not exist until
-    # the extension does. Migration c4d5e6f7a8b9 creates it on the upgrade path;
-    # this is the same statement for the path that never runs that migration.
-    with engine.begin() as connection:
-        connection.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+    _prepare_pg_trgm(Base)
 
     Base.metadata.create_all(engine)
+
+
+def _prepare_pg_trgm(Base) -> None:
+    """Create pg_trgm for the fresh-database path, or drop the index needing it.
+
+    Mirrors the guard in migration c4d5e6f7a8b9: pg_trgm lives in
+    postgresql-contrib and is not installed everywhere. gin_trgm_ops does not
+    exist without it, so leaving the index declared would make create_all fail
+    outright rather than merely produce a slower substring search.
+    """
+    from app.config.postgres import engine
+
+    with engine.begin() as connection:
+        available = connection.execute(
+            text("SELECT 1 FROM pg_available_extensions WHERE name = 'pg_trgm'")
+        ).scalar()
+        if available:
+            connection.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+            return
+
+    logger.warning(
+        "pg_trgm is not available on this server; skipping %s. The substring arm "
+        "of search still returns the same rows, but from a sequential scan.",
+        TRGM_INDEX_NAME,
+    )
+    table = Base.metadata.tables["publications"]
+    table.indexes = {ix for ix in table.indexes if ix.name != TRGM_INDEX_NAME}
 
 
 def _migrate():

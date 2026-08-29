@@ -39,20 +39,47 @@ depends_on: Union[str, Sequence[str], None] = None
 
 # The FTS expression must stay character-identical to SEARCHABLE_TSVECTOR in
 # app/crud/fts.py, or Postgres will not use this index for those queries.
-INDEXES = (
-    (
-        "idx_publications_searchable_content_fts",
-        "CREATE INDEX CONCURRENTLY IF NOT EXISTS "
-        "idx_publications_searchable_content_fts ON publications "
-        "USING GIN (to_tsvector('dutch', coalesce(searchable_content, '')))",
-    ),
-    (
-        "idx_publications_searchable_content_trgm",
-        "CREATE INDEX CONCURRENTLY IF NOT EXISTS "
-        "idx_publications_searchable_content_trgm ON publications "
-        "USING GIN (searchable_content gin_trgm_ops)",
-    ),
+FTS_INDEX = (
+    "idx_publications_searchable_content_fts",
+    "CREATE INDEX CONCURRENTLY IF NOT EXISTS "
+    "idx_publications_searchable_content_fts ON publications "
+    "USING GIN (to_tsvector('dutch', coalesce(searchable_content, '')))",
 )
+
+# Needs pg_trgm; see _ensure_pg_trgm below for why that is not a given.
+TRGM_INDEX = (
+    "idx_publications_searchable_content_trgm",
+    "CREATE INDEX CONCURRENTLY IF NOT EXISTS "
+    "idx_publications_searchable_content_trgm ON publications "
+    "USING GIN (searchable_content gin_trgm_ops)",
+)
+
+INDEXES = (FTS_INDEX, TRGM_INDEX)
+
+
+def _ensure_pg_trgm(connection) -> bool:
+    """Create pg_trgm when the server ships it; report whether it is usable.
+
+    pg_trgm lives in postgresql-contrib, which is not installed everywhere --
+    the production server has plpgsql available and nothing else. An unguarded
+    CREATE EXTENSION there aborts this migration and therefore every migration
+    behind it, including the one that adds descriptions.kind. Since app.main
+    logs a migration failure and starts anyway, the result is pods that report
+    healthy and then fail every query touching descriptions.
+
+    The extension is only needed for the gin_trgm_ops index, which accelerates
+    the substring arm of the search filter. Without it that arm returns exactly
+    the same rows from a sequential scan, so a server without contrib is worth
+    a slower search, not a failed deploy.
+    """
+    available = connection.execute(
+        sa.text("SELECT 1 FROM pg_available_extensions WHERE name = 'pg_trgm'")
+    ).scalar()
+    if not available:
+        return False
+
+    connection.execute(sa.text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+    return True
 
 
 def _drop_if_invalid(connection, name: str) -> None:
@@ -95,14 +122,14 @@ def upgrade() -> None:
         "ALTER TABLE publications ADD COLUMN IF NOT EXISTS searchable_content TEXT"
     )
 
-    # pg_trgm ships with Postgres but is not enabled by default. Needed for the
-    # substring-match arm of the search filter.
-    op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+    indexes = [FTS_INDEX]
+    if _ensure_pg_trgm(op.get_bind()):
+        indexes.append(TRGM_INDEX)
 
     # CREATE INDEX CONCURRENTLY cannot run inside a transaction block.
     with op.get_context().autocommit_block():
         connection = op.get_bind()
-        for name, ddl in INDEXES:
+        for name, ddl in indexes:
             _drop_if_invalid(connection, name)
             connection.execute(sa.text(ddl))
 
