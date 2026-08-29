@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     retrieval_agent_max_rounds: int = 4
     retrieval_agent_max_candidates: int = 60
     retrieval_agent_timeout_seconds: float = 20.0
+    # Ceiling for the opt-in deep search, which the user starts deliberately and
+    # watches progress for. Measured at ~90s against production, so this leaves
+    # room without letting a wedged run hold its lock all day.
+    retrieval_agent_deep_timeout_seconds: float = 240.0
     # How many tool-calling rounds Procy may take before it must answer.
     chat_agent_max_rounds: int = 5
     # Messages of history replayed into a chat turn. Unbounded replay was

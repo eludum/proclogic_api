@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date
 from typing import List, Optional
 from urllib.parse import quote
@@ -12,7 +13,14 @@ from app.crud.publication_mapper import (
     convert_publications_to_out_schema_list_free,
     convert_publications_to_out_schema_list_paid,
 )
-from app.ai.retrieval_agent import find_similar_awards
+from app.ai.retrieval_agent import (
+    cached_deep_results,
+    deep_status,
+    deterministic_results,
+    find_similar_awards,
+    run_deep_search,
+    start_deep_search,
+)
 from app.mcp.context import build_context_async
 from app.schemas.publication_out_schemas import PublicationOut
 from app.schemas.publication_related_schemas import (
@@ -22,7 +30,7 @@ from app.schemas.publication_related_schemas import (
 from app.util.clerk import AuthUser, get_auth_user
 from app.util.kanban_integration import remove_unsaved_publication_from_kanban
 from app.util.pubproc import get_publication_workspace_documents
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer
 from fastapi_pagination import Page, Params
@@ -363,24 +371,31 @@ async def get_related_content(
     contracts_limit: int = Query(
         10, ge=1, le=20, description="Number of related contracts to return"
     ),
-    refresh: bool = Query(
-        False, description="Bypass the cache and re-run the search"
+    mode: str = Query(
+        "auto",
+        description="auto: cached deep result if there is one, else the instant "
+        "rule-based list. fast: always rule-based. deep: run the agent inline "
+        "(slow; prefer POST .../related/deep).",
     ),
     auth_user: Optional[AuthUser] = Depends(get_auth_user),
 ) -> RelatedContentResponse:
     """
     Get awarded contracts comparable to this publication.
 
-    The results are found by searching the award database, not inferred from
-    metadata: a retrieval agent queries the contracts with its own search terms,
-    ranks what it finds, and explains each match. Every item returned is a real
-    award row -- ``similarity_score`` and ``similarity_reason`` are the only
-    fields the model contributes, and the score is a genuine 0-100 relevance
-    rather than the open-ended point total this endpoint used to return.
+    Two engines, and the response says which one answered.
 
-    Results are cached per publication; pass ``refresh=true`` to recompute. If
-    the agent is unavailable or times out, this falls back to the deterministic
-    scorer so the section still renders.
+    ``rules`` is the instant comparison on CPV code, buying authority and
+    region. It is metadata matching and its reasons say so.
+
+    ``procy`` is the retrieval agent: it searches the awards with its own terms,
+    reads what it finds and writes a concrete reason per match. It is markedly
+    better and takes roughly 90 seconds, which is far past what a page load can
+    hold -- so it never runs implicitly. ``auto`` returns a deep result computed
+    earlier if one is cached, and otherwise the rule-based list immediately;
+    starting a deep search is a deliberate act via POST .../related/deep.
+
+    Every item is a real award row either way. ``similarity_score`` and
+    ``similarity_reason`` are the only fields the model contributes.
     """
     with get_session() as session:
         publication = crud_publication.get_publication_by_workspace_id(
@@ -390,16 +405,38 @@ async def get_related_content(
         if not publication:
             raise HTTPException(status_code=404, detail="Publication not found")
 
-    ctx = None
-    if auth_user:
-        ctx = await build_context_async(auth_user.user_id, auth_user.email)
+    if mode not in ("auto", "fast", "deep"):
+        raise HTTPException(
+            status_code=400, detail="mode must be auto, fast or deep"
+        )
 
-    similar = await find_similar_awards(
-        workspace_id=publication_workspace_id,
-        limit=contracts_limit,
-        ctx=ctx,
-        use_cache=not refresh,
-    )
+    source = "rules"
+    if mode == "deep":
+        ctx = None
+        if auth_user:
+            ctx = await build_context_async(auth_user.user_id, auth_user.email)
+        similar = await find_similar_awards(
+            workspace_id=publication_workspace_id,
+            limit=contracts_limit,
+            ctx=ctx,
+            use_cache=True,
+        )
+        # find_similar_awards falls back on its own, so only claim the agent
+        # answered when a deep result is actually cached afterwards.
+        if cached_deep_results(publication_workspace_id, contracts_limit) is not None:
+            source = "procy"
+    else:
+        cached = (
+            None
+            if mode == "fast"
+            else cached_deep_results(publication_workspace_id, contracts_limit)
+        )
+        if cached is not None:
+            similar, source = cached, "procy"
+        else:
+            similar = await asyncio.to_thread(
+                deterministic_results, publication_workspace_id, contracts_limit
+            )
 
     related_contracts = [
         RelatedContractItem(
@@ -420,6 +457,8 @@ async def get_related_content(
     return RelatedContentResponse(
         related_contracts=related_contracts,
         total_contracts=len(related_contracts),
+        source=source,
+        deep_status=deep_status(publication_workspace_id, contracts_limit),
     )
 
 
@@ -493,3 +532,46 @@ async def get_publication_document(
         media_type=content_type,
         headers={"Content-Disposition": disposition},
     )
+
+
+@publications_router.post(
+    "/publications/publication/{publication_workspace_id}/related/deep",
+)
+async def start_deep_related_search(
+    background: BackgroundTasks,
+    publication_workspace_id: str = Path(
+        ..., description="Unique ID of the publication workspace"
+    ),
+    contracts_limit: int = Query(10, ge=1, le=20),
+    auth_user: Optional[AuthUser] = Depends(get_auth_user),
+):
+    """Start the retrieval agent for this tender, and return immediately.
+
+    The agent takes roughly 90 seconds, so holding the request open for it would
+    be at the mercy of every proxy timeout between here and the browser, and
+    would lose the work if the user navigated away. Instead this claims a lock,
+    runs it in the background, and the client polls GET .../related until
+    ``deep_status`` turns "ready" -- at which point the same endpoint serves the
+    result from cache, for this user and everyone after them.
+
+    The lock is SET NX in Redis, so two people opening the same tender do not
+    both pay for a run.
+    """
+    with get_session() as session:
+        publication = crud_publication.get_publication_by_workspace_id(
+            publication_workspace_id=publication_workspace_id, session=session
+        )
+        if not publication:
+            raise HTTPException(status_code=404, detail="Publication not found")
+
+    status = start_deep_search(publication_workspace_id, contracts_limit)
+    if status == "started":
+        ctx = None
+        if auth_user:
+            ctx = await build_context_async(auth_user.user_id, auth_user.email)
+        background.add_task(
+            run_deep_search, publication_workspace_id, contracts_limit, ctx
+        )
+        status = "running"
+
+    return {"status": status}

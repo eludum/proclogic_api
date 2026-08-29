@@ -116,6 +116,127 @@ def _cache_set(workspace_id: str, limit: int, value: List[Dict[str, Any]]) -> No
         logger.warning("similar_awards cache write failed for %s: %s", workspace_id, exc)
 
 
+# ---------------------------------------------------------------------------
+# Opt-in deep search
+#
+# The agent reads candidate awards and explains each match, and it is worth
+# waiting for -- but it takes around 90 seconds, far past anything a page load
+# can hold. So the page never runs it implicitly. It shows the deterministic
+# scorer immediately, or a deep result that was computed earlier, and offers a
+# button that starts one. The flag below is what lets the client poll for
+# progress instead of holding a request open for a minute and a half.
+# ---------------------------------------------------------------------------
+
+STATUS_READY = "ready"
+STATUS_RUNNING = "running"
+STATUS_NONE = "none"
+
+
+def _running_key(workspace_id: str, limit: int) -> str:
+    return f"similar_awards_running:{workspace_id}:{limit}"
+
+
+def deep_status(workspace_id: str, limit: int) -> str:
+    """Whether a deep result exists, is being computed, or has never been asked for."""
+    if _cache_get(workspace_id, limit) is not None:
+        return STATUS_READY
+    try:
+        if get_redis_client().get(_running_key(workspace_id, limit)):
+            return STATUS_RUNNING
+    except Exception as exc:
+        logger.warning("deep status check failed for %s: %s", workspace_id, exc)
+    return STATUS_NONE
+
+
+def _mark_running(workspace_id: str, limit: int) -> bool:
+    """Claim the slot. False when another request already holds it.
+
+    SET NX, so two people opening the same tender do not both pay for a run.
+    The TTL is the ceiling on how long a crashed worker can block a retry.
+    """
+    try:
+        return bool(
+            get_redis_client().set(
+                _running_key(workspace_id, limit),
+                "1",
+                ex=int(settings.retrieval_agent_deep_timeout_seconds) + 60,
+                nx=True,
+            )
+        )
+    except Exception as exc:
+        logger.warning("deep lock failed for %s: %s", workspace_id, exc)
+        # Without a lock we would rather run twice than never.
+        return True
+
+
+def _clear_running(workspace_id: str, limit: int) -> None:
+    try:
+        get_redis_client().delete(_running_key(workspace_id, limit))
+    except Exception as exc:
+        logger.warning("deep lock release failed for %s: %s", workspace_id, exc)
+
+
+def cached_deep_results(
+    workspace_id: str, limit: int
+) -> Optional[List[Dict[str, Any]]]:
+    """A previously computed deep result, if one is still cached."""
+    return _cache_get(workspace_id, limit)
+
+
+def deterministic_results(workspace_id: str, limit: int) -> List[Dict[str, Any]]:
+    """The instant, rule-based comparison. No model involved."""
+    return _fallback(workspace_id, limit)
+
+
+async def run_deep_search(
+    workspace_id: str, limit: int, ctx: Optional[ToolContext] = None
+) -> None:
+    """Run the agent and cache the result. Intended for a background task.
+
+    Swallows everything: this runs detached from any request, so the only useful
+    thing it can do with a failure is log it and release the lock, leaving the
+    page on the deterministic list.
+    """
+    context = ctx or ANONYMOUS
+    try:
+        results = await asyncio.wait_for(
+            _find_similar_awards_uncached(workspace_id, limit, context),
+            timeout=settings.retrieval_agent_deep_timeout_seconds,
+        )
+        if results:
+            _cache_set(workspace_id, limit, results)
+            logger.info(
+                "Deep similar-awards search stored %d result(s) for %s",
+                len(results),
+                workspace_id,
+            )
+        else:
+            logger.info("Deep similar-awards search found nothing for %s", workspace_id)
+    except asyncio.TimeoutError:
+        logger.warning(
+            "Deep similar-awards search timed out after %ss for %s",
+            settings.retrieval_agent_deep_timeout_seconds,
+            workspace_id,
+        )
+    except Exception as exc:
+        logger.error(
+            "Deep similar-awards search failed for %s: %s", workspace_id, exc,
+            exc_info=exc,
+        )
+    finally:
+        _clear_running(workspace_id, limit)
+
+
+def start_deep_search(workspace_id: str, limit: int) -> str:
+    """Claim the slot for a deep run. Returns the status to report to the client."""
+    existing = _cache_get(workspace_id, limit)
+    if existing is not None:
+        return STATUS_READY
+    if not _mark_running(workspace_id, limit):
+        return STATUS_RUNNING
+    return "started"
+
+
 def invalidate_similar_awards_cache(workspace_id: str) -> None:
     """Drop every cached limit variant for one publication."""
     try:
