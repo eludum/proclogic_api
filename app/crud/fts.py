@@ -10,12 +10,15 @@ string below must stay character-identical to the index definition in migration
 ``c4d5e6f7a8b9``.
 """
 
+import logging
 import re
 from typing import List, Optional
 
-from sqlalchemy import and_, func, literal_column, or_
+from sqlalchemy import and_, func, literal_column, or_, text
 
 from app.models.publication_models import Publication
+
+logger = logging.getLogger(__name__)
 
 # Must match idx_publications_searchable_content_fts exactly.
 SEARCHABLE_TSVECTOR = literal_column(
@@ -39,6 +42,59 @@ _MIN_TSQUERY_LENGTH = 3
 # to_tsquery string, so no escaping is required and a stray ':' or '&' in a title
 # cannot produce a syntax error.
 MAX_QUERY_TERMS = 8
+
+# The trigram index backing the substring arm. It only exists where the server
+# has pg_trgm, which is not everywhere -- see migration c4d5e6f7a8b9.
+TRGM_INDEX_NAME = "idx_publications_searchable_content_trgm"
+
+_substring_arm_indexed: Optional[bool] = None
+
+
+def substring_arm_is_indexed() -> bool:
+    """Whether the trigram index exists, so the ILIKE arm is affordable.
+
+    ORing an unindexed ILIKE next to the tsvector match does not merely cost the
+    ILIKE's own time -- it drags the whole disjunction onto a sequential scan.
+    Measured against production (107k publications, no pg_trgm, so no trigram
+    index): the FTS arm alone answers in 0.01s, the ILIKE arm alone in 3.3s, and
+    the two ORed together in 19.7s for one term, timing out at the 30s
+    statement_timeout as soon as there are two.
+
+    So the arm is included only when its index is there. Without it, search
+    loses the substring matches tsquery cannot produce -- partial words, and
+    reference numbers that tokenise away -- which is a real loss of recall, but
+    a smaller one than every multi-word search failing.
+
+    Cached after the first successful answer; a failed check is not cached, and
+    is treated as "not indexed" so a probe that cannot run never produces the
+    slow query.
+    """
+    global _substring_arm_indexed
+    if _substring_arm_indexed is not None:
+        return _substring_arm_indexed
+
+    from app.config.postgres import engine
+
+    try:
+        with engine.connect() as connection:
+            found = bool(
+                connection.execute(
+                    text("SELECT 1 FROM pg_class WHERE relname = :name"),
+                    {"name": TRGM_INDEX_NAME},
+                ).scalar()
+            )
+    except Exception as exc:
+        logger.warning("Could not check for %s: %s", TRGM_INDEX_NAME, exc)
+        return False
+
+    if not found:
+        logger.warning(
+            "%s is missing, so substring matching is disabled for full-text "
+            "search; queries fall back to the tsvector arm only.",
+            TRGM_INDEX_NAME,
+        )
+    _substring_arm_indexed = found
+    return found
 
 
 def _terms(term: str) -> List[str]:
@@ -76,27 +132,34 @@ def build_fts_condition(term: Optional[str], match_all: bool = False):
 
     The substring arm is not redundant: tsquery drops stopwords and short tokens,
     so a search for a reference number or a two-letter code would otherwise
-    return nothing at all. The trigram index keeps that arm off a sequential scan.
+    return nothing at all. It is only included when the trigram index exists to
+    keep it off a sequential scan -- see substring_arm_is_indexed().
     """
     if not term or not term.strip():
         return None
 
     cleaned = term.strip()
     substring = Publication.searchable_content.ilike(f"%{cleaned}%")
+    indexed = substring_arm_is_indexed()
 
     if len(cleaned) < _MIN_TSQUERY_LENGTH:
+        # Too short to tokenise, so the substring arm is the only thing that can
+        # match at all. Returned even unindexed: one sequential scan beats
+        # answering nothing.
         return substring
 
     if match_all or _has_explicit_syntax(cleaned):
-        return or_(SEARCHABLE_TSVECTOR.op("@@")(_tsquery(cleaned)), substring)
+        exact = SEARCHABLE_TSVECTOR.op("@@")(_tsquery(cleaned))
+        return or_(exact, substring) if indexed else exact
 
     terms = _terms(cleaned)
     if not terms:
         return substring
 
     arms = [SEARCHABLE_TSVECTOR.op("@@")(_tsquery(word)) for word in terms]
-    arms.append(substring)
-    return or_(*arms)
+    if indexed:
+        arms.append(substring)
+    return or_(*arms) if len(arms) > 1 else arms[0]
 
 
 def build_fts_rank(term: Optional[str], match_all: bool = False):
