@@ -82,9 +82,17 @@ def upgrade() -> None:
     # below must not inherit a timeout that could abort a long index build.
     op.execute("SET LOCAL lock_timeout = '10s'")
 
-    op.add_column(
-        "publications",
-        sa.Column("searchable_content", sa.Text(), nullable=True),
+    # ADD COLUMN IF NOT EXISTS, not op.add_column, because this migration is not
+    # atomic: the autocommit_block below COMMITs everything above it before the
+    # index build starts, and alembic only records the revision once upgrade()
+    # returns. A pod killed during the (long) concurrent build therefore leaves
+    # the column committed with alembic_version still on the previous revision,
+    # and the retry on the next start would fail forever on DuplicateColumn --
+    # with app.main swallowing the error, so the pod would look healthy while
+    # every later migration stayed unapplied. Idempotent DDL makes the retry a
+    # no-op instead.
+    op.execute(
+        "ALTER TABLE publications ADD COLUMN IF NOT EXISTS searchable_content TEXT"
     )
 
     # pg_trgm ships with Postgres but is not enabled by default. Needed for the

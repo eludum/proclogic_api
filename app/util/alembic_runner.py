@@ -21,7 +21,8 @@ path exactly as before.
 import logging
 
 import alembic.config
-from sqlalchemy import inspect, text
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.pool import NullPool
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,38 @@ MIGRATION_LOCK_KEY = 0x70726F63  # "proc"
 
 # How long a pod waits for whichever replica got there first. Comfortably longer
 # than a migration should take, short enough not to hold up a rollout.
-MIGRATION_LOCK_TIMEOUT = "120s"
+MIGRATION_LOCK_TIMEOUT_MS = 120_000
+MIGRATION_LOCK_TIMEOUT = f"{MIGRATION_LOCK_TIMEOUT_MS}ms"
+
+
+def _lock_engine():
+    """A dedicated engine for the advisory lock, separate from the app pool.
+
+    Two reasons not to borrow app.config.postgres.engine here:
+
+    * It is created with ``-c statement_timeout=30000``. statement_timeout is
+      what actually cancels a waiting ``pg_advisory_lock()``, so on the shared
+      engine the wait ended at 30s no matter what lock_timeout said -- the 120s
+      above was dead code.
+    * Raising the timeout with ``SET`` would fix that but leak: the connection
+      goes back to the pool carrying the new setting, so ordinary request
+      queries would inherit a 120s statement_timeout instead of 30s.
+
+    NullPool because this connection is opened once per process start.
+    """
+    from app.config.settings import settings
+
+    return create_engine(
+        settings.postgres_con_url,
+        poolclass=NullPool,
+        connect_args={
+            "connect_timeout": 10,
+            "options": (
+                f"-c statement_timeout={MIGRATION_LOCK_TIMEOUT_MS} "
+                f"-c lock_timeout={MIGRATION_LOCK_TIMEOUT_MS}"
+            ),
+        },
+    )
 
 
 def _database_is_empty() -> bool:
@@ -69,6 +101,13 @@ def _create_from_models() -> None:
     import app.models.publication_contract_models  # noqa: F401
     import app.models.publication_models  # noqa: F401
 
+    # Before create_all: idx_publications_searchable_content_trgm is declared on
+    # the model with gin_trgm_ops, and that operator class does not exist until
+    # the extension does. Migration c4d5e6f7a8b9 creates it on the upgrade path;
+    # this is the same statement for the path that never runs that migration.
+    with engine.begin() as connection:
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+
     Base.metadata.create_all(engine)
 
 
@@ -90,11 +129,9 @@ def run_migration():
     server if this pod dies mid-migration -- so a crashed pod cannot wedge a
     rollout.
     """
-    from app.config.postgres import engine
-
+    engine = _lock_engine()
     connection = engine.connect()
     try:
-        connection.execute(text(f"SET lock_timeout = '{MIGRATION_LOCK_TIMEOUT}'"))
         try:
             connection.execute(
                 text("SELECT pg_advisory_lock(:key)"), {"key": MIGRATION_LOCK_KEY}
@@ -121,3 +158,4 @@ def run_migration():
             connection.commit()
     finally:
         connection.close()
+        engine.dispose()
