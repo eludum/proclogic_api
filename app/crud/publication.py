@@ -12,6 +12,9 @@ from app.models.publication_models import (
     CompanyPublicationMatch,
     CPVCode,
     Description,
+    KIND_DESCRIPTION,
+    KIND_TITLE,
+    KIND_UNKNOWN,
     Dossier,
     EnterpriseCategory,
     Lot,
@@ -35,36 +38,40 @@ from app.schemas.publication_schemas import (
     OrganisationSchema,
     PublicationSchema,
 )
+from app.util.publication_utils.searchable import refresh_searchable_content
 from sqlalchemy import and_, case, desc, func, literal_column, or_, select
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload, subqueryload
 from sqlalchemy.sql import exists
 
 
-def get_or_create_descriptions(
-    descriptions_schema: List[DescriptionSchema], session: Session
+def create_descriptions(
+    descriptions_schema: List[DescriptionSchema],
+    session: Session,
+    kind: str = KIND_UNKNOWN,
 ) -> List[Description]:
+    """Create one Description row per incoming text, tagged with its kind.
+
+    This deliberately does NOT reuse an existing row with the same text. It used
+    to: it looked up any description with matching text and language, anywhere in
+    the database, and handed that row to the new parent. But a description row
+    carries a single dossier_reference_number and a single lot_id, so "reusing"
+    one actually *moved* it -- reassigning the foreign key and silently stripping
+    the text from whichever dossier or lot had it before.
+
+    That was not hypothetical. update_publication rebuilds a publication's lots
+    on every notice update, and two tenders sharing a phrase as ordinary as
+    "Onderhoud groenzones" is routine, so republished notices quietly emptied
+    each other's lots.
+
+    Rows are cheap; correctness here is not.
+    """
     description_instances = []
     for desc_schema in descriptions_schema:
-        # Calculate the MD5 hash of the text
-        text_hash = func.md5(desc_schema.text)
-
-        # Check if a description with the same text and language already exists
-        description = (
-            session.query(Description)
-            .filter(
-                Description.language == desc_schema.language,
-                func.md5(Description.text) == text_hash,
-            )
-            .first()
+        description = Description(
+            language=desc_schema.language, text=desc_schema.text, kind=kind
         )
-
-        if not description:
-            description = Description(
-                language=desc_schema.language, text=desc_schema.text
-            )
-            session.add(description)
-            session.flush()
-
+        session.add(description)
+        session.flush()
         description_instances.append(description)
     return description_instances
 
@@ -74,8 +81,10 @@ def get_or_create_cpv_code(cpv_code_schema: CPVCodeSchema, session: Session) -> 
     if not cpv_code:
         cpv_code = CPVCode(
             code=cpv_code_schema.code,
-            descriptions=get_or_create_descriptions(
-                descriptions_schema=cpv_code_schema.descriptions, session=session
+            descriptions=create_descriptions(
+                descriptions_schema=cpv_code_schema.descriptions,
+                session=session,
+                kind=KIND_DESCRIPTION,
             ),
         )
         session.add(cpv_code)
@@ -174,11 +183,15 @@ def get_or_create_dossier(dossier_schema: DossierSchema, session: Session) -> Do
             number=dossier_schema.number,
             procurement_procedure_type=dossier_schema.procurement_procedure_type,
             special_purchasing_technique=dossier_schema.special_purchasing_technique,
-            descriptions=get_or_create_descriptions(
-                descriptions_schema=dossier_schema.descriptions, session=session
+            descriptions=create_descriptions(
+                descriptions_schema=dossier_schema.descriptions,
+                session=session,
+                kind=KIND_DESCRIPTION,
             ),
-            titles=get_or_create_descriptions(
-                descriptions_schema=dossier_schema.titles, session=session
+            titles=create_descriptions(
+                descriptions_schema=dossier_schema.titles,
+                session=session,
+                kind=KIND_TITLE,
             ),
         )
         session.add(dossier)
@@ -198,11 +211,15 @@ def create_lot(lot_schema: LotSchema, session: Session) -> Lot:
     lot = Lot(
         reserved_execution=lot_schema.reserved_execution or [],
         reserved_participation=lot_schema.reserved_participation or [],
-        descriptions=get_or_create_descriptions(
-            descriptions_schema=lot_schema.descriptions, session=session
+        descriptions=create_descriptions(
+            descriptions_schema=lot_schema.descriptions,
+            session=session,
+            kind=KIND_DESCRIPTION,
         ),
-        titles=get_or_create_descriptions(
-            descriptions_schema=lot_schema.titles, session=session
+        titles=create_descriptions(
+            descriptions_schema=lot_schema.titles,
+            session=session,
+            kind=KIND_TITLE,
         ),
     )
 
@@ -535,6 +552,11 @@ def get_or_create_publication(
                 session.add(company_match)
             session.flush()
 
+    # Flatten the tender's text onto the row so it is searchable. Done here
+    # rather than in the caller because this is the one place both the create
+    # and the update path pass through.
+    refresh_searchable_content(publication, session)
+
     try:
         session.commit()
         return publication
@@ -604,36 +626,6 @@ def publication_exists(publication_workspace_id: str, session: Session) -> bool:
     return session.query(
         exists().where(Publication.publication_workspace_id == publication_workspace_id)
     ).scalar()
-
-
-def delete_publication(publication_workspace_id: str, session: Session):
-    """Delete a publication and its related data."""
-    try:
-        # First delete the company-publication matches
-        session.query(CompanyPublicationMatch).filter(
-            CompanyPublicationMatch.publication_workspace_id == publication_workspace_id
-        ).delete(synchronize_session=False)
-
-        # Then delete the publication
-        publication = (
-            session.query(Publication)
-            .filter_by(publication_workspace_id=publication_workspace_id)
-            .first()
-        )
-        if publication:
-            session.delete(publication)
-            session.commit()
-            logging.info(
-                f"Publication with workspace ID {publication_workspace_id} deleted successfully."
-            )
-        else:
-            logging.warning(
-                f"Publication with workspace ID {publication_workspace_id} not found."
-            )
-    except Exception as e:
-        logging.error("Error deleting publication: %s", e)
-        session.rollback()
-        raise
 
 
 def build_region_filter_conditions(region_filter: List[str]):

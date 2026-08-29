@@ -1,8 +1,7 @@
 import asyncio
 import logging
 import uuid
-from datetime import date, datetime
-from io import BytesIO
+from datetime import date
 from typing import List
 
 import app.crud.company as crud_company
@@ -23,7 +22,6 @@ from app.crud.notification import (
 )
 from app.schemas.company_schemas import CompanyPublicationMatchSchema
 from app.schemas.publication_schemas import CPVCodeSchema, PublicationSchema
-from app.services.contract_email import handle_new_contract_created
 from app.util.messages_helper import (
     send_deadline_notification,
     send_recommendation_notification,

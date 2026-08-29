@@ -2,21 +2,33 @@ import logging
 from typing import List, Optional, Tuple
 
 from sqlalchemy import and_, extract, func, or_
-from sqlalchemy.orm import Session, joinedload, subqueryload
+from sqlalchemy.orm import Session, joinedload
 
+from app.crud.fts import (
+    build_fts_condition,
+    build_fts_rank,
+    build_region_condition,
+    build_value_condition,
+)
 from app.models.publication_contract_models import Contract, ContractOrganization
 from app.models.publication_models import Dossier, Publication
 
 
 def build_search_filter(search_term: str):
-    """Build search filter for contract publications"""
+    """Build search filter for contract publications.
+
+    Matches the flattened Dutch full-text blob (title, description, lots, buyer,
+    winner) as well as the organisation names directly. The organisation arms
+    are kept alongside the full-text one because searchable_content is populated
+    at ingest and may still be NULL on rows that predate the backfill -- without
+    them, an un-backfilled award would be invisible to search.
+    """
     if not search_term or not search_term.strip():
         return None
 
     search_pattern = f"%{search_term.strip()}%"
 
-    # Search in winner name, buyer name, and service provider name
-    return or_(
+    conditions = [
         # Search in winner name (through contract -> winning_publisher)
         Publication.contract.has(
             Contract.winning_publisher.has(
@@ -37,10 +49,18 @@ def build_search_filter(search_term: str):
         ),
         Publication.contract.has(
             Contract.winning_publisher.has(
-                func.lower(ContractOrganization.business_id).like(func.lower(search_pattern))
+                func.lower(ContractOrganization.business_id).like(
+                    func.lower(search_pattern)
+                )
             )
         ),
-    )
+    ]
+
+    fts_condition = build_fts_condition(search_term)
+    if fts_condition is not None:
+        conditions.append(fts_condition)
+
+    return or_(*conditions)
 
 
 def build_time_filter(
@@ -74,6 +94,19 @@ def build_sector_filter(sector_code: Optional[str]):
     return None
 
 
+def build_cpv_filter(cpv_code: Optional[str]):
+    """Build a CPV filter at whatever precision the caller supplied.
+
+    Distinct from build_sector_filter, which always truncates to two digits:
+    passing "45233120" here means that exact kind of work, not all construction.
+    """
+    if not cpv_code or not cpv_code.strip():
+        return None
+
+    prefix = cpv_code.strip().rstrip("-0") or cpv_code.strip()
+    return Publication.cpv_main_code_code.like(f"{prefix}%")
+
+
 def build_winner_filter(winner: Optional[str]):
     """Build winner filter"""
     if not winner or not winner.strip():
@@ -100,24 +133,72 @@ def build_supplier_filter(supplier: Optional[str]):
     )
 
 
-def get_sort_field(sort_by: str):
-    """Get the appropriate sort field based on sort_by parameter"""
-    if sort_by == "value":
-        return Publication.contract.has(Publication.contract.total_contract_amount)
-    elif sort_by == "winner":
-        return Publication.contract.has(
-            Publication.contract.winning_publisher.has(
-                Publication.contract.winning_publisher.name
-            )
+def build_buyer_filter(buyer: Optional[str]):
+    """Build contracting-authority filter"""
+    if not buyer or not buyer.strip():
+        return None
+
+    buyer_pattern = f"%{buyer.strip()}%"
+    return Publication.contract.has(
+        Contract.contracting_authority.has(
+            func.lower(ContractOrganization.name).like(func.lower(buyer_pattern))
         )
-    elif sort_by == "buyer":
-        return Publication.contract.has(
-            Publication.contract.contracting_authority.has(
-                Publication.contract.contracting_authority.name
-            )
-        )
-    else:  # default to publication_date
-        return Publication.publication_date
+    )
+
+
+def build_contract_value_filter(
+    min_value: Optional[float], max_value: Optional[float]
+):
+    """Bound the awarded amount. Rows with no published amount are excluded."""
+    if min_value is None and max_value is None:
+        return None
+
+    condition = build_value_condition(
+        min_value, max_value, Contract.total_contract_amount
+    )
+    if condition is None:
+        return None
+
+    return Publication.contract.has(condition)
+
+
+def apply_contract_filters(
+    query,
+    search: Optional[str] = None,
+    year: Optional[int] = None,
+    quarter: Optional[int] = None,
+    month: Optional[int] = None,
+    sector_code: Optional[str] = None,
+    cpv_code: Optional[str] = None,
+    region: Optional[List[str]] = None,
+    winner: Optional[str] = None,
+    supplier: Optional[str] = None,
+    buyer: Optional[str] = None,
+    min_value: Optional[float] = None,
+    max_value: Optional[float] = None,
+):
+    """Apply every award filter to a query.
+
+    Single place where the filter set is assembled, so the list endpoint, the
+    summary aggregate and all the analytics breakdowns can never drift apart --
+    a breakdown that filtered differently from the summary would silently fail
+    to reconcile.
+    """
+    for condition in (
+        build_search_filter(search),
+        build_time_filter(year, quarter, month),
+        build_sector_filter(sector_code),
+        build_cpv_filter(cpv_code),
+        build_region_condition(region),
+        build_winner_filter(winner),
+        build_supplier_filter(supplier),
+        build_buyer_filter(buyer),
+        build_contract_value_filter(min_value, max_value),
+    ):
+        if condition is not None:
+            query = query.filter(condition)
+
+    return query
 
 
 def get_paginated_contracts(
@@ -129,8 +210,13 @@ def get_paginated_contracts(
     quarter: Optional[int] = None,
     month: Optional[int] = None,
     sector_code: Optional[str] = None,
+    cpv_code: Optional[str] = None,
+    region: Optional[List[str]] = None,
     winner: Optional[str] = None,
     supplier: Optional[str] = None,
+    buyer: Optional[str] = None,
+    min_value: Optional[float] = None,
+    max_value: Optional[float] = None,
     sort_by: str = "publication_date",
     sort_order: str = "desc",
 ) -> Tuple[List[Publication], int]:
@@ -145,36 +231,35 @@ def get_paginated_contracts(
         # Base query: only publications with contracts (awards)
         query = session.query(Publication).filter(Publication.contract_id.isnot(None))
 
-        # Apply search filter
-        search_filter = build_search_filter(search)
-        if search_filter is not None:
-            query = query.filter(search_filter)
-
-        # Apply time filters
-        time_filter = build_time_filter(year, quarter, month)
-        if time_filter is not None:
-            query = query.filter(time_filter)
-
-        # Apply sector filter
-        sector_filter = build_sector_filter(sector_code)
-        if sector_filter is not None:
-            query = query.filter(sector_filter)
-
-        # Apply winner filter
-        winner_filter = build_winner_filter(winner)
-        if winner_filter is not None:
-            query = query.filter(winner_filter)
-
-        # Apply supplier filter
-        supplier_filter = build_supplier_filter(supplier)
-        if supplier_filter is not None:
-            query = query.filter(supplier_filter)
+        query = apply_contract_filters(
+            query,
+            search=search,
+            year=year,
+            quarter=quarter,
+            month=month,
+            sector_code=sector_code,
+            cpv_code=cpv_code,
+            region=region,
+            winner=winner,
+            supplier=supplier,
+            buyer=buyer,
+            min_value=min_value,
+            max_value=max_value,
+        )
 
         # Get total count before pagination
         total_count = query.count()
 
         # Apply sorting with proper joins
-        if sort_by == "value":
+        if sort_by == "relevance":
+            # Only meaningful with a search term; fall back to recency otherwise
+            # so "relevance" is always a safe thing for a tool caller to ask for.
+            rank = build_fts_rank(search)
+            if rank is not None:
+                query = query.order_by(rank.desc(), Publication.publication_date.desc())
+            else:
+                query = query.order_by(Publication.publication_date.desc())
+        elif sort_by == "value":
             query = query.join(
                 Contract, Publication.contract_id == Contract.contract_id
             )
@@ -245,8 +330,13 @@ def get_contracts_summary(
     quarter: Optional[int] = None,
     month: Optional[int] = None,
     sector_code: Optional[str] = None,
+    cpv_code: Optional[str] = None,
+    region: Optional[List[str]] = None,
     winner: Optional[str] = None,
     supplier: Optional[str] = None,
+    buyer: Optional[str] = None,
+    min_value: Optional[float] = None,
+    max_value: Optional[float] = None,
 ) -> Tuple[int, float, float]:
     """
     Get summary statistics for contracts matching the given filters.
@@ -258,26 +348,21 @@ def get_contracts_summary(
         # Build the same query as the main endpoint but for aggregation
         query = session.query(Publication).filter(Publication.contract_id.isnot(None))
 
-        # Apply all the same filters
-        search_filter = build_search_filter(search)
-        if search_filter is not None:
-            query = query.filter(search_filter)
-
-        time_filter = build_time_filter(year, quarter, month)
-        if time_filter is not None:
-            query = query.filter(time_filter)
-
-        sector_filter = build_sector_filter(sector_code)
-        if sector_filter is not None:
-            query = query.filter(sector_filter)
-
-        winner_filter = build_winner_filter(winner)
-        if winner_filter is not None:
-            query = query.filter(winner_filter)
-
-        supplier_filter = build_supplier_filter(supplier)
-        if supplier_filter is not None:
-            query = query.filter(supplier_filter)
+        query = apply_contract_filters(
+            query,
+            search=search,
+            year=year,
+            quarter=quarter,
+            month=month,
+            sector_code=sector_code,
+            cpv_code=cpv_code,
+            region=region,
+            winner=winner,
+            supplier=supplier,
+            buyer=buyer,
+            min_value=min_value,
+            max_value=max_value,
+        )
 
         # Get aggregated results with proper join
         result = (

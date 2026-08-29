@@ -56,17 +56,6 @@ def get_company_conversations(company_vat_number: str, session: Session) -> List
     )
 
 
-def get_publication_conversations(publication_workspace_id: str, session: Session) -> List[Conversation]:
-    """Get all conversations for a publication."""
-    return (
-        session.query(Conversation)
-        .filter(Conversation.publication_workspace_id == publication_workspace_id)
-        .order_by(Conversation.updated_at.desc())
-        .options(joinedload(Conversation.company))
-        .all()
-    )
-
-
 def add_message(
     conversation_id: int, 
     role: str, 

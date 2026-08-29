@@ -745,7 +745,7 @@ def summarize_publication_contract(
 
         # Parse date
         issue_date = None
-        if "issue_date" in result and result["issue_date"]:
+        if result.get("issue_date"):
             try:
                 issue_date = datetime.strptime(result["issue_date"], "%Y-%m-%d").date()
             except Exception as e:

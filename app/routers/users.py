@@ -26,7 +26,7 @@ class AddUserRequest(BaseModel):
 
 
 @users_router.get("/users/company-emails")
-async def get_company_emails(auth_user: AuthUser = Depends(get_auth_user)):
+def get_company_emails(auth_user: AuthUser = Depends(get_auth_user)):
     """Get all authorized email addresses for the company associated with the authenticated user."""
     if not auth_user.email:
         raise HTTPException(status_code=400, detail="User email not available")
@@ -43,7 +43,7 @@ async def get_company_emails(auth_user: AuthUser = Depends(get_auth_user)):
 
 
 @users_router.post("/users/invite", status_code=201)
-async def invite_user_to_company(
+def invite_user_to_company(
     user: AddUserRequest, auth_user: AuthUser = Depends(get_auth_user)
 ):
     """Invite a new user to the company by sending a Clerk invitation."""
@@ -74,7 +74,7 @@ async def invite_user_to_company(
 
 
 @users_router.delete("/users/remove/{email}")
-async def remove_user_from_company(
+def remove_user_from_company(
     email: str = Path(..., description="Email to remove"),
     auth_user: AuthUser = Depends(get_auth_user),
 ):
@@ -108,7 +108,7 @@ async def remove_user_from_company(
 
 
 @users_router.get("/users/company-users", response_model=List[UserResponse])
-async def get_company_users(auth_user: AuthUser = Depends(get_auth_user)):
+def get_company_users(auth_user: AuthUser = Depends(get_auth_user)):
     """Get all users that have access to the company, including pending invitations."""
     if not auth_user.email:
         raise HTTPException(status_code=400, detail="User email not available")

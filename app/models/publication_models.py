@@ -4,6 +4,7 @@ from typing import List, Optional
 from sqlalchemy import (
     ARRAY,
     Boolean,
+    and_,
     Column,
     DateTime,
     Float,
@@ -81,31 +82,37 @@ class CompanyPublicationMatch(Base):
     publication: Mapped["Publication"] = relationship(back_populates="company_matches")
 
 
+# A `descriptions` row is a title or a body of text, and until this column
+# existed there was no way to tell which. Dossier.titles and Dossier.descriptions
+# were two relationships over the same foreign key with no discriminator, so both
+# returned *every* row for the dossier -- which is why get_publication_title
+# could return a description.
+#
+# KIND_UNKNOWN is what rows created before the discriminator carry. They belong
+# to both collections, exactly as they did before, so existing data keeps
+# behaving as it always has; only newly ingested rows are precise.
+KIND_TITLE = "title"
+KIND_DESCRIPTION = "description"
+KIND_UNKNOWN = "unknown"
+
+TITLE_KINDS = (KIND_TITLE, KIND_UNKNOWN)
+DESCRIPTION_KINDS = (KIND_DESCRIPTION, KIND_UNKNOWN)
+
+
 class Description(Base):
     __tablename__ = "descriptions"
 
     id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True)
     language: Mapped[str] = mapped_column(String)
     text: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=KIND_UNKNOWN, default=KIND_UNKNOWN
+    )
 
-    # Relationships with Lot
     lot_id: Mapped[Optional[int]] = mapped_column(ForeignKey("lots.id"), nullable=True)
-    lot_descriptions: Mapped[Optional["Lot"]] = relationship(
-        back_populates="descriptions", overlaps="lot_titles"
-    )
-    lot_titles: Mapped[Optional["Lot"]] = relationship(
-        back_populates="titles", overlaps="lot_descriptions"
-    )
 
-    # Relationships with Dossier
     dossier_reference_number: Mapped[Optional[str]] = mapped_column(
         ForeignKey("dossiers.reference_number"), nullable=True
-    )
-    dossier_descriptions: Mapped[Optional["Dossier"]] = relationship(
-        back_populates="descriptions", overlaps="dossier_titles"
-    )
-    dossier_titles: Mapped[Optional["Dossier"]] = relationship(
-        back_populates="titles", overlaps="dossier_descriptions"
     )
 
     # Relationship with CPVCode
@@ -148,12 +155,24 @@ class Dossier(Base):
         String, nullable=True
     )
 
-    # Relationships with Description
+    # Both collections write the same foreign key, so they genuinely overlap;
+    # `overlaps` only silences the warning about that. What separates them is the
+    # primaryjoin on Description.kind.
     descriptions: Mapped[List["Description"]] = relationship(
-        back_populates="dossier_descriptions", overlaps="dossier_titles"
+        "Description",
+        primaryjoin=lambda: and_(
+            Dossier.reference_number == Description.dossier_reference_number,
+            Description.kind.in_(DESCRIPTION_KINDS),
+        ),
+        overlaps="titles",
     )
     titles: Mapped[List["Description"]] = relationship(
-        back_populates="dossier_titles", overlaps="descriptions,dossier_descriptions"
+        "Description",
+        primaryjoin=lambda: and_(
+            Dossier.reference_number == Description.dossier_reference_number,
+            Description.kind.in_(TITLE_KINDS),
+        ),
+        overlaps="descriptions",
     )
 
     enterprise_categories: Mapped[List["EnterpriseCategory"]] = relationship()
@@ -166,12 +185,21 @@ class Lot(Base):
     reserved_execution: Mapped[List[str]] = mapped_column(ARRAY(String))
     reserved_participation: Mapped[List[str]] = mapped_column(ARRAY(String))
 
-    # Relationships with Description
     descriptions: Mapped[List["Description"]] = relationship(
-        back_populates="lot_descriptions", overlaps="lot_titles"
+        "Description",
+        primaryjoin=lambda: and_(
+            Lot.id == Description.lot_id,
+            Description.kind.in_(DESCRIPTION_KINDS),
+        ),
+        overlaps="titles",
     )
     titles: Mapped[List["Description"]] = relationship(
-        back_populates="lot_titles", overlaps="descriptions,lot_descriptions"
+        "Description",
+        primaryjoin=lambda: and_(
+            Lot.id == Description.lot_id,
+            Description.kind.in_(TITLE_KINDS),
+        ),
+        overlaps="descriptions",
     )
 
 
@@ -230,6 +258,12 @@ class Publication(Base):
     ai_summary_with_documents: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True
     )
+
+    # Denormalised text blob backing the Dutch full-text index. Populated at
+    # ingest by build_searchable_content(); see migration c4d5e6f7a8b9. Kept as a
+    # plain column rather than a generated one because it aggregates across the
+    # descriptions and organisation_names tables.
+    searchable_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Added fields for better matching
     estimated_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

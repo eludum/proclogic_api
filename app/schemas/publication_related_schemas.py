@@ -19,23 +19,6 @@ class RelatedContractItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class RelatedPublicationItem(BaseModel):
-    """Schema for related active publications"""
-    workspace_id: str
-    title: str
-    organisation: str
-    publication_date: datetime
-    submission_deadline: Optional[datetime]
-    cpv_code: str
-    sector: str
-    estimated_value: Optional[int]
-    similarity_score: float
-    similarity_reason: str
-    match_percentage: Optional[float] = None  # If user is authenticated
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class RelatedContentResponse(BaseModel):
     """Response schema for related content"""
     related_contracts: List[RelatedContractItem]
