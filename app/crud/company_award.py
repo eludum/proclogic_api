@@ -8,9 +8,12 @@ taken from a request body or query string.
 """
 
 import logging
-from typing import Dict, List, Optional, Sequence
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence
 
 from sqlalchemy.orm import Session
+
+if TYPE_CHECKING:  # imported for annotations only; the runtime imports are local
+    from app.models.company_award_document_models import CompanyAwardDocument
 
 from app.models.company_award_models import (
     OVERRIDABLE_FIELDS,
@@ -181,3 +184,90 @@ def merge_over(item, entry: Optional[CompanyAwardEntry]):
         if hasattr(item, field):
             setattr(item, field, value)
     return sorted(supplied.keys())
+
+
+# ---------------------------------------------------------------------------
+# Uploaded documents
+#
+# Scoped through the entry that owns them: every lookup joins to
+# CompanyAwardEntry and filters on company_vat_number, so a document id from
+# another company simply does not resolve.
+# ---------------------------------------------------------------------------
+
+
+def list_documents(
+    session: Session, company_vat_number: str, entry_id: int
+) -> List["CompanyAwardDocument"]:
+    """Metadata for one entry's uploads. `data` is deferred, so no bytes load."""
+    from app.models.company_award_document_models import CompanyAwardDocument
+
+    return (
+        session.query(CompanyAwardDocument)
+        .join(CompanyAwardEntry, CompanyAwardEntry.id == CompanyAwardDocument.award_entry_id)
+        .filter(
+            CompanyAwardDocument.award_entry_id == entry_id,
+            CompanyAwardEntry.company_vat_number == company_vat_number,
+        )
+        .order_by(CompanyAwardDocument.created_at.desc())
+        .all()
+    )
+
+
+def add_document(
+    session: Session,
+    company_vat_number: str,
+    entry_id: int,
+    filename: str,
+    content_type: Optional[str],
+    data: bytes,
+    uploaded_by_email: str,
+) -> Optional["CompanyAwardDocument"]:
+    """Attach a file to an entry this company owns. None if it does not."""
+    from app.models.company_award_document_models import CompanyAwardDocument
+
+    entry = get_by_id(session, company_vat_number, entry_id)
+    if entry is None:
+        return None
+
+    document = CompanyAwardDocument(
+        award_entry_id=entry.id,
+        filename=filename,
+        content_type=content_type,
+        size_bytes=len(data),
+        data=data,
+        uploaded_by_email=uploaded_by_email,
+    )
+    session.add(document)
+    session.commit()
+    session.refresh(document)
+    return document
+
+
+def get_document(
+    session: Session, company_vat_number: str, document_id: int
+) -> Optional["CompanyAwardDocument"]:
+    """One document, bytes included, only if this company owns it."""
+    from sqlalchemy.orm import undefer
+    from app.models.company_award_document_models import CompanyAwardDocument
+
+    return (
+        session.query(CompanyAwardDocument)
+        .join(CompanyAwardEntry, CompanyAwardEntry.id == CompanyAwardDocument.award_entry_id)
+        .filter(
+            CompanyAwardDocument.id == document_id,
+            CompanyAwardEntry.company_vat_number == company_vat_number,
+        )
+        .options(undefer(CompanyAwardDocument.data))
+        .first()
+    )
+
+
+def delete_document(
+    session: Session, company_vat_number: str, document_id: int
+) -> bool:
+    document = get_document(session, company_vat_number, document_id)
+    if document is None:
+        return False
+    session.delete(document)
+    session.commit()
+    return True

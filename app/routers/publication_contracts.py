@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from fastapi_pagination import Page, Params
 
 from app.ai.award_extraction import extract_award_from_pdf, validate_upload
@@ -8,6 +8,7 @@ from app.ai.openai import get_async_openai_client
 from app.config.postgres import get_session
 from app.crud import award_analytics, company_award as crud_company_award
 from app.crud import company as crud_company
+from app.models.company_award_document_models import MAX_UPLOAD_BYTES
 from app.crud import publication as crud_publication
 from app.crud.publication_contract import get_contracts_summary, get_paginated_contracts
 from app.schemas.company_award_schemas import (
@@ -511,4 +512,147 @@ def delete_company_award(
         company = _require_company(session, auth_user)
         if not crud_company_award.delete_by_id(session, company.vat_number, entry_id):
             raise HTTPException(status_code=404, detail="Gunning niet gevonden.")
+        return {"deleted": True}
+
+
+# ---------------------------------------------------------------------------
+# Files a company attaches to an award
+#
+# Distinct from the BOSA annexes, which are fetched live from the procurement
+# API and belong to everyone (see .../publication/{id}/documents). These are the
+# customer's own: their offer, the award letter they received. Same isolation as
+# every other entry -- scoped through the entry, which is scoped to the company
+# resolved from the caller's email.
+# ---------------------------------------------------------------------------
+
+
+def _document_out(doc) -> dict:
+    return {
+        "id": doc.id,
+        "filename": doc.filename,
+        "content_type": doc.content_type,
+        "size_bytes": doc.size_bytes,
+        "uploaded_by_email": doc.uploaded_by_email,
+        "created_at": doc.created_at,
+    }
+
+
+@contracts_router.get("/contracts/{publication_id}/uploads")
+def list_award_uploads(
+    publication_id: str,
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """This company's own files for an award. Metadata only; no bytes."""
+    with get_session() as session:
+        company = _require_company(session, auth_user)
+        entry = crud_company_award.get_entry(session, company.vat_number, publication_id)
+        if entry is None:
+            return {"documents": [], "total": 0}
+        docs = crud_company_award.list_documents(session, company.vat_number, entry.id)
+        return {"documents": [_document_out(d) for d in docs], "total": len(docs)}
+
+
+@contracts_router.post("/contracts/{publication_id}/uploads")
+async def upload_award_document(
+    publication_id: str,
+    file: UploadFile = File(..., description="Document to keep with this award"),
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """Attach a file to an award, creating this company's entry if needed.
+
+    Uploading is often the first thing done on an award that has no entry yet,
+    so the entry is created on demand rather than making the client save an
+    empty form first.
+    """
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Het bestand is leeg.")
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Het bestand is te groot ({len(content) / 1024 / 1024:.1f} MB). "
+                f"Maximaal {MAX_UPLOAD_BYTES // 1024 // 1024} MB."
+            ),
+        )
+
+    with get_session() as session:
+        company = _require_company(session, auth_user)
+
+        publication = crud_publication.get_publication_by_workspace_id(
+            publication_workspace_id=publication_id, session=session
+        )
+        if publication is None:
+            raise HTTPException(status_code=404, detail="Gunning niet gevonden.")
+
+        entry = crud_company_award.get_entry(session, company.vat_number, publication_id)
+        if entry is None:
+            entry = crud_company_award.upsert_entry(
+                session=session,
+                company_vat_number=company.vat_number,
+                created_by_email=auth_user.email,
+                publication_workspace_id=publication_id,
+                fields={},
+            )
+
+        document = crud_company_award.add_document(
+            session=session,
+            company_vat_number=company.vat_number,
+            entry_id=entry.id,
+            filename=file.filename or "document",
+            content_type=file.content_type,
+            data=content,
+            uploaded_by_email=auth_user.email,
+        )
+        if document is None:
+            raise HTTPException(status_code=404, detail="Gunning niet gevonden.")
+        return _document_out(document)
+
+
+@contracts_router.get("/contracts/uploads/{document_id}")
+def download_award_document(
+    document_id: int,
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    """Serve one of this company's files back.
+
+    The lookup joins through the entry and filters on the company, so a document
+    id belonging to someone else does not resolve -- it 404s rather than leaking
+    that it exists.
+    """
+    with get_session() as session:
+        company = _require_company(session, auth_user)
+        document = crud_company_award.get_document(
+            session, company.vat_number, document_id
+        )
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document niet gevonden.")
+
+        # Read inside the session; the object is detached once it closes.
+        payload = bytes(document.data)
+        filename = document.filename
+        content_type = document.content_type or "application/octet-stream"
+
+    return Response(
+        content=payload,
+        media_type=content_type,
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{filename}"'
+            )
+        },
+    )
+
+
+@contracts_router.delete("/contracts/uploads/{document_id}")
+def delete_award_document(
+    document_id: int,
+    auth_user: AuthUser = Depends(get_auth_user),
+):
+    with get_session() as session:
+        company = _require_company(session, auth_user)
+        if not crud_company_award.delete_document(
+            session, company.vat_number, document_id
+        ):
+            raise HTTPException(status_code=404, detail="Document niet gevonden.")
         return {"deleted": True}
