@@ -387,12 +387,19 @@ def _seed_candidates(
             collected.setdefault(pub.publication_workspace_id, pub)
 
     if title and title != "Untitled":
+        # Deliberately not sort_by="relevance". This is a candidate pool, not a
+        # result page: the agent reads everything here and ranks it itself, so
+        # the order is thrown away. Ranking it first was not free -- build_fts_rank
+        # sums one ts_rank_cd per query term, and each one recomputes
+        # to_tsvector over the whole searchable_content blob. On a title that
+        # yields eight terms against ~12k matching awards that hit the 30s
+        # statement timeout, get_paginated_contracts swallowed the error and
+        # returned nothing, and the agent started every run with an empty pool.
         text_hits, _ = get_paginated_contracts(
             session=session,
             page=1,
             size=pool_size,
             search=title[:200],
-            sort_by="relevance",
         )
         _absorb(text_hits)
 
