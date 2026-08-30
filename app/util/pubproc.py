@@ -45,7 +45,10 @@ async def fetch_pubproc_data() -> None:
                     await retrieve_publications(client=client)
                     logging.info("Publication data fetch completed successfully")
             except Exception as e:
-                logging.error("Error in fetching data: %s", e)
+                logging.error(
+                    "Error in fetching data: %s: %s",
+                    type(e).__name__, e, exc_info=True,
+                )
 
             # Wait until next run
             await asyncio.sleep(3600)  # 1 hour in seconds
@@ -65,7 +68,10 @@ async def update_pubproc_data() -> None:
                 # TODO: save documents in db and send notification if saved and docs change
                 pass
             except Exception as e:
-                logging.error("Error in updating pubproc data: %s", e)
+                logging.error(
+                    "Error in updating pubproc data: %s: %s",
+                    type(e).__name__, e, exc_info=True,
+                )
             await asyncio.sleep(3600)  # 1 hour in seconds
     except asyncio.CancelledError:
         logging.info("Publication data update service is shutting down")
@@ -85,7 +91,10 @@ async def gather_notifications() -> None:
                 await perform_notification_maintenance()
                 logging.info("Notification gathering completed successfully")
             except Exception as e:
-                logging.error("Error in gathering notifications: %s", e)
+                logging.error(
+                    "Error in gathering notifications: %s: %s",
+                    type(e).__name__, e, exc_info=True,
+                )
 
             # Wait 6 hours before next notification check
             await asyncio.sleep(21600)  # 6 hours in seconds
@@ -129,10 +138,10 @@ async def send_deadline_notifications() -> None:
                             )
 
                     except Exception as e:
-                        logging.error(f"Error sending deadline notification: {e}")
+                        logging.error("Error sending deadline notification: %s: %s", type(e).__name__, e, exc_info=True)
 
     except Exception as e:
-        logging.error(f"Error sending deadline notifications: {e}")
+        logging.error("Error sending deadline notifications: %s: %s", type(e).__name__, e, exc_info=True)
 
 
 async def perform_notification_maintenance() -> None:
@@ -147,7 +156,7 @@ async def perform_notification_maintenance() -> None:
                 logging.info(f"Cleaned up {cleanup_count} old notifications")
 
     except Exception as e:
-        logging.error(f"Error in notification maintenance: {e}")
+        logging.error("Error in notification maintenance: %s: %s", type(e).__name__, e, exc_info=True)
 
 
 async def retrieve_publications(client: httpx.AsyncClient) -> None:
@@ -311,7 +320,7 @@ async def enrich_publication_with_ai(
             pub.ai_summary_with_documents = summary + citations
             pub.estimated_value = int(estimated_value)
         except Exception as e:
-            logging.error(f"Error in summarize_publication_with_files: {e}")
+            logging.error("Error in summarize_publication_with_files: %s: %s", type(e).__name__, e, exc_info=True)
     else:
         try:
             pub.ai_summary_without_documents = await asyncio.to_thread(
@@ -320,7 +329,7 @@ async def enrich_publication_with_ai(
                 xml=xml_content,
             )
         except Exception as e:
-            logging.error(f"Error in summarize_publication_without_files: {e}")
+            logging.error("Error in summarize_publication_without_files: %s: %s", type(e).__name__, e, exc_info=True)
 
 
 async def generate_company_recommendations(
@@ -403,6 +412,42 @@ def generate_uuid():
     return str(uuid.uuid4())
 
 
+class PubprocSearchError(RuntimeError):
+    """A BOSA search request that did not come back as a usable result page."""
+
+
+def _publications_from(response: httpx.Response, page: int) -> list:
+    """The publications array from a search response, or a legible failure.
+
+    BOSA returns an error object on failure, which has no "publications" key.
+    Indexing it blindly produced KeyError: 'publications' -- true, but useless:
+    it names the key we wanted rather than the status we got. This reports the
+    status and a slice of the body instead, so the log says what BOSA actually
+    said.
+    """
+    if response.status_code != 200:
+        raise PubprocSearchError(
+            f"BOSA search page {page} returned HTTP {response.status_code}: "
+            f"{response.text[:200]}"
+        )
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise PubprocSearchError(
+            f"BOSA search page {page} returned a non-JSON body: "
+            f"{response.text[:200]}"
+        ) from exc
+
+    publications = payload.get("publications")
+    if publications is None:
+        raise PubprocSearchError(
+            f"BOSA search page {page} returned 200 with no 'publications' key; "
+            f"keys were {sorted(payload)[:10]}"
+        )
+    return list(publications)
+
+
 async def get_daily_pubproc_search_data(
     client: httpx.AsyncClient,
     interested_cpv_codes: List[CPVCodeSchema] = None,
@@ -433,24 +478,34 @@ async def get_daily_pubproc_search_data(
         headers=headers,
     )
 
-    r_json = r.json()
-    publications = r_json["publications"]
-    total_count = int(r_json["totalCount"])
+    # Check the status BEFORE parsing. This used to read r_json["publications"]
+    # first and test r.status_code afterwards, so any non-200 -- an expired
+    # token, a rate limit, a gateway error -- surfaced as a bare
+    # KeyError: 'publications' from an error body that never had that key,
+    # rather than as the HTTP failure it actually was.
+    publications = _publications_from(r, page=1)
+    total_count = int(r.json().get("totalCount") or 0)
 
-    if r.status_code == 200:
-        pages = int(np.ceil(total_count / page_size))
+    pages = int(np.ceil(total_count / page_size)) if total_count else 1
 
-        if pages > 1:
-            for i in range(2, pages + 1):
-                data["page"] = i
-                r = await client.get(
-                    settings.pubproc_server
-                    + settings.path_sea_api
-                    + "/search/publications",
-                    params=data,
-                    headers=headers,
-                )
-                publications.extend(r.json()["publications"])
+    if pages > 1:
+        for i in range(2, pages + 1):
+            data["page"] = i
+            r = await client.get(
+                settings.pubproc_server
+                + settings.path_sea_api
+                + "/search/publications",
+                params=data,
+                headers=headers,
+            )
+            # A later page failing should not throw away the pages already
+            # collected: the scraper can work with a short list, but not with an
+            # exception that aborts the whole run.
+            try:
+                publications.extend(_publications_from(r, page=i))
+            except PubprocSearchError as exc:
+                logging.warning("Stopping pagination early: %s", exc)
+                break
 
     return publications
 
@@ -578,7 +633,7 @@ async def get_document_version_download_url(
         return data.get("value")
 
     except Exception as e:
-        logging.error(f"Error getting download URL for version {version_id}: {str(e)}")
+        logging.error("Error getting download URL for version %s: %s: %s", version_id, type(e).__name__, e, exc_info=True)
         return None
 
 
@@ -614,7 +669,7 @@ async def download_document_from_url(
         logging.error(f"Timeout while downloading document {filename}")
         return None
     except Exception as e:
-        logging.error(f"Error downloading document {filename}: {str(e)}")
+        logging.error("Error downloading document %s: %s: %s", filename, type(e).__name__, e, exc_info=True)
         return None
 
 
@@ -669,7 +724,7 @@ async def list_publication_workspace_documents(
         return out
     except Exception as exc:
         logging.error(
-            f"Error listing documents for {publication_workspace_id}: {exc}"
+            "Error listing documents for %s: %s: %s" % (publication_workspace_id, type(exc).__name__, exc)
         )
         return []
 
@@ -748,7 +803,7 @@ async def get_publication_workspace_documents(
 
     except Exception as e:
         logging.error(
-            f"Error downloading documents for {publication_workspace_id}: {str(e)}"
+            "Error downloading documents for %s: %s: %s" % (publication_workspace_id, type(e).__name__, e)
         )
         return {}
 
