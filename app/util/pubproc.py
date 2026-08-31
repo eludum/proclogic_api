@@ -27,7 +27,7 @@ from app.util.messages_helper import (
     send_recommendation_notification,
 )
 from app.util.publication_utils.publication_converter import PublicationConverter
-from app.util.pubproc_token import get_token
+from app.util.pubproc_token import clear_token, get_token
 from app.util.redis_cache import invalidate_publication_cache, redis_cache
 from app.util.redis_utils import NamedSpooledFile
 from pydantic import TypeAdapter
@@ -448,12 +448,48 @@ def _publications_from(response: httpx.Response, page: int) -> list:
     return list(publications)
 
 
+async def _search_publications(
+    client: httpx.AsyncClient, params: dict
+) -> httpx.Response:
+    """GET the BOSA search endpoint, refreshing the token once on a 401.
+
+    A cached token can stop being accepted before its recorded expiry -- BOSA
+    revokes it, or the clocks disagree -- and the scraper only touches this API
+    once a day, so the stale token is always the first thing the daily run
+    sends. That produced a run-ending
+    ``PubprocSearchError: BOSA search page 1 returned HTTP 401`` with
+    ``code 40101 / "Autorisatie is ongeldig of verlopen"``.
+
+    A 401 is the one status worth retrying here: it says our credentials were
+    wrong, and we can make them right. Every other failure is reported as-is.
+    Exactly one retry -- if a token minted seconds ago is also rejected, the
+    problem is the credentials, not the cache, and looping would only delay
+    saying so.
+    """
+    url = settings.pubproc_server + settings.path_sea_api + "/search/publications"
+
+    def _headers() -> dict:
+        return {
+            "Authorization": f"Bearer {get_token()}",
+            "BelGov-Trace-Id": "2ce83af9-d524-43a6-8d1c-b19dff051aed",
+        }
+
+    r = await client.get(url, params=params, headers=_headers())
+
+    if r.status_code == 401:
+        logging.warning(
+            "BOSA rejected the cached token (HTTP 401); refreshing and retrying once"
+        )
+        clear_token()
+        r = await client.get(url, params=params, headers=_headers())
+
+    return r
+
+
 async def get_daily_pubproc_search_data(
     client: httpx.AsyncClient,
     interested_cpv_codes: List[CPVCodeSchema] = None,
 ) -> dict:
-    token = get_token()
-
     today = date.today()
     page_size = 100
 
@@ -467,16 +503,7 @@ async def get_daily_pubproc_search_data(
         cpv_codes = [cpv_code.code for cpv_code in interested_cpv_codes]
         data["cpv-codes"] = ", ".join(cpv_codes)
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "BelGov-Trace-Id": "2ce83af9-d524-43a6-8d1c-b19dff051aed",
-    }
-
-    r = await client.get(
-        settings.pubproc_server + settings.path_sea_api + "/search/publications",
-        params=data,
-        headers=headers,
-    )
+    r = await _search_publications(client, data)
 
     # Check the status BEFORE parsing. This used to read r_json["publications"]
     # first and test r.status_code afterwards, so any non-200 -- an expired
@@ -491,13 +518,7 @@ async def get_daily_pubproc_search_data(
     if pages > 1:
         for i in range(2, pages + 1):
             data["page"] = i
-            r = await client.get(
-                settings.pubproc_server
-                + settings.path_sea_api
-                + "/search/publications",
-                params=data,
-                headers=headers,
-            )
+            r = await _search_publications(client, data)
             # A later page failing should not throw away the pages already
             # collected: the scraper can work with a short list, but not with an
             # exception that aborts the whole run.
