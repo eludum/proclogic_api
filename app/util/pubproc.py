@@ -318,7 +318,11 @@ async def enrich_publication_with_ai(
                 filesmap=filesmap,
             )
             pub.ai_summary_with_documents = summary + citations
-            pub.estimated_value = int(estimated_value)
+            # Already an int -- summarize_publication_with_files coerces the
+            # model's answer. A bare int() here is what turned a model that
+            # replied "4548551.13" into a ValueError that abandoned the
+            # enrichment entirely.
+            pub.estimated_value = estimated_value
         except Exception as e:
             logging.error("Error in summarize_publication_with_files: %s: %s", type(e).__name__, e, exc_info=True)
     else:

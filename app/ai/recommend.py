@@ -1,6 +1,7 @@
 from datetime import datetime
 import logging
 import json
+import math
 import xml.etree.ElementTree as ET
 from typing import Optional
 
@@ -33,6 +34,42 @@ def handle_json_response_formats(response_text: str) -> dict:
     else:
         # If not in code block format, try to parse the entire text
         return json.loads(response_text)
+
+
+def coerce_estimated_value(value: object) -> int:
+    """The model's ``estimated_value`` as a whole number of euros, or 0.
+
+    The prompt asks for ``number or 0`` and the model mostly obliges, but
+    "mostly" is the whole problem: a JSON number is as legitimately
+    ``4548551.13`` as ``4548551``, and ``int("4548551.13")`` raises ValueError
+    rather than rounding. That exception used to escape into the caller and
+    abandon the entire AI enrichment for the publication -- prod lost the
+    estimated value six times across four days in the fortnight to 2026-09-02,
+    every one of them to a model that answered with cents.
+
+    Anything that is not a number at all -- None, "", "onbekend", "EUR 1,2M" --
+    becomes 0, which is what the nullable column already means for "we do not
+    know". A separator convention is deliberately not guessed at: reading
+    "4.548.551,13" the wrong way round is a 100x error reported as fact, and a
+    known-unknown beats a confident wrong number.
+    """
+    # bool is an int subclass, and True is not an amount.
+    if value is None or isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value) if math.isfinite(value) else 0
+
+    text = str(value).strip()
+    if not text:
+        return 0
+    try:
+        number = float(text)
+    except ValueError:
+        logging.warning("Unparseable estimated_value from the model: %r", value)
+        return 0
+    return int(number) if math.isfinite(number) else 0
 
 
 def find_text(element, path, namespaces, default=None):
@@ -934,7 +971,15 @@ def summarize_publication_without_files(
 
 def summarize_publication_with_files(
     publication: PublicationSchema, xml: str, filesmap: dict, client: OpenAI = None
-) -> tuple[str, str, str]:
+) -> tuple[int, str, str]:
+    """Summarise a publication and estimate its value.
+
+    Returns ``(estimated_value, summary, citations)``. The value is an int, not
+    a numeric string: it used to be stringified here and re-parsed with a bare
+    ``int()`` at the only call site, which is where a model answering in cents
+    took the whole enrichment down with it. Coercing once, here, where the
+    model's answer actually arrives, leaves the caller nothing to get wrong.
+    """
     client = client or get_openai_client()
 
     structured_prompt = PublicationConverter.to_ai_prompt_format(
@@ -1038,7 +1083,7 @@ Use a professional, informative tone. Focus on concrete, actionable information.
             message_content = handle_json_response_formats(response.choices[0].message.content)
         except (json.JSONDecodeError, IndexError, AttributeError) as e:
             logging.error(f"Error parsing response: {e}")
-            return "0", "Fout bij het verwerken van de samenvatting.", ""
+            return 0, "Fout bij het verwerken van de samenvatting.", ""
 
         summary = message_content.get("summary", "Geen samenvatting beschikbaar.")
         estimated_value = message_content.get("estimated_value", 0)
@@ -1046,12 +1091,11 @@ Use a professional, informative tone. Focus on concrete, actionable information.
         # No citations in Chat Completions API
         citations_str = ""
 
-        # Ensure we return strings, not None
-        estimated_value_str = str(estimated_value) if estimated_value is not None else "0"
+        # Never None, and never a value the caller has to parse.
         summary_str = str(summary) if summary is not None else "Geen samenvatting beschikbaar."
 
-        return estimated_value_str, summary_str, citations_str
+        return coerce_estimated_value(estimated_value), summary_str, citations_str
 
     except Exception as e:
         logging.error(f"Failed to summarize files: {e}")
-        return "0", "Fout bij het genereren van samenvatting.", ""
+        return 0, "Fout bij het genereren van samenvatting.", ""
