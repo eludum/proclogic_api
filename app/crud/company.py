@@ -229,6 +229,29 @@ def remove_email_from_company(
         return None
 
 
+# ── Why the two readers below do not swallow ────────────────────────────────
+#
+# Every writer in this module returns None or False on failure, and that is
+# fine: the caller asked for something to happen, and it did not.
+#
+# A reader is different. `None` from get_company_by_email is the answer "this
+# address has no company", and ~55 call sites act on it: they 403 with "Geen
+# bedrijf gekoppeld aan dit account", they skip the company's own data, they
+# fall back to an anonymous context. Returning None for "the database failed"
+# too made those two situations indistinguishable, so a transient DB fault was
+# reported to a paying customer as a misconfigured account.
+#
+# 2026-09-02 23:26 is what that looks like end to end: an awards query hit the
+# statement timeout, left the transaction aborted, and the company lookup on
+# the same session then failed with InFailedSqlTransaction -- and swallowed it.
+# The request answered HTTP 200 with an empty award list and none of the
+# company's own corrections applied. Nothing in the response said so.
+#
+# So these two raise, and `None` means exactly one thing. Callers that must
+# degrade rather than fail already catch (mcp/context.py falls back to an
+# anonymous context); the rest get a 500, which is the honest answer.
+
+
 def get_company_by_vat_number(vat_number: str, session: Session, load_matches: bool = False) -> Optional[Company]:
     """Retrieve a company by its VAT number. Set load_matches=True to eager load publication matches."""
     try:
@@ -242,8 +265,11 @@ def get_company_by_vat_number(vat_number: str, session: Session, load_matches: b
 
         return query.filter(Company.vat_number == vat_number).first()
     except Exception as e:
-        logging.error("Error getting company: %s", e)
-        return None
+        # Roll back so the session is usable again for a caller that catches
+        # this and carries on, then raise: None here means "no such company".
+        session.rollback()
+        logging.error("Error getting company by VAT number: %s", e)
+        raise
 
 
 def get_company_by_email(email: str, session: Session, load_matches: bool = False) -> Optional[Company]:
@@ -259,8 +285,9 @@ def get_company_by_email(email: str, session: Session, load_matches: bool = Fals
 
         return query.filter(Company.emails.any(email)).first()  # Use .any() for array contains
     except Exception as e:
-        logging.error("Error getting company: %s", e)
-        return None
+        session.rollback()
+        logging.error("Error getting company by email: %s", e)
+        raise
 
 
 def save_publication_for_company(

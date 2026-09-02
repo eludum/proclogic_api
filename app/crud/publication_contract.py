@@ -2,7 +2,7 @@ import logging
 from typing import List, Optional, Tuple
 
 from sqlalchemy import and_, extract, func
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, selectinload
 
 from app.crud.fts import (
     build_fts_condition,
@@ -276,21 +276,47 @@ def get_paginated_contracts(
             else:
                 query = query.order_by(Publication.publication_date.asc())
 
-        # Apply pagination with optimized eager loading to prevent N+1 queries
-        # Use subqueryload for collections to avoid cartesian products
+        # selectinload everywhere, joinedload nowhere -- and here that is a
+        # planner decision, not a cartesian-product one.
+        #
+        # joinedload adds its LEFT OUTER JOINs to *this* statement, and the
+        # extra joins change what the planner thinks the ORDER BY ... LIMIT 25
+        # costs. With them it abandons the bitmap scan over the FTS and trigram
+        # indexes and walks idx_publications_publication_date backwards
+        # instead, re-evaluating `to_tsvector(searchable_content) @@ query OR
+        # searchable_content ILIKE '%term%'` as a *filter* on every row it
+        # passes, betting it will collect 25 matches early and stop.
+        #
+        # On a term that matches nothing that bet loses completely: it filters
+        # all 107k publications, recomputing a tsvector over the whole text
+        # blob for each. Measured against prod on 2026-09-02 with the term that
+        # took the endpoint down -- 'sxde', 0 matches:
+        #
+        #     count()                      0.05s
+        #     the same query, no options   0.03s
+        #     ... with joinedload         26.34s   <- 30s statement_timeout
+        #     ... with selectinload        0.08s
+        #
+        # selectinload leaves this statement join-free, so the planner keeps the
+        # bitmap scan and the relationships load in follow-up SELECTs keyed on
+        # the 25 ids it returned. The normal case gets faster too (a matching
+        # term: 1.83s -> 0.90s), because those SELECTs replace a row that
+        # carried every joined table's columns at once.
         publications = (
             query.options(
                 # Load dossier and its nested relationships
-                joinedload(Publication.dossier).subqueryload(Dossier.titles),
-                joinedload(Publication.dossier).subqueryload(Dossier.descriptions),
+                selectinload(Publication.dossier).selectinload(Dossier.titles),
+                selectinload(Publication.dossier).selectinload(Dossier.descriptions),
                 # Load organisation
-                joinedload(Publication.organisation),
+                selectinload(Publication.organisation),
                 # Load CPV code
-                joinedload(Publication.cpv_main_code),
+                selectinload(Publication.cpv_main_code),
                 # Load contract with organizations
-                joinedload(Publication.contract).joinedload(Contract.winning_publisher),
-                joinedload(Publication.contract).joinedload(Contract.contracting_authority),
-                joinedload(Publication.contract).joinedload(Contract.service_provider),
+                selectinload(Publication.contract).selectinload(Contract.winning_publisher),
+                selectinload(Publication.contract).selectinload(
+                    Contract.contracting_authority
+                ),
+                selectinload(Publication.contract).selectinload(Contract.service_provider),
             )
             .offset((page - 1) * size)
             .limit(size)
@@ -300,8 +326,22 @@ def get_paginated_contracts(
         return publications, total_count
 
     except Exception as e:
-        logging.error(f"Error getting paginated contracts: {e}")
-        return [], 0
+        # Roll back first. A statement that hit the 30s statement_timeout
+        # leaves the transaction aborted, and every later query on this session
+        # -- in the same request -- then fails with InFailedSqlTransaction.
+        # 2026-09-02 23:26 is what that looks like: the timeout here took the
+        # caller's own company lookup down with it, and because that swallows
+        # its errors too and returns None, the request answered 200 with an
+        # empty award list and none of the company's own corrections applied.
+        session.rollback()
+        logging.error("Error getting paginated contracts: %s", e)
+        # Then raise, rather than reporting a failed search as a search that
+        # found nothing. "0 awards" is an answer callers act on -- the endpoint
+        # renders an empty page, the MCP tool tells the model there are no such
+        # awards -- and it is the wrong one. The one caller that genuinely
+        # wants best-effort recall is _seed_candidates, whose candidate pool is
+        # explicitly optional; it now says so by catching this itself.
+        raise
 
 
 def get_contracts_summary(

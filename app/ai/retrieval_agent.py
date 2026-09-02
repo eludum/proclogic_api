@@ -386,6 +386,27 @@ def _seed_candidates(
                 continue
             collected.setdefault(pub.publication_workspace_id, pub)
 
+    # Either pass may fail without the run failing: the pool is an optimisation
+    # over the deterministic scorer, so a half-full pool -- or an empty one --
+    # still produces an answer, and losing /related entirely to a slow query
+    # would be a worse trade. get_paginated_contracts raises now rather than
+    # returning an empty page (a failed search reported as "no such awards" is
+    # a lie the endpoint and the MCP tool both used to repeat), so this is where
+    # "best effort" gets said out loud instead of being inherited by accident.
+    # The failure is still logged and still alerts; only this caller continues.
+    def _seed(**kwargs) -> None:
+        try:
+            hits, _ = get_paginated_contracts(session=session, page=1, **kwargs)
+        except Exception:
+            logger.warning(
+                "Candidate seeding pass failed for %s; continuing with %d candidates",
+                publication.publication_workspace_id,
+                len(collected),
+                exc_info=True,
+            )
+            return
+        _absorb(hits)
+
     if title and title != "Untitled":
         # Deliberately not sort_by="relevance". This is a candidate pool, not a
         # result page: the agent reads everything here and ranks it itself, so
@@ -395,23 +416,14 @@ def _seed_candidates(
         # yields eight terms against ~12k matching awards that hit the 30s
         # statement timeout, get_paginated_contracts swallowed the error and
         # returned nothing, and the agent started every run with an empty pool.
-        text_hits, _ = get_paginated_contracts(
-            session=session,
-            page=1,
-            size=pool_size,
-            search=title[:200],
-        )
-        _absorb(text_hits)
+        _seed(size=pool_size, search=title[:200])
 
     if cpv and len(collected) < pool_size:
-        cpv_hits, _ = get_paginated_contracts(
-            session=session,
-            page=1,
+        _seed(
             size=pool_size - len(collected),
             cpv_code=cpv[:5],
             sort_by="publication_date",
         )
-        _absorb(cpv_hits)
 
     return list(collected.values())[:pool_size]
 
