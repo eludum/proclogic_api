@@ -64,18 +64,28 @@ def get_public_key(kid):
     for key in jwks["keys"]:
         if key["kid"] == kid:
             return jwk.construct(key)
-    logging.error(f"No key found for kid: {kid}")
+    # The kid comes out of the caller's own token, so an unknown one is a bad
+    # request, not a server fault — WARNING, never ERROR (see decode_token).
+    logging.warning(f"No key found for kid: {kid}")
     raise HTTPException(status_code=401, detail="Invalid token")
 
 
 def decode_token(token: str):
-    """Decode and verify the JWT token"""
+    """Decode and verify the JWT token.
+
+    Nothing this function rejects is a server fault — every failure here is
+    decided by bytes the caller sent. ProclogicErrorOccurred pages on any ERROR
+    line, so logging a rejected token at ERROR meant an expired session, or any
+    anonymous caller posting garbage, could put mail in the ops inbox: 31
+    expiries between 00:16 and 00:18 on 2026-09-03 sent one such email. Token
+    rejections are WARNING now, so they stay visible in Loki without paging.
+    """
     try:
         # Get the key ID from the token headers
         headers = jwt.get_unverified_headers(token)
         kid = headers.get("kid")
         if not kid:
-            logging.error("No kid found in token headers")
+            logging.warning("No kid found in token headers")
             raise HTTPException(status_code=401, detail="Invalid token format")
 
         # Get the public key
@@ -87,12 +97,22 @@ def decode_token(token: str):
             public_key.to_pem().decode("utf-8"),
             algorithms=["RS256"],
         )
+    except HTTPException:
+        # Already a clean 401 from the two checks above. Without this arm it
+        # fell through to `except Exception`, which relabelled it "Unexpected
+        # error" and logged a SECOND line — so one malformed token produced two
+        # distinct alert fingerprints, and the 401 detail was overwritten.
+        raise
     except JWTError as e:
-        logging.error(f"JWT Error: {str(e)}")
+        # Includes ExpiredSignatureError, which is the ordinary case: the token
+        # aged out and the client will refresh.
+        logging.warning(f"JWT Error: {str(e)}")
         raise HTTPException(
             status_code=401, detail=f"Token verification failed: {str(e)}"
         )
     except Exception as e:
+        # Genuinely unexpected — a malformed JWKS payload, a crypto backend
+        # fault. That one is ours, so it stays at ERROR and still pages.
         logging.error(f"Unexpected error: {str(e)}")
         raise HTTPException(status_code=401, detail="Authentication failed")
 
