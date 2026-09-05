@@ -23,6 +23,22 @@ from app.schemas.publication_contract_schemas import (
 
 
 
+class NotAnAwardNoticeError(ValueError):
+    """The XML is a valid notice, just not the kind this parser reads.
+
+    A distinct type because `summarize_publication_contract` used to catch bare
+    `ValueError` for this and pydantic's `ValidationError` IS a `ValueError`.
+    Any schema failure anywhere inside `extract_data_from_xml` therefore came
+    out of the log as "Wrong notice type" -- the one message that tells a
+    reader there is nothing to investigate. Observed 2026-09-01 12:28 in prod:
+
+        WARNI [root] Wrong notice type: 1 validation error for ContractContactPersonSchema
+
+    which is not a notice type at all. It stays a ValueError subclass so callers
+    that catch ValueError are unaffected.
+    """
+
+
 def handle_json_response_formats(response_text: str) -> dict:
     """
     Parse a JSON response from the OpenAI API
@@ -411,7 +427,7 @@ def extract_data_from_xml(xml_content: str) -> Optional[ContractSchema]:
     root_tag = root.tag
     if "PriorInformationNotice" in root_tag:
         # TODO: capture different types of notices
-        raise ValueError(
+        raise NotAnAwardNoticeError(
             "This is a PriorInformationNotice (planning notice), not an award notice"
         )
 
@@ -672,10 +688,12 @@ def summarize_publication_contract(
             )
             return contract
 
-    except ValueError as e:
+    except NotAnAwardNoticeError as e:
         logging.warning(f"Wrong notice type: {e}")
     except Exception as e:
-        logging.warning(f"New format parsing failed: {e}, trying old format")
+        logging.warning(
+            f"New format parsing failed: {type(e).__name__}: {e}, trying old format"
+        )
 
     # Try old XML format as fallback
     try:

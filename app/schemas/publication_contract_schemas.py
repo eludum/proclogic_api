@@ -1,7 +1,37 @@
+import logging
 import re
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, TypeAdapter, ValidationError, field_validator
 from typing import Dict, Optional, List
 from datetime import date, datetime
+
+# Validating one address on its own, so a bad one can be dropped rather than
+# raised. EmailStr is only usable as an annotation; this is how you ask it a
+# question about a single value.
+_EMAIL = TypeAdapter(EmailStr)
+
+
+def _drop_unparseable_email(v):
+    """An address the parser cannot read becomes None, not a ValidationError.
+
+    These fields are filled from whatever a contracting authority typed into
+    the BOSA notice, and `EmailStr` refusing one used to abort the parse of the
+    entire award notice: `extract_data_from_xml` propagated the ValidationError
+    up to `summarize_publication_contract`, which fell through to the old-format
+    parser and then to a full LLM re-read of the XML. Observed 2026-09-01 12:28
+    in prod -- one contact person cost a notice its structured parse and bought
+    an OpenAI call in its place.
+
+    The field is already Optional, and a malformed address is worth less than
+    every other field on the notice. Log it and keep going.
+    """
+    if v is None or (isinstance(v, str) and not v.strip()):
+        return None
+    try:
+        return _EMAIL.validate_python(v)
+    except ValidationError:
+        logging.warning("Dropping unparseable email address %r", v)
+        return None
+
 
 # TODO: remove all nulls and make all fields required, after you have fixed the db
 class ContractAddressSchema(BaseModel):
@@ -18,6 +48,8 @@ class ContractContactPersonSchema(BaseModel):
     phone: Optional[str] = None
     email: Optional[EmailStr] = None
 
+    _clean_email = field_validator('email', mode='before')(_drop_unparseable_email)
+
 
 class ContractOrganizationSchema(BaseModel):
     name: str
@@ -29,6 +61,8 @@ class ContractOrganizationSchema(BaseModel):
     contact_persons: Optional[List[ContractContactPersonSchema]] = []
     company_size: Optional[str] = None
     subcontracting: Optional[str] = None
+
+    _clean_email = field_validator('email', mode='before')(_drop_unparseable_email)
 
     @field_validator('business_id')
     @classmethod
