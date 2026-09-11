@@ -420,6 +420,22 @@ class PubprocSearchError(RuntimeError):
     """A BOSA search request that did not come back as a usable result page."""
 
 
+# The search call used to inherit httpx's default 5-second timeout from the
+# scraper's client, and a page of 100 publications does not always arrive that
+# fast: page 1 died with a bare `ReadTimeout` mid-body on 2026-09-09 23:26 and
+# 2026-09-11 08:42, and each time the whole hourly run went with it. A read
+# timeout counts the gap between chunks, not the whole response, so 60s is
+# generous for a slow page and still short for a hung one.
+SEARCH_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
+
+# A search is a GET, so a transport failure or a gateway status is retried
+# before the run is given up on. The pauses grow (5s, 10s) so a BOSA that is
+# briefly overloaded gets some air.
+SEARCH_ATTEMPTS = 3
+SEARCH_RETRY_BACKOFF_SECONDS = 5.0
+_RETRYABLE_SEARCH_STATUS = {502, 503, 504}
+
+
 def _publications_from(response: httpx.Response, page: int) -> list:
     """The publications array from a search response, or a legible failure.
 
@@ -464,13 +480,19 @@ async def _search_publications(
     ``PubprocSearchError: BOSA search page 1 returned HTTP 401`` with
     ``code 40101 / "Autorisatie is ongeldig of verlopen"``.
 
-    A 401 is the one status worth retrying here: it says our credentials were
-    wrong, and we can make them right. Every other failure is reported as-is.
-    Exactly one retry -- if a token minted seconds ago is also rejected, the
-    problem is the credentials, not the cache, and looping would only delay
-    saying so.
+    A 401 is retried once with a fresh token: it says our credentials were
+    wrong, and we can make them right. Exactly one retry -- if a token minted
+    seconds ago is also rejected, the problem is the credentials, not the cache,
+    and looping would only delay saying so.
+
+    Transient failures -- a timeout, a dropped connection, a 502/503/504 -- get
+    ``SEARCH_ATTEMPTS`` tries (see ``SEARCH_TIMEOUT``). A transport failure that
+    outlasts them raises PubprocSearchError naming the page and the exception
+    type, rather than httpx's own ``ReadTimeout``, whose message is empty.
+    Every other status is returned for ``_publications_from`` to report.
     """
     url = settings.pubproc_server + settings.path_sea_api + "/search/publications"
+    page = params.get("page")
 
     def _headers() -> dict:
         return {
@@ -478,14 +500,39 @@ async def _search_publications(
             "BelGov-Trace-Id": "2ce83af9-d524-43a6-8d1c-b19dff051aed",
         }
 
-    r = await client.get(url, params=params, headers=_headers())
+    async def _get() -> httpx.Response:
+        for attempt in range(1, SEARCH_ATTEMPTS + 1):
+            try:
+                r = await client.get(
+                    url, params=params, headers=_headers(), timeout=SEARCH_TIMEOUT
+                )
+            except httpx.TransportError as exc:
+                failure = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+                if attempt == SEARCH_ATTEMPTS:
+                    raise PubprocSearchError(
+                        f"BOSA search page {page} failed after {SEARCH_ATTEMPTS} "
+                        f"attempts: {failure}"
+                    ) from exc
+            else:
+                if r.status_code not in _RETRYABLE_SEARCH_STATUS or attempt == SEARCH_ATTEMPTS:
+                    return r
+                failure = f"HTTP {r.status_code}"
+
+            delay = SEARCH_RETRY_BACKOFF_SECONDS * attempt
+            logging.warning(
+                "BOSA search page %s failed (%s); retrying in %.0fs (attempt %d/%d)",
+                page, failure, delay, attempt, SEARCH_ATTEMPTS,
+            )
+            await asyncio.sleep(delay)
+
+    r = await _get()
 
     if r.status_code == 401:
         logging.warning(
             "BOSA rejected the cached token (HTTP 401); refreshing and retrying once"
         )
         clear_token()
-        r = await client.get(url, params=params, headers=_headers())
+        r = await _get()
 
     return r
 
@@ -522,11 +569,12 @@ async def get_daily_pubproc_search_data(
     if pages > 1:
         for i in range(2, pages + 1):
             data["page"] = i
-            r = await _search_publications(client, data)
             # A later page failing should not throw away the pages already
             # collected: the scraper can work with a short list, but not with an
-            # exception that aborts the whole run.
+            # exception that aborts the whole run. The request sits inside the
+            # try as well as the parse -- a timeout on page 2 used to escape it.
             try:
+                r = await _search_publications(client, data)
                 publications.extend(_publications_from(r, page=i))
             except PubprocSearchError as exc:
                 logging.warning("Stopping pagination early: %s", exc)
