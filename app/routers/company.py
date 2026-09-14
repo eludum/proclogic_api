@@ -367,12 +367,16 @@ async def generate_recommendations_for_new_company(company_vat_number: str):
                                 notification_count += 1
                             except Exception as e:
                                 logging.error(
-                                    f"Error sending notification for publication {publication.publication_workspace_id}: {e}"
+                                    "Error sending notification for publication %s: %s: %s",
+                                    publication.publication_workspace_id,
+                                    type(e).__name__, e, exc_info=True,
                                 )
 
                 except Exception as e:
                     logging.error(
-                        f"Error processing publication {publication.publication_workspace_id}: {e}"
+                        "Error processing publication %s: %s: %s",
+                        publication.publication_workspace_id,
+                        type(e).__name__, e, exc_info=True,
                     )
                     continue
 

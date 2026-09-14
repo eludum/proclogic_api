@@ -172,8 +172,14 @@ async def retrieve_publications(client: httpx.AsyncClient) -> None:
             try:
                 await process_publication(client, pub, session)
             except Exception as e:
+                # Named type and traceback, like every other handler in this
+                # module. An httpx timeout's str() is empty, so the f-string
+                # this replaces logged the prefix and a bare colon — which is
+                # all 2026-09-14 14:57 UTC left of the publication that failed.
                 logging.error(
-                    f"Error processing publication {pub.publication_workspace_id}: {e}"
+                    "Error processing publication %s: %s: %s",
+                    pub.publication_workspace_id,
+                    type(e).__name__, e, exc_info=True,
                 )
 
 
