@@ -21,11 +21,27 @@ ENV PATH="/opt/venv/bin:$PATH"
 # closure, so the built image is the same on every rebuild. No --upgrade, which
 # would defeat the pins.
 COPY requirements.lock.txt /tmp/requirements.lock.txt
+#
+# pip is uninstalled from the venv once it has done its job: nothing in the
+# running app installs packages, and pip vendors its own copies of urllib3,
+# msgpack and setuptools (pip/_vendor/vendor.txt) that trail upstream and show
+# up as CVEs in the image scan even though no app code ever imports them.
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r /tmp/requirements.lock.txt
+    && pip install --no-cache-dir -r /tmp/requirements.lock.txt \
+    && pip check \
+    && pip uninstall -y pip
 
 # ── Runtime: slim base + the prebuilt venv only (no compiler, no build tools) ──
 FROM python:3.14-slim AS runtime
+
+# Pull Debian security fixes that landed after the python:3.14-slim tag was last
+# rebuilt, instead of waiting for upstream to republish it. And drop the base
+# image's own system pip, for the same vendored-copies reason as above -- the app
+# runs entirely from /opt/venv.
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip uninstall -y pip
 
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH" \
