@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+from app.config.settings import with_psycopg2_driver
 from app.models.base import Base
 
 load_dotenv(".env")
@@ -14,7 +15,9 @@ load_dotenv(".env")
 config = context.config
 
 # get sql alchemy url from settings file
-config.set_main_option("sqlalchemy.url", os.environ["POSTGRES_CON_URL"])
+config.set_main_option(
+    "sqlalchemy.url", with_psycopg2_driver(os.environ["POSTGRES_CON_URL"])
+)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

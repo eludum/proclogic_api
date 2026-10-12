@@ -1,5 +1,21 @@
 from typing import List, Optional
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def with_psycopg2_driver(url: Optional[str]) -> Optional[str]:
+    """Pin a driverless postgres URL to psycopg2.
+
+    SQLAlchemy 2.1 made a bare ``postgresql://`` load psycopg (v3), which is not
+    installed. The live Secret still says ``postgresql://``, so the driver is
+    pinned here instead of in every URL that reaches us.
+    """
+    if url is None:
+        return None
+    for prefix in ("postgresql://", "postgres://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg2://" + url[len(prefix):]
+    return url
 
 
 class Settings(BaseSettings):
@@ -78,6 +94,11 @@ class Settings(BaseSettings):
     postgres_ro_con_url: Optional[str] = None
     mcp_sql_row_limit: int = 200
     mcp_sql_statement_timeout_ms: int = 5000
+
+    @field_validator("postgres_con_url", "postgres_ro_con_url")
+    @classmethod
+    def _pin_postgres_driver(cls, v: Optional[str]) -> Optional[str]:
+        return with_psycopg2_driver(v)
 
     # Retrieval agent caps. The agent may call tools this many times before it is
     # forced to answer, and may never consider more than max_candidates rows.
