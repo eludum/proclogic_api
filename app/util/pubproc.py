@@ -2,7 +2,7 @@ import asyncio
 import logging
 import uuid
 from datetime import date
-from typing import List
+from typing import Callable, List
 
 import app.crud.company as crud_company
 import app.crud.publication as crud_publication
@@ -432,6 +432,10 @@ class PubprocSearchError(RuntimeError):
 # 2026-09-11 08:42, and each time the whole hourly run went with it. A read
 # timeout counts the gap between chunks, not the whole response, so 60s is
 # generous for a slow page and still short for a hung one.
+#
+# The documents endpoints (list, download-url) had the same 5-second default:
+# a list call died with a bare `ReadTimeout` on 2026-10-21 09:14 UTC, and the
+# tender was enriched with no documents at all. They now share these settings.
 SEARCH_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 
 # A search is a GET, so a transport failure or a gateway status is retried
@@ -440,6 +444,46 @@ SEARCH_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 SEARCH_ATTEMPTS = 3
 SEARCH_RETRY_BACKOFF_SECONDS = 5.0
 _RETRYABLE_SEARCH_STATUS = {502, 503, 504}
+
+
+async def _get_retrying(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    headers: Callable[[], dict],
+    what: str,
+    params: dict | None = None,
+    error: type[Exception] = httpx.TransportError,
+) -> httpx.Response:
+    """GET a BOSA endpoint, retrying a transport failure or a 502/503/504.
+
+    ``headers`` is called per attempt, so a token refreshed meanwhile is used.
+    After ``SEARCH_ATTEMPTS`` tries the last response is returned, or, for a
+    transport failure, ``error`` is raised naming ``what`` and the exception
+    type (httpx's own ``ReadTimeout`` has an empty message).
+    """
+    for attempt in range(1, SEARCH_ATTEMPTS + 1):
+        try:
+            r = await client.get(
+                url, params=params, headers=headers(), timeout=SEARCH_TIMEOUT
+            )
+        except httpx.TransportError as exc:
+            failure = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+            if attempt == SEARCH_ATTEMPTS:
+                raise error(
+                    f"{what} failed after {SEARCH_ATTEMPTS} attempts: {failure}"
+                ) from exc
+        else:
+            if r.status_code not in _RETRYABLE_SEARCH_STATUS or attempt == SEARCH_ATTEMPTS:
+                return r
+            failure = f"HTTP {r.status_code}"
+
+        delay = SEARCH_RETRY_BACKOFF_SECONDS * attempt
+        logging.warning(
+            "%s failed (%s); retrying in %.0fs (attempt %d/%d)",
+            what, failure, delay, attempt, SEARCH_ATTEMPTS,
+        )
+        await asyncio.sleep(delay)
 
 
 def _publications_from(response: httpx.Response, page: int) -> list:
@@ -507,29 +551,10 @@ async def _search_publications(
         }
 
     async def _get() -> httpx.Response:
-        for attempt in range(1, SEARCH_ATTEMPTS + 1):
-            try:
-                r = await client.get(
-                    url, params=params, headers=_headers(), timeout=SEARCH_TIMEOUT
-                )
-            except httpx.TransportError as exc:
-                failure = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
-                if attempt == SEARCH_ATTEMPTS:
-                    raise PubprocSearchError(
-                        f"BOSA search page {page} failed after {SEARCH_ATTEMPTS} "
-                        f"attempts: {failure}"
-                    ) from exc
-            else:
-                if r.status_code not in _RETRYABLE_SEARCH_STATUS or attempt == SEARCH_ATTEMPTS:
-                    return r
-                failure = f"HTTP {r.status_code}"
-
-            delay = SEARCH_RETRY_BACKOFF_SECONDS * attempt
-            logging.warning(
-                "BOSA search page %s failed (%s); retrying in %.0fs (attempt %d/%d)",
-                page, failure, delay, attempt, SEARCH_ATTEMPTS,
-            )
-            await asyncio.sleep(delay)
+        return await _get_retrying(
+            client, url, headers=_headers, params=params,
+            what=f"BOSA search page {page}", error=PubprocSearchError,
+        )
 
     r = await _get()
 
@@ -688,18 +713,20 @@ async def get_document_version_download_url(
     Returns:
         Download URL string or None if request fails
     """
-    token = get_token()
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "BelGov-Trace-Id": generate_uuid(),
-    }
+    def headers() -> dict:
+        return {
+            "Authorization": f"Bearer {get_token()}",
+            "BelGov-Trace-Id": generate_uuid(),
+        }
 
     try:
-        r = await client.get(
+        r = await _get_retrying(
+            client,
             settings.pubproc_server
             + settings.path_dos_api
             + f"/publication-workspace-document-versions/{version_id}/download-url",
             headers=headers,
+            what=f"BOSA download URL for version {version_id}",
         )
 
         if r.status_code != 200:
@@ -817,18 +844,20 @@ async def get_publication_workspace_documents(
     Returns:
         Dict mapping original filename -> BytesIO object
     """
-    token = get_token()
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "BelGov-Trace-Id": generate_uuid(),
-    }
+    def headers() -> dict:
+        return {
+            "Authorization": f"Bearer {get_token()}",
+            "BelGov-Trace-Id": generate_uuid(),
+        }
 
     try:
-        r = await client.get(
+        r = await _get_retrying(
+            client,
             settings.pubproc_server
             + settings.path_dos_api
             + f"/publication-workspaces/{publication_workspace_id}/documents",
             headers=headers,
+            what=f"BOSA document list for {publication_workspace_id}",
         )
 
         if r.status_code != 200:
