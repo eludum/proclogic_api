@@ -99,7 +99,7 @@ CLERK_JWKS_URL=https://your-clerk-instance/.well-known/jwks.json
 
 # AI Services
 OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-5-mini  # optional, this is the default
+OPENAI_MODEL=gpt-6-luna  # optional, this is the default
 
 # PubProc Integration (Belgian public procurement system)
 # ⚠️ Obtain these credentials from BOSA (see step 4 above)
@@ -199,7 +199,7 @@ The API will be available at:
 | `CLERK_SECRET_KEY` | Clerk authentication secret | Yes | - |
 | `CLERK_JWKS_URL` | Clerk JWKS endpoint for JWT validation | No | `https://clerk.proclogic.be/.well-known/jwks.json` |
 | `OPENAI_API_KEY` | OpenAI API key for AI features | Yes | - |
-| `OPENAI_MODEL` | Model used for chat, summaries and recommendations | No | `gpt-5-mini` |
+| `OPENAI_MODEL` | Model used for chat, summaries and recommendations | No | `gpt-6-luna` |
 | `PUBPROC_SERVER` | Public procurement API server | Yes | - |
 | `PUBPROC_TOKEN_URL` | OAuth2 token endpoint for the procurement API | Yes | - |
 | `PUBPROC_CLIENT_ID` | OAuth client ID for procurement system (obtain from BOSA) | Yes | - |

@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     log_heartbeat_seconds: int = 1800
 
     openai_api_key: str
-    openai_model: str = "gpt-5-mini"
+    openai_model: str = "gpt-6-luna"
 
     pubproc_client_id: str
     pubproc_client_secret: str

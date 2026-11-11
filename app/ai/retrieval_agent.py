@@ -588,6 +588,8 @@ async def _run_agent(
             messages=messages,
             tools=tool_specs,
             tool_choice="auto",
+            # gpt-6-luna rejects function tools on Chat Completions unless reasoning is off.
+            reasoning_effort="none",
         )
         message = response.choices[0].message
         tool_calls = message.tool_calls or []
@@ -675,6 +677,7 @@ async def _run_agent(
         messages=messages,
         tool_choice="none",
         tools=tool_specs,
+        reasoning_effort="none",
     )
     return _parse_results(final.choices[0].message.content or "")
 

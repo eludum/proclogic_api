@@ -14,6 +14,9 @@ from app.models.conversation_models import Conversation
 from app.models.publication_models import Publication
 from app.util.publication_utils.publication_converter import PublicationConverter
 
+# gpt-6-luna rejects function tools on Chat Completions unless reasoning is off.
+TOOL_REASONING_EFFORT = "none"
+
 logger = logging.getLogger(__name__)
 
 # Emitted so the UI can say what Procy is doing mid-turn. Optional: the caller
@@ -275,6 +278,7 @@ async def process_ai_message(
         kwargs: Dict[str, Any] = {"model": settings.openai_model, "messages": messages}
         if tools:
             kwargs["tools"] = tools
+            kwargs["reasoning_effort"] = TOOL_REASONING_EFFORT
             kwargs["tool_choice"] = "auto"
 
         response = await client.chat.completions.create(**kwargs)
@@ -304,6 +308,7 @@ async def process_ai_message(
     }
     if tools:
         final_kwargs["tools"] = tools
+        final_kwargs["reasoning_effort"] = TOOL_REASONING_EFFORT
         final_kwargs["tool_choice"] = "none"
     response = await client.chat.completions.create(**final_kwargs)
     return response.choices[0].message.content or "", None
@@ -343,6 +348,7 @@ async def stream_ai_response(
         }
         if tools:
             kwargs["tools"] = tools
+            kwargs["reasoning_effort"] = TOOL_REASONING_EFFORT
             kwargs["tool_choice"] = "auto"
 
         stream = await client.chat.completions.create(**kwargs)
@@ -392,6 +398,7 @@ async def stream_ai_response(
         # The history contains tool_calls, so the schema has to stay attached;
         # tool_choice="none" is what stops another round of searching.
         final_kwargs["tools"] = tools
+        final_kwargs["reasoning_effort"] = TOOL_REASONING_EFFORT
         final_kwargs["tool_choice"] = "none"
     final_stream = await client.chat.completions.create(**final_kwargs)
     async for chunk in final_stream:
